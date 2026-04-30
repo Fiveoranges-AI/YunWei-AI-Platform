@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd landing && pnpm install --no-frozen-lockfile",
-  "buildCommand": "cd landing && pnpm build",
+  "installCommand": "cd landing && npm ci",
+  "buildCommand": "cd landing && npm run build",
   "outputDirectory": "landing/dist/public",
   "framework": null
 }
