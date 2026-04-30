@@ -828,7 +828,7 @@ git commit -m "Task 3: HMAC sign/verify + nonce store (SSO.md §1.2)"
 
 ---
 
-## Task 4: 用户/会话 / Login / CSRF(§1.1, §7.2)
+## Task 4: 用户/会话 / Login / CSRF(§1.1, §7.2) [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/platform_app/auth.py`
