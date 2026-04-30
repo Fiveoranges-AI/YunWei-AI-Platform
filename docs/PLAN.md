@@ -1174,7 +1174,7 @@ git commit -m "Task 5: platform-admin CLI"
 
 ---
 
-## Task 6: 反向代理核心 + SSE 透传(§3, §3.1, §3.2)
+## Task 6: 反向代理核心 + SSE 透传(§3, §3.1, §3.2) [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/platform_app/response_headers.py`
