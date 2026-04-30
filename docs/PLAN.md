@@ -1414,7 +1414,7 @@ git commit -m "Task 6: reverse proxy + SSE + response header sanitization (SSO.m
 
 ---
 
-## Task 7: §7.2 跨 agent 防火墙
+## Task 7: §7.2 跨 agent 防火墙 [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/platform_app/firewall.py`
