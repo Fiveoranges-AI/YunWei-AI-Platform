@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fiveoranges.ai · Agent 列表</title>
+<style>
+body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 24px; }
+h1 { font-size: 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
+.card { padding: 20px; background: white; border: 1px solid #eee; border-radius: 8px; cursor: pointer; transition: box-shadow 0.15s; }
+.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.card h3 { margin: 0 0 8px 0; font-size: 16px; }
+.card .desc { color: #666; font-size: 13px; }
+.health-healthy { color: #1a8c1a; }
+.health-unhealthy { color: #c00; }
+.logout { float: right; color: #999; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>我的 Agents <span class="logout" onclick="logout()">退出</span></h1>
+<div id="list" class="grid"></div>
+<script>
+async function logout() {
+  await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  location.href = '/';
+}
+async function load() {
+  const r = await fetch('/api/agents', { credentials: 'same-origin' });
+  if (r.status === 401) { location.href = '/'; return; }
+  const data = await r.json();
+  document.getElementById('list').innerHTML = data.agents.map(a => `
+    <div class="card" onclick="location.href='${a.url}'">
+      <h3>${a.display_name}</h3>
+      <div class="desc">${a.description || ''}</div>
+      <div class="health-${a.health}">● ${a.health}</div>
+    </div>
+  `).join('');
+}
+load();
+</script>
+</body>
+</html>
