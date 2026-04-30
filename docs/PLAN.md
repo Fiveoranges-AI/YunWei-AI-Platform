@@ -247,7 +247,7 @@ git commit -m "Task 1: scaffold platform-app skeleton"
 
 ---
 
-## Task 2: 数据库 schema + 连接层
+## Task 2: 数据库 schema + 连接层 [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/migrations/001_init.sql`
@@ -470,19 +470,29 @@ def write_proxy_log(
 ```
 
 - [ ] **Step 4: 写 `~/agent-platform/platform/tests/conftest.py`**
+
+> 注:`settings.py` 在模块导入时就读 `os.environ["COOKIE_SECRET"]`,所以 env
+> 必须在 conftest 模块加载阶段(任何 `from platform_app import ...` 之前)就设上。
+> 用 fixture 的 `monkeypatch.setenv` 已经太晚——pytest collection 阶段
+> `import platform_app` 就会触发 KeyError。
+
 ```python
 import os
 import tempfile
 from pathlib import Path
 import pytest
 
-@pytest.fixture(autouse=True)
-def _isolated_env(monkeypatch):
-    tmp = tempfile.mkdtemp()
-    monkeypatch.setenv("PLATFORM_DB_PATH", str(Path(tmp) / "platform.db"))
-    monkeypatch.setenv("PROXY_LOG_DB_PATH", str(Path(tmp) / "proxy_log.db"))
-    monkeypatch.setenv("COOKIE_SECRET", "test-cookie-secret-32-bytes-padding=")
-    yield tmp
+# Settings reads env at module import; set vars before any test module
+# imports platform_app.* so the singleton sees test-friendly values.
+_TMP = tempfile.mkdtemp()
+os.environ["PLATFORM_DB_PATH"] = str(Path(_TMP) / "platform.db")
+os.environ["PROXY_LOG_DB_PATH"] = str(Path(_TMP) / "proxy_log.db")
+os.environ.setdefault("COOKIE_SECRET", "test-cookie-secret-32-bytes-padding=")
+
+
+@pytest.fixture
+def tmp_data_dir() -> str:
+    return _TMP
 ```
 
 - [ ] **Step 5: 写 `~/agent-platform/platform/tests/test_db.py`**
