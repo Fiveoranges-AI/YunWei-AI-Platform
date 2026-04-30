@@ -987,7 +987,7 @@ git commit -m "Task 4: auth + session + CSRF (SSO.md §1.1, §7.2)"
 
 ---
 
-## Task 5: Admin CLI(`platform-admin`)
+## Task 5: Admin CLI(`platform-admin`) [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/platform_app/admin.py`
