@@ -528,7 +528,7 @@ git commit -m "Task 2: db schema + cache layer (SSO.md §5, §7.3)"
 
 ---
 
-## Task 3: HMAC 签名模块 + nonce store(§1.2)
+## Task 3: HMAC 签名模块 + nonce store(§1.2) [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/platform_app/hmac_sign.py`
