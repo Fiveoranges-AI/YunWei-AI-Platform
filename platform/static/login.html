@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fiveoranges.ai 登录</title>
+<style>
+body { font-family: -apple-system, sans-serif; background: #fafafa; max-width: 400px; margin: 80px auto; padding: 24px; }
+h1 { font-size: 18px; margin-bottom: 24px; color: #333; }
+form { background: white; padding: 24px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+input { width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+button { width: 100%; padding: 12px; background: #ff7a00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-top: 12px; }
+.err { color: #c00; font-size: 13px; min-height: 18px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>fiveoranges.ai · 登录</h1>
+<form id="f">
+<input name="username" placeholder="用户名" autocomplete="username" required>
+<input name="password" type="password" placeholder="密码" autocomplete="current-password" required>
+<button type="submit">登录</button>
+<div class="err" id="err"></div>
+</form>
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch('/auth/login', { method: 'POST', body: fd, credentials: 'same-origin' });
+  if (r.ok) location.href = '/';
+  else {
+    const j = await r.json().catch(() => ({}));
+    document.getElementById('err').textContent = (j.detail && j.detail.message) || '登录失败';
+  }
+});
+</script>
+</body>
+</html>

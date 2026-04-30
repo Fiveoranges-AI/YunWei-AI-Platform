@@ -1534,7 +1534,7 @@ git commit -m "Task 7: cross-agent request firewall (SSO.md §7.2)"
 
 ---
 
-## Task 8: Health 探测 + main.py 路由组装
+## Task 8: Health 探测 + main.py 路由组装 [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/platform_app/health.py`
