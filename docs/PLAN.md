@@ -109,7 +109,7 @@ Yinhu agent 代码原地修改:`/Users/eason/yunwei-workspaces/yinhu-rebuild/gen
 
 ---
 
-## Task 1: 仓库脚手架 + 依赖
+## Task 1: 仓库脚手架 + 依赖 [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/platform/pyproject.toml`
