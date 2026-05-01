@@ -24,18 +24,8 @@ services:
     build: /Users/eason/yunwei-workspaces/yinhu-rebuild/generated
     container_name: agent-yinhu-super-xiaochen
     restart: unless-stopped
-    environment:
-      TENANT_CLIENT: yinhu
-      TENANT_AGENT: super-xiaochen
-      HMAC_SECRET_CURRENT: ${YINHU_HMAC_SECRET_CURRENT}
-      HMAC_KEY_ID_CURRENT: ${YINHU_HMAC_KEY_ID_CURRENT}
-      HMAC_SECRET_PREV: ""
-      HMAC_KEY_ID_PREV: ""
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL}
-      MODEL_PRO: ${MODEL_PRO}
-      MODEL_FLASH: ${MODEL_FLASH}
-      AGENT_VERSION: yinhu-1.0.0
+    env_file:
+      - ../agents/yinhu-super-xiaochen/.env
     volumes:
       - /Users/eason/yunwei-workspaces/yinhu-rebuild/.yunwei-cache/canary:/data
     networks:
