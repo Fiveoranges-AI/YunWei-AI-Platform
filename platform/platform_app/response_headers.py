@@ -43,20 +43,31 @@ def inject_security_headers(
     *, csp_nonce: str, is_app_subdomain: bool,
 ) -> list[tuple[bytes, bytes]]:
     """SSO.md §7.1 全套响应头。"""
+    # v1.2: relaxed CSP for legacy agent UIs that ship hand-written HTML
+    # with inline <style>/<script>, style="..." attrs, and assorted font
+    # URLs. CSP3 quirk: when script-src has BOTH 'nonce-XXX' and
+    # 'unsafe-inline', browsers ignore 'unsafe-inline' and require the
+    # nonce on every inline tag. Since yinhu's index.html doesn't carry
+    # nonces yet, drop nonce + strict-dynamic so 'unsafe-inline' actually
+    # takes effect. v1.3 will make agents nonce-aware (X-CSP-Nonce header
+    # platform already sends → agent injects into inline tags) and we'll
+    # restore the strict nonce-only mode.
+    # Note: csp_nonce is still computed and forwarded to agent for v1.3
+    # forward-compat; just not advertised in this header.
+    del csp_nonce  # silence unused-arg lints; consumed in v1.3
     csp = (
         "default-src 'none'; "
-        f"script-src 'self' 'strict-dynamic' 'nonce-{csp_nonce}'; "
-        "style-src 'self'; "
-        "img-src 'self' data:; "
-        "font-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data: https:; "
         "connect-src 'self'; "
-        "worker-src 'self'; "
+        "worker-src 'self' blob:; "
         "manifest-src 'self'; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'; "
         "object-src 'none'; "
-        "require-trusted-types-for 'script'; "
         "report-uri /csp-report"
     )
     additions = [

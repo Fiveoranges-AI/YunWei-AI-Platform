@@ -37,8 +37,12 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
     restart: unless-stopped
-    # token mode: no config.yml mounted; routes configured in CF dashboard
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    # token mode: no config.yml mounted; routes configured in CF dashboard.
+    # cloudflared reads TUNNEL_TOKEN from env (injected via env_file at
+    # runtime), avoiding compose-level ${VAR} interpolation that needs the
+    # .env file to be in compose's "project directory" (= ops/, not us).
+    env_file: ../.env
+    command: tunnel --no-autoupdate run
     networks:
       - cf-tunnel
     depends_on:

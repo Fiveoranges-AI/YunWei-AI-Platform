@@ -46,6 +46,12 @@ async def reverse_proxy(
         v = request.headers.get(h)
         if v:
             forward_headers[h] = v
+    # Forward the public-facing Host so the agent's verify() sees the same
+    # host the platform put in the HMAC payload. httpx would otherwise set
+    # Host to the upstream URL's host (the docker service name).
+    public_host = request.headers.get("host", "")
+    if public_host:
+        forward_headers["host"] = public_host
     nonce = make_csp_nonce()
     forward_headers["X-CSP-Nonce"] = nonce
 

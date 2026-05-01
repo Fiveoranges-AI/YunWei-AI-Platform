@@ -63,6 +63,7 @@ async def catch_all(full_path: str, request: Request):
             dest_path_prefix=f"/{client_id}/{agent_id}/",
             csrf_header=request.headers.get("x-csrf-token"),
             csrf_cookie=request.cookies.get("app_csrf"),
+            method=request.method,
         )
     except firewall.FirewallReject as e:
         raise HTTPException(403, {"error": "cross_agent_blocked", "message": str(e)})

@@ -11,9 +11,18 @@ def _ok_kwargs(**override):
         referer="https://app.fiveoranges.ai/yinhu/super-xiaochen/",
         host=HOST, dest_path_prefix=DEST,
         csrf_header="abc", csrf_cookie="abc",
+        method="POST",  # default to POST so CSRF check is exercised; safe-method tests pass method=GET explicitly
     )
     base.update(override)
     return base
+
+
+def test_safe_method_skips_csrf():
+    # GET / HEAD / OPTIONS pass without CSRF tokens — passive subresources
+    # like <img> can't carry them, but cross-site + Referer-prefix checks
+    # still protect.
+    check_request(**_ok_kwargs(method="GET", csrf_header=None, csrf_cookie=None))
+    check_request(**_ok_kwargs(method="HEAD", csrf_header=None, csrf_cookie=None))
 
 
 def test_navigate_allowed_without_csrf():
