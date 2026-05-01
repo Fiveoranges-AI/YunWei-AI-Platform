@@ -29,11 +29,17 @@ _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
 
-@app.get("/")
+_NO_STORE = {"Cache-Control": "no-store, must-revalidate"}
+
+
+@app.api_route("/", methods=["GET", "HEAD"])
 def index(request: Request):
-    if request.cookies.get("app_session"):
-        return FileResponse(_STATIC / "agents.html")
-    return FileResponse(_STATIC / "login.html")
+    # no-store: index branches on the app_session cookie, so the response
+    # for "/" must never be cached. Without this, a browser that loaded
+    # login.html before login will keep serving the cached login.html
+    # after login until the user manually refreshes (Cmd+Shift+R).
+    page = "agents.html" if request.cookies.get("app_session") else "login.html"
+    return FileResponse(_STATIC / page, headers=_NO_STORE)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
