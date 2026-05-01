@@ -48,14 +48,24 @@ def test_referer_host_mismatch_blocked():
         check_request(**_ok_kwargs(referer="https://evil.com/yinhu/super-xiaochen/"))
 
 
-def test_missing_csrf_blocked():
-    with pytest.raises(FirewallReject, match="csrf"):
-        check_request(**_ok_kwargs(csrf_header=None))
+def test_same_origin_post_skips_csrf():
+    # Same-origin POST is browser-attested same scheme+host+port; SOP
+    # prevents cross-origin attackers from triggering such a request, so
+    # CSRF tokens are redundant.
+    check_request(**_ok_kwargs(csrf_header=None, csrf_cookie=None))
 
 
-def test_csrf_mismatch_blocked():
+def test_same_site_missing_csrf_blocked():
+    # Same-site (different subdomain like internal.fiveoranges.ai) still
+    # needs CSRF — subdomains can't be trusted by SOP alone.
     with pytest.raises(FirewallReject, match="csrf"):
-        check_request(**_ok_kwargs(csrf_header="xxx", csrf_cookie="yyy"))
+        check_request(**_ok_kwargs(sec_fetch_site="same-site", csrf_header=None))
+
+
+def test_same_site_csrf_mismatch_blocked():
+    with pytest.raises(FirewallReject, match="csrf"):
+        check_request(**_ok_kwargs(sec_fetch_site="same-site",
+                                    csrf_header="xxx", csrf_cookie="yyy"))
 
 
 def test_missing_sec_fetch_blocked():

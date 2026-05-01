@@ -44,5 +44,13 @@ def check_request(
     if method.upper() in SAFE_METHODS:
         return
 
+    # Sec-Fetch-Site=same-origin is browser-attested: the request was
+    # initiated by JS running on the SAME scheme+host+port. SOP already
+    # prevents cross-origin attackers from causing such a request, so the
+    # CSRF double-submit check is redundant. Keep the check for same-site
+    # (subdomain) and "none" / unknown — those still need defense.
+    if sec_fetch_site == "same-origin":
+        return
+
     if not _csrf.verify_double_submit(csrf_header, csrf_cookie):
         raise FirewallReject("csrf failure")
