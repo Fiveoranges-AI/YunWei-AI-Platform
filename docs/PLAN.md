@@ -2113,7 +2113,7 @@ git commit -m "feat: relative fetch paths + auto base href"
 
 ---
 
-## Task 11: Docker Compose 编排
+## Task 11: Docker Compose 编排 [完成 2026-04-30]
 
 **Files:**
 - Create: `~/agent-platform/ops/docker-compose.yml`
