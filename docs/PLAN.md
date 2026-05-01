@@ -2260,7 +2260,7 @@ git commit -m "Task 11: docker-compose orchestration + bootstrap script"
 
 ---
 
-## Task 12: Cloudflared Tunnel 路由(token 模式,routes 在 dashboard)
+## Task 12: Cloudflared Tunnel 路由(token 模式,routes 在 dashboard) [完成 2026-05-01]
 
 我们用 **token 模式**(参考 Task 11 的 docker-compose 命令 `tunnel run --token ${TUNNEL_TOKEN}`)。Routes 在 Cloudflare dashboard 配置,不需要本地 config.yml。这种方式最简单,管理界面直观。
 
