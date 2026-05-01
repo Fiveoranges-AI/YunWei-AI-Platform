@@ -62,13 +62,13 @@
 │   └── static/
 │       ├── login.html
 │       └── agents.html
-├── ops/                                 ← Task 12 创建
-│   ├── docker-compose.yml
-│   ├── cloudflared/
-│   │   └── config.yml
-│   ├── backup.sh
-│   └── launchd/
+├── ops/                                 ← Task 11/12/14 创建
+│   ├── docker-compose.yml               ← Task 11
+│   ├── bootstrap.sh                     ← Task 11
+│   ├── backup.sh                        ← Task 14
+│   └── launchd/                         ← Task 14
 │       └── com.fiveoranges.colima.plist
+│   # cloudflared 用 token 模式,routes 在 CF dashboard,不存本地 config.yml
 ├── data/                                ← runtime 持久化(.gitignore'd)
 │   ├── platform.db
 │   ├── proxy_log.db
@@ -2319,10 +2319,15 @@ curl -i https://app.fiveoranges.ai/api/agents
 # 期望:401 not_logged_in
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 标记完成**
+
+Token 模式下没有要 commit 的代码——routes 全在 CF dashboard。如果后续切到
+config-file 模式可以加 `ops/cloudflared/config.yml`,目前不需要。
+
+只在 PLAN.md 标记 Task 12 完成即可:
 ```bash
-git add ops/cloudflared/config.yml
-git commit -m "Task 12: cloudflared config + tunnel ingress"
+sed -i '' 's|^## Task 12: Cloudflared.*|& [完成 YYYY-MM-DD]|' docs/PLAN.md
+git commit -m "Task 12: tunnel routes provisioned via CF dashboard"
 ```
 
 ---
