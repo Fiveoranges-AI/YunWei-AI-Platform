@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import time
 import uuid
+from urllib.parse import quote
 
 
 def _compute_sig(
@@ -39,7 +40,10 @@ def sign(
         "X-Tenant-Client": client,
         "X-Tenant-Agent": agent,
         "X-User-Id": user_id,
-        "X-User-Name": user_name,
+        # URL-encode so non-ASCII display names ("许总") survive HTTP header
+        # ASCII enforcement; agent can urldecode if it needs to display.
+        # Not part of the HMAC payload, so encoding doesn't affect signature.
+        "X-User-Name": quote(user_name, safe=""),
         "X-User-Role": user_role,
         "X-Auth-Timestamp": str(ts),
         "X-Auth-Nonce": nonce,
