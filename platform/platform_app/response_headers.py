@@ -43,12 +43,17 @@ def inject_security_headers(
     *, csp_nonce: str, is_app_subdomain: bool,
 ) -> list[tuple[bytes, bytes]]:
     """SSO.md §7.1 全套响应头。"""
+    # v1.2: relaxed CSP to allow inline scripts/styles + data: URI fonts so
+    # existing agent UIs (yinhu's index.html has heaps of inline <style>,
+    # style="..." attrs, inline <script> blocks, and base64 woff2 fonts)
+    # work without rewrites. Re-tighten in v1.3 by making agents nonce-aware
+    # (agent reads X-CSP-Nonce platform sends and applies to inline tags).
     csp = (
         "default-src 'none'; "
-        f"script-src 'self' 'strict-dynamic' 'nonce-{csp_nonce}'; "
-        "style-src 'self'; "
+        f"script-src 'self' 'strict-dynamic' 'nonce-{csp_nonce}' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
-        "font-src 'self'; "
+        "font-src 'self' data:; "
         "connect-src 'self'; "
         "worker-src 'self'; "
         "manifest-src 'self'; "
@@ -56,7 +61,6 @@ def inject_security_headers(
         "base-uri 'self'; "
         "form-action 'self'; "
         "object-src 'none'; "
-        "require-trusted-types-for 'script'; "
         "report-uri /csp-report"
     )
     additions = [
