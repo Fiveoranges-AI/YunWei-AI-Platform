@@ -43,22 +43,24 @@ def inject_security_headers(
     *, csp_nonce: str, is_app_subdomain: bool,
 ) -> list[tuple[bytes, bytes]]:
     """SSO.md §7.1 全套响应头。"""
-    # v1.2: relaxed CSP for legacy agent UIs that ship hand-written HTML
-    # with inline <style>/<script>, style="..." attrs, and assorted font
-    # URLs. CSP3 quirk: when script-src has BOTH 'nonce-XXX' and
-    # 'unsafe-inline', browsers ignore 'unsafe-inline' and require the
-    # nonce on every inline tag. Since yinhu's index.html doesn't carry
-    # nonces yet, drop nonce + strict-dynamic so 'unsafe-inline' actually
-    # takes effect. v1.3 will make agents nonce-aware (X-CSP-Nonce header
-    # platform already sends → agent injects into inline tags) and we'll
-    # restore the strict nonce-only mode.
-    # Note: csp_nonce is still computed and forwarded to agent for v1.3
-    # forward-compat; just not advertised in this header.
-    del csp_nonce  # silence unused-arg lints; consumed in v1.3
+    # v1.3: strict nonce-based CSP for <script> and <style> blocks. Inline
+    # tag attributes (style="..." / onclick="...") are allowed via the
+    # CSP3 *-src-attr directives without loosening *-src — modern browsers
+    # apply *-src-attr to attributes and *-src to <script>/<style> blocks
+    # independently.
+    #
+    # Requires the agent to inject the nonce into its inline tags. Platform
+    # forwards the nonce via X-CSP-Nonce header (proxy.py); see yinhu
+    # web_agent.py serve_index for the rewrite logic. An agent that
+    # doesn't yet support this will have its inline tags blocked — roll
+    # back to v1.2 (this file's previous revision) until the agent is
+    # nonce-aware.
     csp = (
         "default-src 'none'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
+        f"script-src 'self' 'strict-dynamic' 'nonce-{csp_nonce}'; "
+        f"style-src 'self' 'nonce-{csp_nonce}'; "
+        "script-src-attr 'unsafe-inline'; "
+        "style-src-attr 'unsafe-inline'; "
         "img-src 'self' data: blob:; "
         "font-src 'self' data: https:; "
         "connect-src 'self'; "
