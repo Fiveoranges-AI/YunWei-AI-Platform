@@ -1,151 +1,145 @@
 /* =============================================================
-   ApproachSection — 4-step implementation process
-   Style: Horizontal step cards with connecting line, white bg
+   Approach — From discovery to daily operation, in four phases (v1.3)
+   Diagonal-rising 4-step layout on desktop, stacked on mobile.
    ============================================================= */
 
-import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
-const steps = [
-  {
-    num: "01",
-    en: "Diagnose",
-    cn: "诊断",
-    desc: "Business process analysis, pain point identification, system and data inventory.",
-    cn_desc: "业务流程诊断、痛点梳理、系统与数据盘点",
-    color: "#2D6EA8",
-  },
-  {
-    num: "02",
-    en: "Prioritize",
-    cn: "优先排序",
-    desc: "Select high-ROI, low-resistance AI scenarios that can be deployed quickly.",
-    cn_desc: "选择高 ROI、低阻力、可快速落地的 AI 场景",
-    color: "#3B7EC8",
-  },
-  {
-    num: "03",
-    en: "Build",
-    cn: "构建",
-    desc: "Develop AI Agents, knowledge bases, data interfaces, automation workflows, and dashboards.",
-    cn_desc: "构建 AI Agent、知识库、数据接口、自动化流程和看板",
-    color: "#4A8BC4",
-  },
-  {
-    num: "04",
-    en: "Scale",
-    cn: "扩展",
-    desc: "Expand from one scenario to sales, production, finance, HR, and executive decision layers.",
-    cn_desc: "从一个场景扩展到销售、生产、财务、人事和管理决策层",
-    color: "#5B9BD5",
-  },
+const STEPS = [
+  { cn: "诊断", en: "Discover", desc: "到现场梳理你的数据、系统与当前痛点。" },
+  { cn: "设计", en: "Design", desc: "流程先行的架构：哪个智能体负责哪类决策？" },
+  { cn: "构建", en: "Build", desc: "两周一节奏的迭代交付，你的团队全程参与。" },
+  { cn: "运营", en: "Operate", desc: "陪伴上线后的前 90 天进入稳定运营。" },
 ];
 
-function useInView(threshold = 0.15) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, inView };
-}
-
 export default function ApproachSection() {
-  const { ref, inView } = useInView();
-
   return (
-    <section id="approach" className="py-24 lg:py-32 bg-white">
-      <div className="container" ref={ref}>
-        {/* Header */}
-        <div className="mb-16">
-          <span className="section-label mb-5 inline-flex">
-            <span className="slash-accent" style={{ width: "1rem" }} />
-            Implementation · 实施方法
+    <section id="approach" className="bg-section-blue" style={{ padding: "7rem 0" }}>
+      <div className="container">
+        <div style={{ marginBottom: "4.5rem", maxWidth: "760px" }}>
+          <span className="section-label">
+            <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
+            我们的方法 · OUR APPROACH
           </span>
           <h2
-            className="font-bold leading-tight"
-            style={{ fontFamily: "Sora, sans-serif", fontSize: "clamp(1.9rem, 3.5vw, 2.8rem)", color: "#0F2340" }}
+            style={{
+              marginTop: "1rem",
+              fontSize: "clamp(2.1rem, 4vw, 3rem)",
+              lineHeight: 1.15,
+              fontWeight: 700,
+              color: "#0F2340",
+              letterSpacing: "-0.01em",
+              fontFamily: "Sora, sans-serif",
+            }}
           >
-            From Use Case to{" "}
-            <span style={{ color: "#2D6EA8" }}>Operating System</span>
+            From discovery to daily operation, in four phases.
           </h2>
-          <p className="mt-2 text-base font-medium" style={{ color: "#2D6EA8", fontFamily: "Manrope, sans-serif" }}>
-            从单一场景切入，逐步构建企业智能运营系统。
-          </p>
+          <div
+            style={{
+              marginTop: "0.75rem",
+              fontFamily: "Sora, sans-serif",
+              fontWeight: 500,
+              fontSize: "1.0625rem",
+              color: "#475569",
+            }}
+          >
+            从诊断到日常运营，四个阶段闭环。
+          </div>
         </div>
 
-        {/* Steps */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative">
-          {/* Connecting line (desktop) */}
-          <div
-            className="hidden lg:block absolute top-10 left-[12.5%] right-[12.5%] h-px"
-            style={{ background: "linear-gradient(90deg, #2D6EA8, #5B9BD5)" }}
-          />
+        <div className="approach-rail">
+          {/* Diagonal connector — desktop only */}
+          <svg
+            className="approach-line"
+            viewBox="0 0 1000 220"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <defs>
+              <linearGradient id="approachLineGrad" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0%" stopColor="#2D6EA8" stopOpacity="0.15" />
+                <stop offset="50%" stopColor="#2D6EA8" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="#2D6EA8" stopOpacity="0.15" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M 60 180 L 960 40"
+              stroke="url(#approachLineGrad)"
+              strokeWidth="2"
+              strokeDasharray="6 8"
+              fill="none"
+            />
+            <polygon points="960,40 950,32 950,48" fill="#2D6EA8" opacity="0.7" />
+          </svg>
 
-          {steps.map((s, i) => (
-            <div
-              key={i}
-              className="relative flex flex-col"
-              style={{
-                opacity: inView ? 1 : 0,
-                transform: inView ? "translateY(0)" : "translateY(24px)",
-                transition: `opacity 0.5s ease ${i * 0.12}s, transform 0.5s ease ${i * 0.12}s`,
-              }}
-            >
-              {/* Step circle */}
-              <div className="flex items-center gap-4 mb-6">
-                <div
-                  className="relative z-10 w-20 h-20 rounded-full flex flex-col items-center justify-center border-2 bg-white"
-                  style={{ borderColor: s.color }}
-                >
-                  <span
-                    className="font-bold leading-none"
-                    style={{ fontFamily: "Sora, sans-serif", fontSize: "0.65rem", color: s.color, letterSpacing: "0.1em" }}
-                  >
-                    STEP
-                  </span>
-                  <span
-                    className="font-bold"
-                    style={{ fontFamily: "Sora, sans-serif", fontSize: "1.4rem", color: s.color, lineHeight: 1.1 }}
-                  >
-                    {s.num}
-                  </span>
-                </div>
-              </div>
-
-              {/* Content */}
+          <div className="approach-steps">
+            {STEPS.map((s, i) => (
               <div
-                className="flex-1 p-6 rounded-xl border border-slate-100"
-                style={{ background: "#F8FAFC" }}
+                key={s.en}
+                className="approach-step"
+                style={{ ["--step-i" as string]: i } as CSSProperties}
               >
-                <h3
-                  className="font-bold mb-0.5"
-                  style={{ fontFamily: "Sora, sans-serif", fontSize: "1.1rem", color: "#0F2340" }}
+                <div
+                  style={{
+                    width: "5.5rem",
+                    height: "5.5rem",
+                    background: "#fff",
+                    border: "2px solid var(--brand-blue)",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontFamily: "Sora, sans-serif",
+                    fontWeight: 700,
+                    fontSize: "1.625rem",
+                    color: "var(--brand-blue)",
+                    position: "relative",
+                    zIndex: 2,
+                    marginBottom: "1.25rem",
+                    boxShadow:
+                      "0 8px 22px rgba(45,110,168,0.18), inset 0 0 0 4px #fff, inset 0 0 0 5px rgba(45,110,168,0.10)",
+                  }}
                 >
-                  {s.en}
-                </h3>
-                <p
-                  className="text-sm font-semibold mb-3"
-                  style={{ fontFamily: "Manrope, sans-serif", color: s.color }}
+                  0{i + 1}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "1.375rem",
+                    fontWeight: 700,
+                    color: "#0F2340",
+                    fontFamily: "Sora, sans-serif",
+                    lineHeight: 1.2,
+                  }}
                 >
                   {s.cn}
-                </p>
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "var(--brand-blue)",
+                    letterSpacing: "0.14em",
+                    marginTop: "4px",
+                    fontFamily: "Sora, sans-serif",
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {s.en}
+                </div>
                 <p
-                  className="text-sm leading-relaxed mb-1"
-                  style={{ fontFamily: "Manrope, sans-serif", color: "#475569" }}
+                  style={{
+                    marginTop: "0.875rem",
+                    color: "#475569",
+                    fontSize: "0.9375rem",
+                    lineHeight: 1.65,
+                  }}
                 >
                   {s.desc}
                 </p>
-                <p
-                  className="text-xs leading-relaxed"
-                  style={{ fontFamily: "Manrope, sans-serif", color: "#94A3B8" }}
-                >
-                  {s.cn_desc}
-                </p>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
