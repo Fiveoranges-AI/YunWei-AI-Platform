@@ -1,37 +1,751 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>fiveoranges.ai 登录</title>
-<style>
-body { font-family: -apple-system, sans-serif; background: #fafafa; max-width: 400px; margin: 80px auto; padding: 24px; }
-h1 { font-size: 18px; margin-bottom: 24px; color: #333; }
-form { background: white; padding: 24px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-input { width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-button { width: 100%; padding: 12px; background: #ff7a00; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-top: 12px; }
-.err { color: #c00; font-size: 13px; min-height: 18px; margin-top: 8px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>客户登录 · Client Portal — Five Oranges AI · 运帷 AI</title>
+  <meta name="description" content="Five Oranges AI Client Portal — Log in to your enterprise AI workspace." />
+  <link rel="icon" href="/static/assets/logo.png" type="image/png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --brand-blue: #2D6EA8;
+      --brand-blue-light: #4A8BC4;
+      --brand-blue-pale: #EEF4FB;
+      --brand-navy: #0F2340;
+      --danger: #DC2626;
+      --danger-bg: #FEF2F2;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      color: #0F2340;
+      background: #F8F7F4;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { text-decoration: none; color: inherit; }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* Layout: split-screen 60/40 */
+    .portal {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .portal-main {
+      display: grid;
+      grid-template-columns: 1fr;
+      flex: 1;
+      min-height: calc(100vh - 56px);
+    }
+
+    @media (min-width: 1024px) {
+      .portal-main { grid-template-columns: 6fr 4fr; }
+    }
+
+    /* Left · brand visual */
+    .brand-pane {
+      position: relative;
+      overflow: hidden;
+      padding: 2rem 1.5rem;
+      min-height: 280px;
+      background: linear-gradient(135deg, #0B1B33 0%, #0F2340 45%, #1B3D6B 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+    @media (min-width: 768px) {
+      .brand-pane { padding: 3rem 3.5rem; min-height: 360px; }
+    }
+    @media (min-width: 1024px) {
+      .brand-pane { padding: 3rem 4.5rem; min-height: 100%; }
+    }
+
+    .brand-pane::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 100%, rgba(45,110,168,0.55), transparent 55%),
+        radial-gradient(ellipse at 90% 0%, rgba(96,165,250,0.20), transparent 50%);
+      pointer-events: none;
+    }
+    .brand-pane::after {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse at 30% 60%, #000 0%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse at 30% 60%, #000 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .brand-pane > * { position: relative; z-index: 1; }
+
+    .brand-logo {
+      display: flex; align-items: center; gap: 14px;
+      animation: fadeIn 0.5s ease both;
+    }
+    .brand-logo-mark {
+      width: 52px; height: 52px;
+      border-radius: 12px;
+      background: #fff;
+      padding: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .brand-logo-mark img { width: 40px; height: 40px; border-radius: 8px; display: block; }
+    .brand-logo-text {
+      font-family: 'Sora', sans-serif;
+      line-height: 1.1;
+    }
+    .brand-logo-text .word {
+      font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.02em;
+    }
+    .brand-logo-text .cn {
+      font-size: 18px; color: #60A5FA; font-weight: 600; letter-spacing: 0.18em;
+      margin-top: 3px;
+    }
+
+    .brand-hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 2.5rem 0;
+      max-width: 540px;
+      animation: fadeIn 0.6s ease 0.1s both;
+    }
+
+    .brand-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 11.5px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #60A5FA;
+      margin-bottom: 1.75rem;
+    }
+    .brand-eyebrow .bar {
+      width: 24px; height: 2px; background: #60A5FA; transform: skewX(-20deg);
+    }
+
+    .brand-slogan-en {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: clamp(2.25rem, 4.6vw, 3.75rem);
+      line-height: 1.02;
+      letter-spacing: -0.025em;
+      color: #fff;
+    }
+    .brand-slogan-en .scope { color: #60A5FA; }
+    .brand-slogan-cn {
+      margin-top: 0.75rem;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: clamp(1.05rem, 1.6vw, 1.4rem);
+      letter-spacing: 0.18em;
+      color: #93C5FD;
+    }
+
+    .brand-welcome {
+      margin-top: 2.5rem;
+      max-width: 460px;
+      font-size: 1.0625rem;
+      line-height: 1.65;
+      color: rgba(255,255,255,0.92);
+    }
+    .brand-welcome .en {
+      display: block;
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.6;
+    }
+
+    .brand-trust {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      align-items: center;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      font-family: 'Sora', sans-serif;
+      font-size: 11.5px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+    }
+    .brand-trust .dot { width: 4px; height: 4px; border-radius: 50%; background: #60A5FA; }
+
+    /* Right · form pane */
+    .form-pane {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1.5rem;
+      background: #FFFFFF;
+      position: relative;
+    }
+    @media (min-width: 768px) {
+      .form-pane { padding: 3rem; }
+    }
+
+    .form-card {
+      width: 100%;
+      max-width: 440px;
+      animation: fadeIn 0.5s ease 0.15s both;
+    }
+
+    .form-card.shake { animation: shake 320ms cubic-bezier(.36,.07,.19,.97) both; }
+    @keyframes shake {
+      10%,90% { transform: translateX(-2px); }
+      20%,80% { transform: translateX(4px); }
+      30%,50%,70% { transform: translateX(-7px); }
+      40%,60% { transform: translateX(7px); }
+    }
+
+    .form-h1 {
+      font-family: 'Sora', sans-serif;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.012em;
+      color: #0F2340;
+      margin: 0 0 4px;
+      line-height: 1.15;
+    }
+    .form-h1-en {
+      font-family: 'Sora', sans-serif;
+      font-size: 0.875rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--brand-blue);
+    }
+    .form-sub {
+      margin-top: 0.875rem;
+      font-size: 0.9375rem;
+      color: #64748B;
+      line-height: 1.6;
+    }
+    .form-sub .en { display: block; color: #94A3B8; font-size: 0.8125rem; margin-top: 2px; }
+
+    .alert {
+      margin-top: 1.5rem;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--danger-bg);
+      border: 1px solid rgba(220,38,38,0.22);
+      color: var(--danger);
+      font-size: 0.875rem;
+      line-height: 1.5;
+      display: none;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .alert.show { display: flex; }
+    .alert .en { color: rgba(220,38,38,0.7); display: block; margin-top: 1px; font-size: 0.78rem; }
+
+    .form-fields {
+      margin-top: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.125rem;
+    }
+
+    .field-label {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: #0F2340;
+    }
+    .field-label .en {
+      font-weight: 500;
+      font-size: 0.6875rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #94A3B8;
+    }
+
+    .input-wrap { position: relative; }
+    .input {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border: 1.5px solid rgba(15,35,64,0.14);
+      border-radius: 10px;
+      background: #fff;
+      font-size: 0.9375rem;
+      font-family: 'Manrope', sans-serif;
+      color: #0F2340;
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+      outline: none;
+    }
+    .input::placeholder { color: #94A3B8; }
+    .input:hover { border-color: rgba(15,35,64,0.28); }
+    .input:focus {
+      border-color: var(--brand-blue);
+      box-shadow: 0 0 0 4px rgba(45,110,168,0.14);
+    }
+    .input.has-error {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 4px rgba(220,38,38,0.10);
+    }
+    .input.has-icon-right { padding-right: 44px; }
+
+    .input-icon-btn {
+      position: absolute;
+      right: 6px; top: 50%;
+      transform: translateY(-50%);
+      width: 36px; height: 36px;
+      border: none; background: transparent;
+      color: #94A3B8;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+    }
+    .input-icon-btn:hover { color: var(--brand-blue); background: var(--brand-blue-pale); }
+
+    .field-error {
+      display: none;
+      margin-top: 6px;
+      align-items: center;
+      gap: 6px;
+      color: var(--danger);
+      font-size: 0.8125rem;
+    }
+    .field-error.show { display: flex; }
+    .field-error svg { flex-shrink: 0; }
+
+    .options-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .checkbox-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.875rem;
+      color: #475569;
+      cursor: pointer;
+      user-select: none;
+    }
+    .checkbox-wrap input { position: absolute; opacity: 0; pointer-events: none; }
+    .checkbox-box {
+      width: 18px; height: 18px;
+      border: 1.5px solid rgba(15,35,64,0.30);
+      border-radius: 5px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #fff;
+      transition: border-color 180ms, background 180ms;
+    }
+    .checkbox-wrap input:checked + .checkbox-box {
+      background: var(--brand-blue);
+      border-color: var(--brand-blue);
+    }
+    .checkbox-box svg { opacity: 0; stroke: #fff; transition: opacity 180ms; }
+    .checkbox-wrap input:checked + .checkbox-box svg { opacity: 1; }
+    .checkbox-wrap .en { color: #94A3B8; font-size: 0.75rem; letter-spacing: 0.04em; margin-left: 2px; }
+
+    .link-blue {
+      color: var(--brand-blue);
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 160ms;
+      font-family: 'Sora', sans-serif;
+    }
+    .link-blue:hover { color: var(--brand-navy); text-decoration: underline; }
+    .link-blue .en { color: rgba(45,110,168,0.65); font-size: 0.75rem; letter-spacing: 0.04em; margin-left: 4px; font-weight: 500; }
+
+    .btn-primary {
+      margin-top: 0.5rem;
+      width: 100%;
+      height: 50px;
+      border-radius: 10px;
+      background: var(--brand-blue);
+      color: #fff;
+      border: none;
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 0.9375rem;
+      letter-spacing: 0.01em;
+      box-shadow: 0 8px 22px rgba(45,110,168,0.30);
+      transition: background 160ms, box-shadow 200ms, transform 160ms;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .btn-primary .en { font-size: 0.6875rem; opacity: 0.78; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; }
+    .btn-primary:hover {
+      background: #225685;
+      box-shadow: 0 12px 28px rgba(45,110,168,0.38);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary[disabled] { background: #94A3B8; box-shadow: none; cursor: not-allowed; transform: none; }
+
+    .btn-primary .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .btn-primary[data-state="loading"] .spinner { display: inline-block; }
+    .btn-primary .check { display: none; }
+    .btn-primary[data-state="success"] { background: #10B981; box-shadow: 0 8px 22px rgba(16,185,129,0.30); }
+    .btn-primary[data-state="success"] .check { display: inline-block; animation: pop 240ms ease both; }
+    @keyframes pop {
+      0% { transform: scale(0.4); opacity: 0; }
+      80% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .card-foot {
+      margin-top: 1.75rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid rgba(15,35,64,0.06);
+      font-size: 0.875rem;
+      color: #64748B;
+      text-align: center;
+    }
+    .card-foot a { color: var(--brand-blue); font-weight: 600; }
+    .card-foot a:hover { text-decoration: underline; }
+    .card-foot .en { color: #94A3B8; font-size: 0.75rem; display: block; margin-top: 2px; letter-spacing: 0.04em; }
+
+    .portal-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0 1.5rem;
+      height: 56px;
+      background: #0F2340;
+      color: #94A3B8;
+      font-size: 0.8125rem;
+      flex-wrap: wrap;
+    }
+    @media (min-width: 768px) {
+      .portal-foot { padding: 0 2.5rem; }
+    }
+    .portal-foot .copy { font-family: 'Sora', sans-serif; }
+    .portal-foot ul {
+      list-style: none; margin: 0; padding: 0;
+      display: flex; gap: 1.25rem; flex-wrap: wrap;
+    }
+    .portal-foot a { color: #94A3B8; transition: color 160ms; }
+    .portal-foot a:hover { color: #fff; }
+    .portal-foot .en { color: #64748B; font-size: 0.7rem; letter-spacing: 0.04em; margin-left: 4px; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 1023px) {
+      .brand-hero { padding: 1.5rem 0; }
+    }
+  </style>
 </head>
 <body>
-<h1>fiveoranges.ai · 登录</h1>
-<form id="f">
-<input name="username" placeholder="用户名" autocomplete="username" required>
-<input name="password" type="password" placeholder="密码" autocomplete="current-password" required>
-<button type="submit">登录</button>
-<div class="err" id="err"></div>
-</form>
-<script>
-document.getElementById('f').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const r = await fetch('/auth/login', { method: 'POST', body: fd, credentials: 'same-origin' });
-  if (r.ok) location.href = '/';
-  else {
-    const j = await r.json().catch(() => ({}));
-    document.getElementById('err').textContent = (j.detail && j.detail.message) || '登录失败';
-  }
-});
-</script>
+  <div class="portal" data-screen-label="Login · Client Portal">
+    <main class="portal-main">
+
+      <!-- Left · brand visual -->
+      <aside class="brand-pane" aria-label="Five Oranges AI brand">
+        <a class="brand-logo" href="https://fiveoranges.ai/" aria-label="Back to homepage">
+          <span class="brand-logo-mark"><img src="/static/assets/logo.png" alt="Five Oranges AI logo" /></span>
+          <span class="brand-logo-text">
+            <span class="word">FIVE ORANGES</span>
+            <span class="cn">运帷 AI</span>
+          </span>
+        </a>
+
+        <div class="brand-hero">
+          <div class="brand-eyebrow">
+            <span class="bar"></span>
+            <span>您的 AI 工作台 · YOUR AI WORKSPACE</span>
+          </div>
+          <h1 class="brand-slogan-en">
+            Beyond <span class="scope">the scope.</span>
+          </h1>
+          <div class="brand-slogan-cn">进无止境</div>
+
+          <p class="brand-welcome">
+            登录后进入贵司专属 AI 智能体工作空间，所有数据本地化、可追溯、可审计。
+            <span class="en">Log in to your dedicated AI agent workspace. All data localized, traceable, and auditable.</span>
+          </p>
+        </div>
+
+        <div class="brand-trust">
+          <span>SOC 2</span>
+          <span class="dot"></span>
+          <span>ISO 27001</span>
+          <span class="dot"></span>
+          <span>数据加密</span>
+        </div>
+      </aside>
+
+      <!-- Right · login form -->
+      <section class="form-pane" aria-labelledby="login-h1">
+        <form class="form-card" id="login-form" novalidate>
+          <div class="form-h1-en">Client Portal</div>
+          <h1 class="form-h1" id="login-h1">客户登录</h1>
+          <p class="form-sub">
+            登录您的企业专属工作台
+            <span class="en">Log in to your enterprise workspace</span>
+          </p>
+
+          <div class="alert" id="form-alert" role="alert" aria-live="polite">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>
+              <span id="alert-cn">邮箱或密码错误</span>
+              <span class="en" id="alert-en">Invalid email or password</span>
+            </span>
+          </div>
+
+          <div class="form-fields">
+            <!-- Email / username -->
+            <div>
+              <label class="field-label" for="username">
+                邮箱<span class="en">EMAIL</span>
+              </label>
+              <div class="input-wrap">
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  class="input"
+                  placeholder="name@company.com"
+                  autocomplete="username"
+                  aria-label="邮箱 · Email"
+                  aria-describedby="username-error"
+                  spellcheck="false"
+                  autocapitalize="none"
+                  required
+                />
+              </div>
+              <div class="field-error" id="username-error" aria-live="polite">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span id="username-error-text">请输入邮箱 · Email is required</span>
+              </div>
+            </div>
+
+            <!-- Password -->
+            <div>
+              <label class="field-label" for="password">
+                密码<span class="en">PASSWORD</span>
+              </label>
+              <div class="input-wrap">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  class="input has-icon-right"
+                  placeholder="请输入密码"
+                  autocomplete="current-password"
+                  aria-label="密码 · Password"
+                  aria-describedby="password-error"
+                  required
+                />
+                <button type="button" class="input-icon-btn" id="toggle-pw" aria-label="显示密码 · Show password">
+                  <svg id="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg id="icon-eye-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+              <div class="field-error" id="password-error" aria-live="polite">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span id="password-error-text">请输入密码 · Password is required</span>
+              </div>
+            </div>
+
+            <div class="options-row">
+              <label class="checkbox-wrap">
+                <input type="checkbox" id="remember" />
+                <span class="checkbox-box">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                <span>记住我<span class="en">Remember me</span></span>
+              </label>
+              <a href="mailto:contact@fiveoranges.ai?subject=%E9%87%8D%E7%BD%AE%E5%AF%86%E7%A0%81%20%C2%B7%20Password%20reset" class="link-blue" id="forgot-link">
+                忘记密码？<span class="en">Forgot password?</span>
+              </a>
+            </div>
+
+            <button type="submit" class="btn-primary" id="submit-btn" data-state="default">
+              <span class="spinner" aria-hidden="true"></span>
+              <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span id="btn-label">登录</span>
+              <span class="en" id="btn-en">SIGN IN</span>
+            </button>
+          </div>
+
+          <div class="card-foot">
+            <span>还没有账号？</span>
+            <a href="mailto:contact@fiveoranges.ai">联系销售 →</a>
+            <span class="en">Don't have an account? Contact sales</span>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <footer class="portal-foot">
+      <div class="copy">© 2026 Five Oranges AI · 运帷 AI. All rights reserved.</div>
+      <ul>
+        <li><a href="https://fiveoranges.ai/privacy">隐私<span class="en">PRIVACY</span></a></li>
+        <li><a href="https://fiveoranges.ai/terms">条款<span class="en">TERMS</span></a></li>
+        <li><a href="mailto:contact@fiveoranges.ai">联系<span class="en">CONTACT</span></a></li>
+      </ul>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      const form     = document.getElementById('login-form');
+      const card     = form;
+      const userInp  = document.getElementById('username');
+      const pw       = document.getElementById('password');
+      const userErr  = document.getElementById('username-error');
+      const userErrText = document.getElementById('username-error-text');
+      const pwErr    = document.getElementById('password-error');
+      const pwErrText = document.getElementById('password-error-text');
+      const alertBox = document.getElementById('form-alert');
+      const alertCn  = document.getElementById('alert-cn');
+      const alertEn  = document.getElementById('alert-en');
+      const btn      = document.getElementById('submit-btn');
+      const btnLabel = document.getElementById('btn-label');
+      const btnEn    = document.getElementById('btn-en');
+      const togglePw = document.getElementById('toggle-pw');
+      const iconEye  = document.getElementById('icon-eye');
+      const iconEyeOff = document.getElementById('icon-eye-off');
+
+      togglePw.addEventListener('click', () => {
+        const isPw = pw.type === 'password';
+        pw.type = isPw ? 'text' : 'password';
+        iconEye.style.display = isPw ? 'none' : 'block';
+        iconEyeOff.style.display = isPw ? 'block' : 'none';
+        togglePw.setAttribute('aria-label', isPw ? '隐藏密码 · Hide password' : '显示密码 · Show password');
+      });
+
+      userInp.addEventListener('input', () => {
+        userInp.classList.remove('has-error');
+        userErr.classList.remove('show');
+        alertBox.classList.remove('show');
+      });
+      pw.addEventListener('input', () => {
+        pw.classList.remove('has-error');
+        pwErr.classList.remove('show');
+        alertBox.classList.remove('show');
+      });
+
+      function showAlert(cn, en) {
+        alertCn.textContent = cn;
+        alertEn.textContent = en;
+        alertBox.classList.add('show');
+        card.classList.remove('shake');
+        void card.offsetWidth;
+        card.classList.add('shake');
+      }
+
+      function resetButton() {
+        btn.disabled = false;
+        btn.dataset.state = 'default';
+        btnLabel.textContent = '登录';
+        btnEn.textContent = 'SIGN IN';
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        let ok = true;
+
+        if (!userInp.value.trim()) {
+          userInp.classList.add('has-error');
+          userErrText.textContent = '请输入邮箱 · Email is required';
+          userErr.classList.add('show');
+          ok = false;
+        }
+        if (!pw.value) {
+          pw.classList.add('has-error');
+          pwErrText.textContent = '请输入密码 · Password is required';
+          pwErr.classList.add('show');
+          ok = false;
+        }
+
+        if (!ok) return;
+
+        btn.disabled = true;
+        btn.dataset.state = 'loading';
+        btnLabel.textContent = '登录中...';
+        btnEn.textContent = 'SIGNING IN';
+
+        try {
+          const fd = new FormData();
+          fd.append('username', userInp.value.trim());
+          fd.append('password', pw.value);
+
+          const res = await fetch('/auth/login', {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin',
+          });
+
+          if (res.ok) {
+            btn.dataset.state = 'success';
+            btnLabel.textContent = '登录成功，正在跳转...';
+            btnEn.textContent = 'REDIRECTING';
+            setTimeout(() => { window.location.href = '/'; }, 600);
+            return;
+          }
+
+          let cnMsg = '邮箱或密码错误';
+          let enMsg = 'Invalid email or password';
+          try {
+            const j = await res.json();
+            const detail = j && j.detail;
+            if (detail && typeof detail === 'object') {
+              if (detail.message) cnMsg = detail.message;
+              if (res.status === 429) {
+                cnMsg = '登录尝试过多，请稍后再试';
+                enMsg = 'Too many attempts. Please try again later.';
+              } else if (detail.error === 'account_locked') {
+                cnMsg = '账号已锁定，请联系管理员';
+                enMsg = 'Account locked. Please contact admin.';
+              }
+            }
+          } catch (_) { /* keep defaults */ }
+
+          resetButton();
+          showAlert(cnMsg, enMsg);
+        } catch (err) {
+          resetButton();
+          showAlert('网络异常，请检查后重试', 'Network error. Please check your connection.');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
