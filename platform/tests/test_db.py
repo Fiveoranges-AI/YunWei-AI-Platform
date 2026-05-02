@@ -1,14 +1,26 @@
 from platform_app import db
 
+
 def test_init_creates_tables():
     db.init()
-    rows = db.main().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-    names = {r["name"] for r in rows}
-    assert {"users", "tenants", "user_tenant", "platform_sessions", "api_keys"} <= names
+    rows = db.main().execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema='public' AND table_type='BASE TABLE'"
+    ).fetchall()
+    names = {r["table_name"] for r in rows}
+    assert {"users", "tenants", "user_tenant", "platform_sessions",
+            "api_keys", "proxy_log"} <= names
 
-def test_proxy_log_in_separate_file():
+
+def test_proxy_log_writable():
     db.init()
-    rows = db.proxy_log_db().execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-    assert "proxy_log" in {r["name"] for r in rows}
-    # 主 DB 里**没有** proxy_log 表
-    assert "proxy_log" not in {r["name"] for r in db.main().execute("SELECT name FROM sqlite_master").fetchall()}
+    db.write_proxy_log(
+        user_id="u_x", client_id="c", agent_id="a",
+        method="GET", path="/p", status=200, duration_ms=12, ip="1.2.3.4",
+    )
+    row = db.main().execute(
+        "SELECT path, status FROM proxy_log WHERE user_id=%s ORDER BY id DESC LIMIT 1",
+        ("u_x",),
+    ).fetchone()
+    assert row["path"] == "/p"
+    assert row["status"] == 200

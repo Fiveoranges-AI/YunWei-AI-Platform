@@ -23,7 +23,7 @@ async def probe_loop():
                     except Exception:
                         pass
                     db.main().execute(
-                        "UPDATE tenants SET health=?, health_checked_at=? WHERE client_id=? AND agent_id=?",
+                        "UPDATE tenants SET health=%s, health_checked_at=%s WHERE client_id=%s AND agent_id=%s",
                         (health, int(time.time()), r["client_id"], r["agent_id"]),
                     )
                     db.invalidate_tenant(r["client_id"], r["agent_id"])

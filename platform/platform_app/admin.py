@@ -18,7 +18,8 @@ def cmd_add_user(args):
     pw = args.password or getpass.getpass(f"Password for {args.username}: ")
     user_id = f"u_{args.username}"
     db.main().execute(
-        "INSERT INTO users (id, username, password_hash, display_name, email, created_at) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO users (id, username, password_hash, display_name, email, created_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s)",
         (user_id, args.username, auth.hash_password(pw), args.display_name, args.email, _now()),
     )
     print(f"created user_id={user_id}")
@@ -32,7 +33,7 @@ def cmd_add_tenant(args):
     db.main().execute(
         "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
         "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
         (args.client, args.agent, args.display_name, args.container_url,
          secret, key_id, uid, _now()),
     )
@@ -55,8 +56,10 @@ def cmd_grant(args):
     db.init()
     user_id = f"u_{args.username}"
     db.main().execute(
-        "INSERT OR REPLACE INTO user_tenant (user_id, client_id, agent_id, role, granted_at, granted_by) "
-        "VALUES (?,?,?,?,?,?)",
+        "INSERT INTO user_tenant (user_id, client_id, agent_id, role, granted_at, granted_by) "
+        "VALUES (%s,%s,%s,%s,%s,%s) "
+        "ON CONFLICT (user_id, client_id, agent_id) DO UPDATE "
+        "SET role=EXCLUDED.role, granted_at=EXCLUDED.granted_at, granted_by=EXCLUDED.granted_by",
         (user_id, args.client, args.agent, args.role, _now(), "cli"),
     )
     db.invalidate_acl(user_id, args.client, args.agent)
@@ -67,7 +70,7 @@ def cmd_revoke(args):
     db.init()
     user_id = f"u_{args.username}"
     db.main().execute(
-        "DELETE FROM user_tenant WHERE user_id=? AND client_id=? AND agent_id=?",
+        "DELETE FROM user_tenant WHERE user_id=%s AND client_id=%s AND agent_id=%s",
         (user_id, args.client, args.agent),
     )
     db.invalidate_acl(user_id, args.client, args.agent)
@@ -79,14 +82,14 @@ def cmd_rotate_key(args):
     new_secret = secrets.token_urlsafe(32)
     new_kid = f"k-{int(time.time())}"
     row = db.main().execute(
-        "SELECT hmac_secret_current, hmac_key_id_current FROM tenants WHERE client_id=? AND agent_id=?",
+        "SELECT hmac_secret_current, hmac_key_id_current FROM tenants WHERE client_id=%s AND agent_id=%s",
         (args.client, args.agent),
     ).fetchone()
     assert row, "tenant not found"
     db.main().execute(
-        "UPDATE tenants SET hmac_secret_current=?, hmac_key_id_current=?, "
-        "hmac_secret_prev=?, hmac_key_id_prev=?, hmac_rotated_at=? "
-        "WHERE client_id=? AND agent_id=?",
+        "UPDATE tenants SET hmac_secret_current=%s, hmac_key_id_current=%s, "
+        "hmac_secret_prev=%s, hmac_key_id_prev=%s, hmac_rotated_at=%s "
+        "WHERE client_id=%s AND agent_id=%s",
         (new_secret, new_kid, row["hmac_secret_current"], row["hmac_key_id_current"], _now(),
          args.client, args.agent),
     )
@@ -97,7 +100,7 @@ def cmd_rotate_key(args):
 def cmd_clear_prev_key(args):
     db.init()
     db.main().execute(
-        "UPDATE tenants SET hmac_secret_prev='', hmac_key_id_prev='' WHERE client_id=? AND agent_id=?",
+        "UPDATE tenants SET hmac_secret_prev='', hmac_key_id_prev='' WHERE client_id=%s AND agent_id=%s",
         (args.client, args.agent),
     )
     db.invalidate_tenant(args.client, args.agent)

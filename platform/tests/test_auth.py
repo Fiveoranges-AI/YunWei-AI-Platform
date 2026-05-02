@@ -10,7 +10,7 @@ def test_authenticate_unknown_user_returns_none():
 def test_authenticate_wrong_password():
     db.init()
     db.main().execute(
-        "INSERT INTO users (id, username, password_hash, display_name, created_at) VALUES (?,?,?,?,?)",
+        "INSERT INTO users (id, username, password_hash, display_name, created_at) VALUES (%s,%s,%s,%s,%s)",
         ("u_a", "alice", auth.hash_password("correct"), "Alice", int(time.time())),
     )
     assert auth.authenticate("alice", "wrong") is None
@@ -20,7 +20,7 @@ def test_authenticate_wrong_password():
 def test_create_session_then_lookup():
     db.init()
     db.main().execute(
-        "INSERT INTO users (id, username, password_hash, display_name, created_at) VALUES (?,?,?,?,?)",
+        "INSERT INTO users (id, username, password_hash, display_name, created_at) VALUES (%s,%s,%s,%s,%s)",
         ("u_a", "alice", auth.hash_password("p"), "Alice", int(time.time())),
     )
     sid, csrf = auth.create_session("u_a", "127.0.0.1", "test-ua")
@@ -33,7 +33,7 @@ def test_create_session_then_lookup():
 def test_revoke_session_invalidates_lookup():
     db.init()
     db.main().execute(
-        "INSERT INTO users (id, username, password_hash, display_name, created_at) VALUES (?,?,?,?,?)",
+        "INSERT INTO users (id, username, password_hash, display_name, created_at) VALUES (%s,%s,%s,%s,%s)",
         ("u_a", "alice", auth.hash_password("p"), "Alice", int(time.time())),
     )
     sid, _ = auth.create_session("u_a", None, None)

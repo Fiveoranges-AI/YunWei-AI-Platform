@@ -1,31 +1,32 @@
 import os
-import tempfile
-from pathlib import Path
 import pytest
 
-# Settings reads env at module import; set vars before any test module
-# imports platform_app.* so the singleton sees test-friendly values.
-_TMP = tempfile.mkdtemp()
-os.environ["PLATFORM_DB_PATH"] = str(Path(_TMP) / "platform.db")
-os.environ["PROXY_LOG_DB_PATH"] = str(Path(_TMP) / "proxy_log.db")
+# Set required env BEFORE platform_app modules import (settings reads on import).
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql://postgres:test@localhost:5433/test",
+)
+os.environ.setdefault(
+    "REDIS_URL",
+    "redis://localhost:6380",
+)
 os.environ.setdefault("COOKIE_SECRET", "test-cookie-secret-32-bytes-padding=")
 
 
-@pytest.fixture
-def tmp_data_dir() -> str:
-    return _TMP
-
-
 @pytest.fixture(autouse=True)
-def _clean_db_state():
-    """Wipe all rows + TTL caches between tests so tests don't bleed state."""
+def _clean_state():
+    """Truncate all tables + flush redis between tests."""
+    import psycopg, redis
+    # Make sure tables exist before truncating (init runs once per session).
     from platform_app import db as _db
-    if _db._MAIN_DB is not None:
-        for tbl in ("api_keys", "platform_sessions", "user_tenant", "tenants", "users"):
-            _db._MAIN_DB.execute(f"DELETE FROM {tbl}")
-    if _db._PROXY_DB is not None:
-        _db._PROXY_DB.execute("DELETE FROM proxy_log")
-    _db._tenant_cache.clear()
-    _db._session_cache.clear()
-    _db._acl_cache.clear()
+    if _db._MAIN is None:
+        _db.init()
+    # Truncate (PostgreSQL CASCADE handles FK chain)
+    with _db.main()._get().cursor() as cur:
+        cur.execute(
+            "TRUNCATE api_keys, platform_sessions, user_tenant, tenants, users, proxy_log "
+            "RESTART IDENTITY CASCADE"
+        )
+    # Flush Redis test DB
+    redis.from_url(os.environ["REDIS_URL"]).flushdb()
     yield

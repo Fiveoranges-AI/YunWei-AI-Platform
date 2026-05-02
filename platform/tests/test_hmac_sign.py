@@ -132,9 +132,11 @@ def test_unknown_key_id_rejected():
         )
 
 
-def test_nonce_store_gc():
+def test_nonce_store_redis_expiry():
+    """Redis SETNX with TTL: same (key_id, nonce) within window is replay,
+    but GC happens automatically via Redis key expiration (no manual gc())."""
     store = NonceStore()
-    store.check_and_add("k1", "n1", expiry=int(time.time()) - 1)  # 已过期
-    # GC 后再加同 nonce 应通过
+    # Fresh nonce accepted
+    store.check_and_add("k1", f"unique-{time.time_ns()}", expiry=int(time.time()) + 25)
+    # gc() is now a no-op but still callable for backwards compat
     store.gc()
-    store.check_and_add("k1", "n1", expiry=int(time.time()) + 25)

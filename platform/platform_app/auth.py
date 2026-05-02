@@ -23,13 +23,13 @@ def verify_password(plain: str, hashed: str) -> bool:
 def authenticate(username: str, password: str) -> str | None:
     """Returns user_id or None. Always runs bcrypt to avoid timing oracle."""
     row = db.main().execute(
-        "SELECT id, password_hash FROM users WHERE username=?", (username,),
+        "SELECT id, password_hash FROM users WHERE username=%s", (username,),
     ).fetchone()
     if row is None:
         verify_password(password, DUMMY_HASH)  # constant-time decoy
         return None
     if verify_password(password, row["password_hash"]):
-        db.main().execute("UPDATE users SET last_login=? WHERE id=?", (int(time.time()), row["id"]))
+        db.main().execute("UPDATE users SET last_login=%s WHERE id=%s", (int(time.time()), row["id"]))
         return row["id"]
     return None
 
@@ -41,23 +41,23 @@ def create_session(user_id: str, ip: str | None, ua: str | None) -> tuple[str, s
     now = int(time.time())
     db.main().execute(
         "INSERT INTO platform_sessions (id, user_id, csrf_token, created_at, expires_at, ip, user_agent) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
         (sid, user_id, csrf, now, now + settings.session_lifetime_seconds, ip, ua),
     )
     return sid, csrf
 
 
 def revoke_session(session_id: str) -> None:
-    db.main().execute("DELETE FROM platform_sessions WHERE id=?", (session_id,))
+    db.main().execute("DELETE FROM platform_sessions WHERE id=%s", (session_id,))
     db.main().execute(
-        "UPDATE api_keys SET revoked_at=? WHERE source_session_id=? AND revoked_at IS NULL",
+        "UPDATE api_keys SET revoked_at=%s WHERE source_session_id=%s AND revoked_at IS NULL",
         (int(time.time()), session_id),
     )
     db.invalidate_session(session_id)
 
 
 def revoke_user_sessions(user_id: str) -> None:
-    rows = db.main().execute("SELECT id FROM platform_sessions WHERE user_id=?", (user_id,)).fetchall()
+    rows = db.main().execute("SELECT id FROM platform_sessions WHERE user_id=%s", (user_id,)).fetchall()
     for r in rows:
         revoke_session(r["id"])
 
@@ -69,7 +69,7 @@ def current_user_from_request(cookie_value: str | None) -> dict | None:
     if sess is None:
         return None
     user = db.main().execute(
-        "SELECT id, username, display_name FROM users WHERE id=?", (sess["user_id"],),
+        "SELECT id, username, display_name FROM users WHERE id=%s", (sess["user_id"],),
     ).fetchone()
     if not user:
         return None

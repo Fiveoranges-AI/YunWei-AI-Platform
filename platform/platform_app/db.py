@@ -1,109 +1,143 @@
-"""sqlite 连接 + 迁移 + 缓存层(§7.3)."""
+"""Postgres connection + migrations + cache helpers.
+
+v1.4: dropped sqlite + in-memory TTLCache. Backend is Postgres (psycopg)
+plus Redis (cache.py). One shared connection with autocommit; OK for
+single-uvicorn-worker hobby load. Bump to ConnectionPool when scaling.
+"""
 from __future__ import annotations
-import sqlite3
 import time
-from contextlib import contextmanager
 from pathlib import Path
-from cachetools import TTLCache
+import psycopg
+from psycopg.rows import dict_row
+from .cache import tenant_cache, session_cache, acl_cache
 from .settings import settings
 
-_MAIN_DB: sqlite3.Connection | None = None
-_PROXY_DB: sqlite3.Connection | None = None
-
-# §7.3 缓存,容量 10000 条
-_tenant_cache: TTLCache = TTLCache(maxsize=10000, ttl=60)
-_session_cache: TTLCache = TTLCache(maxsize=10000, ttl=30)
-_acl_cache: TTLCache = TTLCache(maxsize=10000, ttl=60)
+_CONN: psycopg.Connection | None = None
 
 
-def _connect(path: Path) -> sqlite3.Connection:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+def _connect() -> psycopg.Connection:
+    return psycopg.connect(
+        settings.database_url,
+        autocommit=True,
+        row_factory=dict_row,
+    )
+
+
+class _DB:
+    """Wrapper that auto-reconnects on broken connection so callers can
+    keep the simple sqlite-shape API (`.execute(sql, params).fetchone()`).
+    """
+
+    def __init__(self) -> None:
+        self._conn: psycopg.Connection | None = None
+
+    def _get(self) -> psycopg.Connection:
+        if self._conn is None or self._conn.closed:
+            self._conn = _connect()
+        return self._conn
+
+    def execute(self, sql: str, params: tuple = ()) -> psycopg.Cursor:
+        try:
+            return self._get().execute(sql, params)
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            # connection dropped; reconnect once
+            self._conn = None
+            return self._get().execute(sql, params)
+
+
+_MAIN: _DB | None = None
 
 
 def init() -> None:
-    global _MAIN_DB, _PROXY_DB
-    _MAIN_DB = _connect(settings.db_path)
-    _PROXY_DB = _connect(settings.proxy_log_db_path)
+    global _MAIN
+    _MAIN = _DB()
     _migrate()
 
 
 def _migrate() -> None:
     main_sql = (Path(__file__).parent.parent / "migrations" / "001_init.sql").read_text()
     proxy_sql = (Path(__file__).parent.parent / "migrations" / "002_proxy_log.sql").read_text()
-    assert _MAIN_DB and _PROXY_DB
-    _MAIN_DB.executescript(main_sql)
-    _PROXY_DB.executescript(proxy_sql)
+    assert _MAIN
+    # psycopg can run multi-statement SQL via cursor.execute when no params
+    with _MAIN._get().cursor() as cur:
+        cur.execute(main_sql)
+        cur.execute(proxy_sql)
 
 
-def main() -> sqlite3.Connection:
-    assert _MAIN_DB, "db.init() not called"
-    return _MAIN_DB
+def main() -> _DB:
+    assert _MAIN, "db.init() not called"
+    return _MAIN
 
 
-def proxy_log_db() -> sqlite3.Connection:
-    assert _PROXY_DB, "db.init() not called"
-    return _PROXY_DB
+# v1.2 had a separate _PROXY_DB sqlite file; in Postgres everything is one DB.
+# Keep proxy_log_db() as alias for callsite stability.
+def proxy_log_db() -> _DB:
+    return main()
 
 
-def get_tenant(client_id: str, agent_id: str) -> sqlite3.Row | None:
-    key = (client_id, agent_id)
-    if key in _tenant_cache:
-        return _tenant_cache[key]
+# ─── tenants ────────────────────────────────────────────────────
+
+def get_tenant(client_id: str, agent_id: str) -> dict | None:
+    key = f"{client_id}:{agent_id}"
+    cached = tenant_cache.get(key)
+    if cached is not None:
+        return cached
     row = main().execute(
-        "SELECT * FROM tenants WHERE client_id=? AND agent_id=? AND active=1",
+        "SELECT * FROM tenants WHERE client_id=%s AND agent_id=%s AND active=1",
         (client_id, agent_id),
     ).fetchone()
     if row:
-        _tenant_cache[key] = row
+        tenant_cache.set(key, dict(row))
     return row
 
 
 def invalidate_tenant(client_id: str, agent_id: str) -> None:
-    _tenant_cache.pop((client_id, agent_id), None)
+    tenant_cache.delete(f"{client_id}:{agent_id}")
 
 
-def get_session(session_id: str) -> sqlite3.Row | None:
-    if session_id in _session_cache:
-        cached = _session_cache[session_id]
+# ─── sessions ───────────────────────────────────────────────────
+
+def get_session(session_id: str) -> dict | None:
+    cached = session_cache.get(session_id)
+    if cached is not None:
         if cached["expires_at"] > int(time.time()):
             return cached
-        _session_cache.pop(session_id, None)
+        session_cache.delete(session_id)
         return None
     row = main().execute(
-        "SELECT * FROM platform_sessions WHERE id=? AND expires_at>?",
+        "SELECT * FROM platform_sessions WHERE id=%s AND expires_at>%s",
         (session_id, int(time.time())),
     ).fetchone()
     if row:
-        _session_cache[session_id] = row
+        session_cache.set(session_id, dict(row))
     return row
 
 
 def invalidate_session(session_id: str) -> None:
-    _session_cache.pop(session_id, None)
+    session_cache.delete(session_id)
 
+
+# ─── ACL ────────────────────────────────────────────────────────
 
 def has_acl(user_id: str, client_id: str, agent_id: str) -> bool:
-    key = (user_id, client_id, agent_id)
-    if key in _acl_cache:
-        return _acl_cache[key]
+    key = f"{user_id}:{client_id}:{agent_id}"
+    cached = acl_cache.get(key)
+    if cached is not None:
+        return cached
     row = main().execute(
-        "SELECT 1 FROM user_tenant WHERE user_id=? AND client_id=? AND agent_id=?",
+        "SELECT 1 FROM user_tenant WHERE user_id=%s AND client_id=%s AND agent_id=%s",
         (user_id, client_id, agent_id),
     ).fetchone()
     result = row is not None
-    _acl_cache[key] = result
+    acl_cache.set(key, result)
     return result
 
 
 def invalidate_acl(user_id: str, client_id: str, agent_id: str) -> None:
-    _acl_cache.pop((user_id, client_id, agent_id), None)
+    acl_cache.delete(f"{user_id}:{client_id}:{agent_id}")
 
+
+# ─── proxy_log ──────────────────────────────────────────────────
 
 def write_proxy_log(
     *, user_id: str | None, client_id: str | None, agent_id: str | None,
@@ -111,6 +145,6 @@ def write_proxy_log(
 ) -> None:
     proxy_log_db().execute(
         "INSERT INTO proxy_log (ts, user_id, client_id, agent_id, method, path, status, duration_ms, ip) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (int(time.time()), user_id, client_id, agent_id, method, path, status, duration_ms, ip),
     )
