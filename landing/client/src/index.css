@@ -224,4 +224,109 @@
     line-height: 1;
     letter-spacing: -0.05em;
   }
+
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  .footer-link {
+    transition: color 0.2s ease;
+  }
+  .footer-link:hover {
+    color: var(--brand-blue) !important;
+  }
+}
+
+/* ---------- Navbar live-pulse ---------- */
+@keyframes navLivePulse {
+  0%   { transform: scale(1);   opacity: 0.6; }
+  70%  { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes drawerSlideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.drawer-panel { animation: drawerSlideDown 240ms cubic-bezier(0.32, 0.72, 0.24, 1.0); }
+
+/* Solution card border-on-hover */
+.solution-card {
+  transition: border-color 220ms ease-out, transform 250ms ease-out, box-shadow 250ms ease-out;
+}
+.solution-card:hover {
+  border-color: var(--brand-blue) !important;
+}
+
+/* Hero 2-col grid */
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+@media (min-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 3.5rem;
+  }
+}
+
+/* Approach diagonal-up rail */
+.approach-rail { position: relative; }
+.approach-line { display: none; }
+.approach-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+}
+.approach-step { text-align: left; }
+@media (min-width: 768px) {
+  .approach-steps { grid-template-columns: repeat(2, 1fr); gap: 3rem 2rem; }
+}
+@media (min-width: 1024px) {
+  .approach-rail { padding: 1rem 0 2rem; }
+  .approach-line {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .approach-steps {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    position: relative;
+    z-index: 1;
+  }
+  .approach-step {
+    transform: translateY(calc(60px - var(--step-i, 0) * 22px));
+    transition: transform 300ms ease-out;
+  }
+}
+
+/* CTA grid */
+.cta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+  align-items: center;
+}
+@media (min-width: 1024px) {
+  .cta-grid { grid-template-columns: 1.2fr 1fr; }
+}
+
+/* Footer 3-col */
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+}
+@media (min-width: 768px) {
+  .footer-grid { grid-template-columns: repeat(3, 1fr); }
 }
