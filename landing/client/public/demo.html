@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>超级小陈 · 银湖石墨 — Five Oranges AI</title>
+  <link rel="icon" href="/manus-storage/logo_clean_934597e8.png" type="image/png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --brand: #2D6EA8;
+      --brand-dk: #1F4F7A;
+      --brand-lt: #4A8BC4;
+      --brand-pale: #EEF4FB;
+      --ink: #0F2340;
+      --ink-2: #1E2D45;
+      --txt: #334155;
+      --txt-mute: #64748B;
+      --txt-faint: #94A3B8;
+      --bg: #FFFFFF;
+      --bg-rail: #F8FAFC;
+      --bg-pill: #F1F5F9;
+      --line: #E2E8F0;
+      --line-soft: #EEF2F7;
+      --line-strong: rgba(15,35,64,0.16);
+      --danger: #DC2626;
+      --warn: #D97706;
+      --ok: #059669;
+      --shadow-1: 0 1px 2px rgba(15,35,64,0.04);
+      --shadow-2: 0 8px 24px rgba(15,35,64,0.06);
+      --shadow-3: 0 20px 48px rgba(15,35,64,0.10);
+      --r-sm: 8px;
+      --r-md: 10px;
+      --r-lg: 14px;
+      --r-xl: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--txt);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body { overflow: hidden; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; padding: 0; }
+    a { color: inherit; text-decoration: none; }
+    input { font-family: inherit; }
+    [data-sora] { font-family: 'Sora', sans-serif; }
+
+    /* =================== Layout =================== */
+    .stage {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      height: 100vh;
+      background: var(--bg);
+    }
+    /* Sidebar — conversation history */
+    .sidebar {
+      background: var(--bg-rail);
+      border-right: 1px solid var(--line);
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    /* Main */
+    .main {
+      display: flex; flex-direction: column;
+      min-width: 0; min-height: 0;
+      position: relative;
+    }
+
+    /* =================== Sidebar header =================== */
+    .sb-brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .sb-brand .logo {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: #fff; padding: 2px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 0 1px var(--line) inset;
+    }
+    .sb-brand .logo img { width: 100%; height: 100%; border-radius: 6px; }
+    .sb-brand .name {
+      font-family: 'Sora', sans-serif;
+      font-size: 13px; font-weight: 700;
+      color: var(--ink); line-height: 1.2;
+    }
+    .sb-brand .name .tag {
+      display: block; font-size: 10.5px; font-weight: 500;
+      color: var(--txt-mute); margin-top: 2px; letter-spacing: 0.04em;
+    }
+
+    .sb-actions { padding: 14px 14px 10px; }
+    .btn-new {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 14px;
+      background: var(--brand);
+      color: #fff;
+      border-radius: var(--r-md);
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 13.5px;
+      box-shadow: 0 4px 12px rgba(45,110,168,0.20);
+      transition: background 160ms, transform 160ms, box-shadow 200ms;
+    }
+    .btn-new:hover { background: var(--brand-dk); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(45,110,168,0.28); }
+    .btn-new svg { width: 14px; height: 14px; }
+
+    .sb-search {
+      position: relative;
+      padding: 0 14px 12px;
+    }
+    .sb-search .icn {
+      position: absolute; left: 26px; top: 50%; transform: translateY(-50%);
+      color: var(--txt-faint);
+    }
+    .sb-search input {
+      width: 100%; height: 36px;
+      padding: 0 38px 0 34px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      font-size: 13px; color: var(--ink);
+      outline: none;
+      transition: border-color 160ms, box-shadow 160ms;
+    }
+    .sb-search input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(45,110,168,0.12); }
+    .sb-search input::placeholder { color: var(--txt-faint); }
+    .sb-search .kbd {
+      position: absolute; right: 22px; top: 50%; transform: translateY(-50%);
+      font-family: 'Sora', sans-serif;
+      font-size: 10px; font-weight: 600;
+      color: var(--txt-mute);
+      background: var(--bg-pill);
+      border: 1px solid var(--line);
+      padding: 2px 6px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    .sb-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 10px; }
+    .sb-list::-webkit-scrollbar { width: 6px; }
+    .sb-list::-webkit-scrollbar-thumb { background: rgba(15,35,64,0.10); border-radius: 3px; }
+    .sb-group-title {
+      padding: 10px 10px 6px;
+      font-family: 'Sora', sans-serif;
+      font-size: 10.5px; font-weight: 600;
+      color: var(--txt-faint);
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .sb-item {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: var(--r-md);
+      font-size: 13px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 140ms, color 140ms;
+      width: 100%;
+      text-align: left;
+    }
+    .sb-item:hover { background: rgba(45,110,168,0.07); color: var(--brand); }
+    .sb-item.active {
+      background: var(--brand-pale);
+      color: var(--brand);
+      font-weight: 600;
+      box-shadow: inset 2px 0 0 var(--brand);
+    }
+    .sb-item .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .sb-item .ts {
+      flex-shrink: 0;
+      font-family: 'Sora', sans-serif;
+      font-size: 10.5px;
+      color: var(--txt-faint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sb-user {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+    .sb-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lt) 100%);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Sora', sans-serif; font-weight: 700; font-size: 14px;
+      flex-shrink: 0;
+    }
+    .sb-user .who { flex: 1; min-width: 0; }
+    .sb-user .nm { font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sb-user .role { font-size: 11px; color: var(--txt-mute); margin-top: 2px; line-height: 1.2; }
+    .sb-user .more { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--txt-mute); transition: background 140ms, color 140ms; flex-shrink: 0; }
+    .sb-user .more:hover { background: var(--bg-pill); color: var(--ink); }
+
+    /* =================== Topbar =================== */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      flex-shrink: 0;
+      z-index: 5;
+    }
+    .topbar .crumbs {
+      display: flex; align-items: center; gap: 10px;
+      min-width: 0;
+    }
+    .topbar .home {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-mute);
+      transition: background 140ms, color 140ms;
+    }
+    .topbar .home:hover { background: var(--bg-pill); color: var(--brand); }
+    .topbar .title {
+      font-family: 'Sora', sans-serif;
+      font-size: 16px; font-weight: 700;
+      color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .topbar .pill-sandbox {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      background: rgba(45,110,168,0.08);
+      color: var(--brand);
+      border-radius: 999px;
+      font-family: 'Sora', sans-serif;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .topbar .pill-sandbox .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--brand);
+      animation: pulse-dot 1.6s ease-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%   { box-shadow: 0 0 0 0 rgba(45,110,168,0.45); }
+      100% { box-shadow: 0 0 0 8px rgba(45,110,168,0); }
+    }
+    .topbar .actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .icn-btn {
+      width: 34px; height: 34px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-mute);
+      transition: background 140ms, color 140ms;
+    }
+    .icn-btn:hover { background: var(--bg-pill); color: var(--ink); }
+
+    @media (max-width: 1023px) {
+      .topbar .pill-sandbox { display: none; }
+    }
+    @media (max-width: 767px) {
+      .stage { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .topbar { padding: 12px 16px; }
+    }
+
+    /* =================== Conversation thread =================== */
+    .thread-wrap {
+      flex: 1; min-height: 0;
+      overflow-y: auto;
+      padding: 28px 24px 220px;
+      display: flex; justify-content: center;
+      scroll-behavior: smooth;
+    }
+    .thread-wrap::-webkit-scrollbar { width: 8px; }
+    .thread-wrap::-webkit-scrollbar-thumb { background: rgba(15,35,64,0.10); border-radius: 4px; }
+    .thread {
+      width: 100%;
+      max-width: 760px;
+      display: flex; flex-direction: column;
+      gap: 22px;
+    }
+    .day-divider {
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px;
+      margin: 4px 0 0;
+    }
+    .day-divider::before, .day-divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--line); max-width: 160px;
+    }
+    .day-divider span {
+      font-family: 'Sora', sans-serif;
+      font-size: 11.5px; color: var(--txt-faint);
+      letter-spacing: 0.04em;
+    }
+
+    /* user bubble — right aligned */
+    .msg-user {
+      align-self: flex-end;
+      display: flex; gap: 10px;
+      max-width: 88%;
+      flex-direction: row-reverse;
+      align-items: flex-start;
+    }
+    .msg-user .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Sora', sans-serif; font-weight: 600; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .msg-user .bubble {
+      background: var(--brand-pale);
+      color: var(--ink);
+      padding: 12px 16px;
+      border-radius: 14px 14px 4px 14px;
+      font-size: 14.5px;
+      line-height: 1.65;
+      box-shadow: var(--shadow-1);
+    }
+
+    /* assistant message */
+    .msg-ai {
+      display: flex; gap: 12px;
+      align-items: flex-start;
+    }
+    .msg-ai .avatar-ai {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 0 0 1px var(--line) inset;
+      padding: 3px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .msg-ai .avatar-ai img { width: 100%; height: 100%; border-radius: 5px; }
+    .msg-ai .body {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column;
+      gap: 14px;
+    }
+    .msg-ai .meta-line {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px; color: var(--txt-mute);
+    }
+    .msg-ai .meta-line .nm {
+      font-family: 'Sora', sans-serif;
+      color: var(--ink); font-weight: 600; font-size: 13px;
+    }
+    .meta-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px;
+      background: var(--bg-pill);
+      border-radius: 999px;
+      font-size: 11px;
+      color: var(--txt-mute);
+      font-family: 'Sora', sans-serif;
+    }
+
+    /* Thinking dots */
+    .thinking {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 14px;
+      background: var(--bg-rail);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--txt-mute);
+    }
+    .thinking .dots { display: inline-flex; gap: 4px; }
+    .thinking .dots span {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--brand);
+      animation: think 1.2s ease-in-out infinite;
+    }
+    .thinking .dots span:nth-child(2) { animation-delay: 0.15s; }
+    .thinking .dots span:nth-child(3) { animation-delay: 0.30s; }
+    @keyframes think {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%           { transform: scale(1);   opacity: 1;   }
+    }
+
+    /* Lead paragraph */
+    .lead {
+      font-size: 14.5px;
+      line-height: 1.75;
+      color: var(--ink-2);
+      opacity: 0; transform: translateY(6px);
+      transition: opacity 360ms, transform 360ms;
+    }
+    .lead.show { opacity: 1; transform: translateY(0); }
+    .lead .em-num { font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+    .lead .em-danger { font-weight: 700; color: var(--danger); }
+    .lead .em-warn { font-weight: 700; color: var(--warn); }
+
+    /* =================== Table card =================== */
+    .table-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-1);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity 380ms, transform 380ms;
+    }
+    .table-card.show { opacity: 1; transform: translateY(0); }
+    .table-card .head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .table-card .head .t {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 14px;
+      color: var(--ink);
+    }
+    .table-card .head .meta { font-size: 11.5px; color: var(--txt-mute); }
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th, .tbl td {
+      padding: 12px 18px;
+      text-align: left;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    .tbl thead th {
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 11.5px;
+      color: var(--txt-mute);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: #FBFCFD;
+      border-bottom: 1px solid var(--line);
+    }
+    .tbl tbody tr {
+      opacity: 0; transform: translateY(4px);
+      transition: opacity 280ms, transform 280ms, background 140ms;
+    }
+    .tbl tbody tr.show { opacity: 1; transform: translateY(0); }
+    .tbl tbody tr:last-child td { border-bottom: none; }
+    .tbl tbody tr:hover { background: rgba(45,110,168,0.03); }
+    .tbl .client { font-weight: 600; color: var(--ink); font-size: 13.5px; }
+    .tbl .code { font-family: 'Sora', sans-serif; color: var(--txt-faint); font-size: 11px; margin-top: 3px; letter-spacing: 0.02em; }
+    .tbl .num { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+    .pbar-wrap { display: flex; align-items: center; gap: 10px; }
+    .pbar {
+      position: relative;
+      height: 6px; width: 100px;
+      background: #F1F5F9;
+      border-radius: 4px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .pbar > i {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 0%;
+      border-radius: 4px;
+      transition: width 1000ms cubic-bezier(0.5, 0.05, 0.2, 1);
+    }
+    .pct {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      min-width: 38px;
+    }
+    .pct.danger { color: var(--danger); }
+    .pct.warn   { color: var(--warn); }
+    .pct.normal { color: var(--brand); }
+    .pct.ok     { color: var(--ok); }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 11px;
+      border-radius: 999px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600; font-size: 11.5px;
+    }
+    .badge.danger { background: #FEE2E2; color: #991B1B; }
+    .badge.warn   { background: #FEF3C7; color: #92400E; }
+    .badge.normal { background: var(--brand-pale); color: var(--brand); }
+    .badge.ok     { background: #D1FAE5; color: #065F46; }
+
+    /* =================== Insight box =================== */
+    .insight {
+      background: #FFFBEB;
+      border: 1px solid #FDE68A;
+      border-left: 3px solid var(--warn);
+      border-radius: var(--r-md);
+      padding: 14px 18px;
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: #422006;
+      opacity: 0; transform: translateY(6px);
+      transition: opacity 360ms, transform 360ms;
+    }
+    .insight.show { opacity: 1; transform: translateY(0); }
+    .insight .h {
+      display: flex; align-items: center; gap: 8px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 13px;
+      color: #92400E;
+      margin-bottom: 6px;
+    }
+    .insight strong { color: var(--danger); font-weight: 700; }
+
+    /* =================== Citations =================== */
+    .citations {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+      padding-top: 4px;
+      font-size: 11.5px;
+      color: var(--txt-mute);
+      opacity: 0;
+      transition: opacity 280ms;
+    }
+    .citations.show { opacity: 1; }
+    .citations .lbl {
+      font-family: 'Sora', sans-serif;
+      font-weight: 600; font-size: 11px;
+      color: var(--txt-faint);
+      letter-spacing: 0.06em;
+      margin-right: 2px;
+    }
+    .cite {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px;
+      background: var(--bg-rail);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink-2);
+      font-family: 'Sora', sans-serif;
+      font-weight: 500;
+      transition: border-color 140ms, color 140ms, background 140ms;
+      cursor: pointer;
+    }
+    .cite:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-pale); }
+    .cite .n { color: var(--brand); font-weight: 700; font-size: 10.5px; }
+
+    /* Footer line under AI message */
+    .ai-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+      font-size: 11.5px;
+      color: var(--txt-faint);
+      padding-top: 4px;
+    }
+    .ai-foot .actions-row { display: flex; gap: 4px; }
+    .ai-foot .a-btn {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-mute);
+      transition: background 140ms, color 140ms;
+    }
+    .ai-foot .a-btn:hover { background: var(--bg-pill); color: var(--ink); }
+
+    /* Followups chips */
+    .followups {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      opacity: 0;
+      transition: opacity 280ms;
+    }
+    .followups.show { opacity: 1; }
+    .followups button {
+      padding: 8px 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 12.5px;
+      color: var(--ink-2);
+      transition: border-color 140ms, color 140ms, background 140ms;
+    }
+    .followups button:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-pale); }
+    .followups button::before {
+      content: '+ ';
+      color: var(--brand);
+      font-weight: 700;
+    }
+
+    /* =================== Composer =================== */
+    .composer {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 16px 24px 24px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 30%, #fff 100%);
+      pointer-events: none;
+    }
+    .composer-inner {
+      max-width: 760px; margin: 0 auto;
+      pointer-events: auto;
+    }
+    .composer-box {
+      position: relative;
+      background: #fff;
+      border: 1.5px solid var(--line);
+      border-radius: 16px;
+      padding: 4px 4px 4px 16px;
+      display: flex; align-items: center; gap: 8px;
+      box-shadow: var(--shadow-2);
+      transition: border-color 160ms, box-shadow 160ms;
+    }
+    .composer-box:focus-within {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(45,110,168,0.12), var(--shadow-2);
+    }
+    .composer-box input {
+      flex: 1; min-width: 0;
+      height: 44px;
+      background: transparent;
+      border: none; outline: none;
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .composer-box input::placeholder { color: var(--txt-faint); }
+    .composer-tools { display: flex; align-items: center; gap: 2px; }
+    .composer-tools .tool {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-mute);
+      transition: background 140ms, color 140ms;
+    }
+    .composer-tools .tool:hover { background: var(--bg-pill); color: var(--ink); }
+    .composer-send {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: var(--brand);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 140ms, transform 140ms;
+    }
+    .composer-send:hover { background: var(--brand-dk); transform: translateY(-1px); }
+    .composer-disclaim {
+      margin-top: 8px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--txt-faint);
+    }
+
+    /* Floating CTA */
+    .floating-cta {
+      position: fixed; right: 24px; bottom: 100px; z-index: 30;
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 12px 18px;
+      background: var(--brand);
+      color: #fff;
+      border-radius: 999px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      box-shadow: 0 12px 28px rgba(45,110,168,0.35);
+      transition: background 160ms, transform 160ms, box-shadow 200ms;
+      opacity: 0; transform: translateY(8px);
+      pointer-events: none;
+    }
+    .floating-cta.show { opacity: 1; transform: translateY(0); pointer-events: auto; animation: cta-pulse 2.4s ease-in-out infinite 1s; }
+    .floating-cta:hover { background: var(--brand-dk); transform: translateY(-2px); }
+    .floating-cta .en { font-size: 10px; opacity: 0.78; letter-spacing: 0.12em; font-weight: 500; }
+    @keyframes cta-pulse {
+      0%, 100% { box-shadow: 0 12px 28px rgba(45,110,168,0.35), 0 0 0 0 rgba(45,110,168,0.40); }
+      50%      { box-shadow: 0 12px 28px rgba(45,110,168,0.42), 0 0 0 12px rgba(45,110,168,0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" data-screen-label="01 Demo · 超级小陈">
+
+    <!-- ===== Sidebar ===== -->
+    <aside class="sidebar" aria-label="会话列表">
+      <div class="sb-brand">
+        <a href="/" class="logo" aria-label="返回首页"><img src="/manus-storage/logo_clean_934597e8.png" alt="" /></a>
+        <div class="name">
+          运帷 AI
+          <span class="tag">超级小陈 · 银湖石墨</span>
+        </div>
+      </div>
+
+      <div class="sb-actions">
+        <button class="btn-new" id="btn-new">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建对话
+        </button>
+      </div>
+
+      <div class="sb-search">
+        <span class="icn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </span>
+        <input type="search" placeholder="搜索过往对话" aria-label="搜索过往对话" />
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="sb-list">
+        <div class="sb-group-title">今天</div>
+        <button class="sb-item active">
+          <span class="label">本月订单完成进度</span>
+          <span class="ts">14:08</span>
+        </button>
+        <button class="sb-item">
+          <span class="label">应收账款超期清单</span>
+          <span class="ts">11:42</span>
+        </button>
+        <button class="sb-item">
+          <span class="label">CUST-007 报价历史</span>
+          <span class="ts">09:15</span>
+        </button>
+
+        <div class="sb-group-title">昨天</div>
+        <button class="sb-item">
+          <span class="label">石墨化炉异常停机分析</span>
+          <span class="ts">17:31</span>
+        </button>
+        <button class="sb-item">
+          <span class="label">本周回款 Top 10</span>
+          <span class="ts">10:08</span>
+        </button>
+
+        <div class="sb-group-title">本周早些时候</div>
+        <button class="sb-item">
+          <span class="label">蜂巢能源合同到期提醒</span>
+          <span class="ts">周二</span>
+        </button>
+        <button class="sb-item">
+          <span class="label">Q1 净利同比分析</span>
+          <span class="ts">周二</span>
+        </button>
+        <button class="sb-item">
+          <span class="label">采购入库异常波动</span>
+          <span class="ts">周一</span>
+        </button>
+      </div>
+
+      <div class="sb-user">
+        <div class="sb-avatar">许</div>
+        <div class="who">
+          <div class="nm">许总</div>
+          <div class="role">银湖石墨 · CEO</div>
+        </div>
+        <button class="more" aria-label="更多">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ===== Main ===== -->
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs">
+          <a href="/" class="home" aria-label="返回首页">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </a>
+          <h1 class="title" id="thread-title">本月订单完成进度</h1>
+          <span class="pill-sandbox"><span class="dot"></span>Sandbox · 沙盒</span>
+        </div>
+        <div class="actions">
+          <button class="icn-btn" id="btn-skip" title="跳过演示动画" aria-label="跳过动画">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+          </button>
+          <button class="icn-btn" id="btn-restart" title="重新播放" aria-label="重新播放">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+          <button class="icn-btn" title="设置" aria-label="设置">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Thread -->
+      <div class="thread-wrap" id="thread-wrap">
+        <div class="thread" id="thread">
+          <div class="day-divider"><span>2026 年 4 月 25 日 · 周六</span></div>
+
+          <!-- User message -->
+          <div class="msg-user">
+            <div class="avatar">许</div>
+            <div class="bubble">本月银湖订单完成进度怎么样？按客户给我排一下，落后的标出来。</div>
+          </div>
+
+          <!-- AI message -->
+          <div class="msg-ai">
+            <div class="avatar-ai"><img src="/manus-storage/logo_clean_934597e8.png" alt="超级小陈"/></div>
+            <div class="body">
+              <div class="meta-line">
+                <span class="nm">超级小陈</span>
+                <span>14:08</span>
+                <span class="meta-tag" id="src-tag">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+                  调用 3 个数据源
+                </span>
+              </div>
+
+              <!-- Thinking placeholder (replaced by content) -->
+              <div class="thinking" id="thinking">
+                <span class="dots"><span></span><span></span><span></span></span>
+                <span id="thinking-text">正在读取销售台账与生产工时…</span>
+              </div>
+
+              <!-- Lead -->
+              <p class="lead" id="lead" style="display:none;"></p>
+
+              <!-- Table card -->
+              <div class="table-card" id="table-card" style="display:none;">
+                <div class="head">
+                  <div class="t">订单完成情况 · 按客户</div>
+                  <div class="meta">数据截至 14:08 · 共 4 个客户</div>
+                </div>
+                <table class="tbl" aria-label="订单完成情况">
+                  <thead>
+                    <tr>
+                      <th>客户</th>
+                      <th>订单数</th>
+                      <th>已交</th>
+                      <th>金额（万）</th>
+                      <th>完成度</th>
+                      <th>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbl-body"></tbody>
+                </table>
+              </div>
+
+              <!-- Insight -->
+              <div class="insight" id="insight" style="display:none;">
+                <div class="h">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  关键发现
+                </div>
+                宁德时代积压主要发生在<strong>石墨化-2 号炉</strong>，过去 7 天累计停机 <strong>14.6 小时</strong>。若按当前节奏，预计延期 <strong>+6 天</strong>，违约金风险约 <strong>¥18.2 万</strong>。建议尽快联系生产部王主任调度其他炉位补排。
+              </div>
+
+              <!-- Citations -->
+              <div class="citations" id="citations" style="display:none;">
+                <span class="lbl">引用</span>
+                <button class="cite"><span class="n">[01]</span>金蝶 · 销售台账 4 月</button>
+                <button class="cite"><span class="n">[02]</span>MES · 石墨化-2 号炉</button>
+                <button class="cite"><span class="n">[03]</span>合同 · 销-2026-Q1-007 §4.2</button>
+              </div>
+
+              <!-- AI footer -->
+              <div class="ai-foot" id="ai-foot" style="display:none;">
+                <div class="actions-row">
+                  <button class="a-btn" title="复制"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  <button class="a-btn" title="导出"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                </div>
+                <span>数据口径与金蝶 ERP 一致 · 置信度 0.94</span>
+              </div>
+
+              <!-- Followups -->
+              <div class="followups" id="followups" style="display:none;">
+                <button>今天车间有几个异常停机？</button>
+                <button>哪些客户回款超过 90 天？</button>
+                <button>把这周运营快报发到管理群</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <div class="composer">
+        <div class="composer-inner">
+          <div class="composer-box">
+            <input id="user-input" type="text" placeholder="向超级小陈提问，例如：今天车间有几个异常停机？" aria-label="提问" />
+            <div class="composer-tools">
+              <button class="tool" title="附件"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+              <button class="tool" title="语音"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+            </div>
+            <button class="composer-send" id="btn-send" aria-label="发送">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+            </button>
+          </div>
+          <p class="composer-disclaim">超级小陈仅基于已授权的企业数据回答，所有数字可追溯至原始记录。</p>
+        </div>
+      </div>
+
+      <!-- Floating CTA -->
+      <a href="/#contact" class="floating-cta" id="floating-cta" aria-label="预约咨询">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span style="display:inline-flex; flex-direction:column; line-height:1.15; align-items:flex-start;">
+          <span>预约真实数据演示</span>
+          <span class="en">TRY ON YOUR DATA</span>
+        </span>
+      </a>
+    </main>
+  </div>
+
+  <script>
+    /* ============ State ============ */
+    const ROWS = [
+      { client: '宁德时代',  code: 'CUST-007', total: 22, done: 11, amt: 441.2, pct: 50,  status: 'danger', label: '落后' },
+      { client: '江苏先导',  code: 'CUST-014', total: 8,  done: 6,  amt: 94.6,  pct: 75,  status: 'warn',   label: '关注' },
+      { client: '中钢新材',  code: 'CUST-022', total: 12, done: 10, amt: 182.0, pct: 83,  status: 'normal', label: '正常' },
+      { client: '蜂巢能源',  code: 'CUST-031', total: 5,  done: 5,  amt: 76.0,  pct: 100, status: 'ok',     label: '已交' },
+    ];
+    const LEAD_HTML = '总，4 月共 <span class="em-num">47 笔订单</span>，已交付 <span class="em-num">31 笔</span>，整体完成率 <span class="em-num">66%</span>，与上月同期基本持平。其中 <span class="em-danger">1 个客户明显落后</span>，<span class="em-warn">1 个需要关注</span>，建议优先处理：';
+
+    const els = {
+      thinking:  document.getElementById('thinking'),
+      thinkText: document.getElementById('thinking-text'),
+      lead:      document.getElementById('lead'),
+      table:     document.getElementById('table-card'),
+      tblBody:   document.getElementById('tbl-body'),
+      insight:   document.getElementById('insight'),
+      citations: document.getElementById('citations'),
+      aiFoot:    document.getElementById('ai-foot'),
+      followups: document.getElementById('followups'),
+      cta:       document.getElementById('floating-cta'),
+      threadWrap:document.getElementById('thread-wrap'),
+    };
+
+    let timers = [];
+    let skipMode = false;
+    function clearTimers() { timers.forEach(t => clearTimeout(t)); timers = []; }
+    function wait(ms) {
+      const real = skipMode ? Math.min(ms, 60) : ms;
+      return new Promise(res => { const t = setTimeout(res, real); timers.push(t); });
+    }
+    function scrollToBottom() {
+      els.threadWrap.scrollTo({ top: els.threadWrap.scrollHeight, behavior: 'smooth' });
+    }
+
+    function reset() {
+      clearTimers();
+      els.thinking.style.display = '';
+      els.thinkText.textContent = '正在读取销售台账与生产工时…';
+      els.lead.style.display = 'none';
+      els.lead.classList.remove('show');
+      els.lead.innerHTML = '';
+      els.table.style.display = 'none';
+      els.table.classList.remove('show');
+      els.tblBody.innerHTML = '';
+      els.insight.style.display = 'none';
+      els.insight.classList.remove('show');
+      els.citations.style.display = 'none';
+      els.citations.classList.remove('show');
+      els.aiFoot.style.display = 'none';
+      els.followups.style.display = 'none';
+      els.followups.classList.remove('show');
+      els.cta.classList.remove('show');
+      els.threadWrap.scrollTop = 0;
+    }
+
+    async function play() {
+      reset();
+
+      // Phase 1 — Thinking
+      await wait(900);
+      els.thinkText.textContent = '正在分析 4 个客户、47 笔订单…';
+      await wait(1100);
+
+      // Phase 2 — Lead
+      els.thinking.style.display = 'none';
+      els.lead.innerHTML = LEAD_HTML;
+      els.lead.style.display = '';
+      requestAnimationFrame(() => els.lead.classList.add('show'));
+      scrollToBottom();
+      await wait(420);
+
+      // Phase 3 — Table card
+      els.table.style.display = '';
+      requestAnimationFrame(() => els.table.classList.add('show'));
+      ROWS.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>
+            <div class="client">${r.client}</div>
+            <div class="code">${r.code}</div>
+          </td>
+          <td class="num">${r.total}</td>
+          <td class="num">${r.done}</td>
+          <td class="num">${r.amt.toFixed(1)}</td>
+          <td>
+            <div class="pbar-wrap">
+              <span class="pbar"><i data-pct="${r.pct}" data-status="${r.status}"></i></span>
+              <span class="pct ${r.status}" data-counter="${r.pct}">0%</span>
+            </div>
+          </td>
+          <td><span class="badge ${r.status}">${r.label}</span></td>
+        `;
+        els.tblBody.appendChild(tr);
+        const t = setTimeout(() => tr.classList.add('show'), 220 + i * 120);
+        timers.push(t);
+      });
+      await wait(220 + ROWS.length * 120 + 60);
+      scrollToBottom();
+
+      // Animate bars + counters
+      const colors = { danger: '#DC2626', warn: '#D97706', normal: '#2D6EA8', ok: '#059669' };
+      els.tblBody.querySelectorAll('.pbar > i').forEach(b => {
+        const pct = +b.dataset.pct;
+        b.style.background = colors[b.dataset.status] || colors.normal;
+        requestAnimationFrame(() => { b.style.width = pct + '%'; });
+      });
+      els.tblBody.querySelectorAll('[data-counter]').forEach(c => animateCounter(c, +c.dataset.counter, 900));
+      await wait(700);
+
+      // Phase 4 — Insight
+      els.insight.style.display = '';
+      requestAnimationFrame(() => els.insight.classList.add('show'));
+      scrollToBottom();
+      await wait(380);
+
+      // Phase 5 — Citations + AI footer
+      els.citations.style.display = '';
+      requestAnimationFrame(() => els.citations.classList.add('show'));
+      els.aiFoot.style.display = '';
+      await wait(260);
+
+      // Phase 6 — Followups + CTA
+      els.followups.style.display = '';
+      requestAnimationFrame(() => els.followups.classList.add('show'));
+      els.cta.classList.add('show');
+      scrollToBottom();
+    }
+
+    function animateCounter(el, target, dur) {
+      if (skipMode) { el.textContent = target + '%'; return; }
+      const t0 = performance.now();
+      function step(now) {
+        const p = Math.min(1, (now - t0) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(target * eased) + '%';
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    /* ============ Wire up ============ */
+    document.getElementById('btn-restart').addEventListener('click', () => play());
+    document.getElementById('btn-skip').addEventListener('click', () => {
+      skipMode = !skipMode;
+      const btn = document.getElementById('btn-skip');
+      btn.style.color = skipMode ? 'var(--brand)' : '';
+      btn.title = skipMode ? '跳过模式开启' : '跳过演示动画';
+    });
+    document.getElementById('btn-new').addEventListener('click', () => {
+      document.getElementById('user-input').focus();
+    });
+
+    // Followup chips → restart
+    document.querySelectorAll('.followups button').forEach(b => {
+      b.addEventListener('click', () => {
+        document.getElementById('user-input').value = b.textContent.trim();
+        document.getElementById('user-input').focus();
+      });
+    });
+
+    // Sidebar nav (visual only — switching just keeps current scenario)
+    document.querySelectorAll('.sb-item').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.sb-item').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.getElementById('thread-title').textContent = b.querySelector('.label').textContent;
+        if (b.querySelector('.label').textContent !== '本月订单完成进度') {
+          // graceful: restart & keep showing main demo
+          play();
+        }
+      });
+    });
+
+    document.getElementById('btn-send').addEventListener('click', () => {
+      const v = document.getElementById('user-input').value.trim();
+      if (!v) return;
+      // restart for any input
+      play();
+      document.getElementById('user-input').value = '';
+    });
+    document.getElementById('user-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-send').click();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') window.location.href = '/';
+    });
+
+    window.addEventListener('load', () => setTimeout(play, 500));
+  </script>
+</body>
+</html>

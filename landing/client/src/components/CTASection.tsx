@@ -3,7 +3,7 @@
    2-column layout: copy + 3-button cluster (Demo / Book / Portal).
    ============================================================= */
 
-const DEMO_URL = "https://app.fiveoranges.ai/";
+const DEMO_URL = "/demo.html";
 const PORTAL_URL = "https://app.fiveoranges.ai/";
 const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
 

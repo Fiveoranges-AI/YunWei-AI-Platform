@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 ];
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
-const DEMO_URL = "https://app.fiveoranges.ai/";
+const DEMO_URL = "/demo.html";
 const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
 
 type CnTooltipProps = { text: string; show: boolean };
