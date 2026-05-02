@@ -4,7 +4,7 @@
    ============================================================= */
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
-const DEMO_URL = "https://app.fiveoranges.ai/";
+const DEMO_URL = "/demo.html";
 
 export default function Footer() {
   return (
