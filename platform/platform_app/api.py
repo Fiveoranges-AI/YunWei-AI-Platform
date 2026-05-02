@@ -28,7 +28,7 @@ def agents(request: Request):
     rows = db.main().execute(
         "SELECT t.client_id, t.agent_id, t.display_name, t.icon_url, t.description, t.health "
         "FROM tenants t JOIN user_tenant ut ON t.client_id=ut.client_id AND t.agent_id=ut.agent_id "
-        "WHERE ut.user_id=? AND t.active=1",
+        "WHERE ut.user_id=%s AND t.active=1",
         (user["id"],),
     ).fetchall()
     return {"agents": [

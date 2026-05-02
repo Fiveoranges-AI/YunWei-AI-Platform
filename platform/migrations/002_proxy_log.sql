@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS proxy_log (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts          INTEGER NOT NULL,
+  id          BIGSERIAL PRIMARY KEY,
+  ts          BIGINT NOT NULL,
   user_id     TEXT,
   client_id   TEXT,
   agent_id    TEXT,

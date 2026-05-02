@@ -94,22 +94,24 @@ def verify(
 
 
 class NonceStore:
-    """进程内 (key_id, nonce) -> expiry_ts。Thread-safe enough for asyncio single-loop usage."""
-    def __init__(self, max_size: int = 100_000):
-        self._store: dict[tuple[str, str], int] = {}
-        self._max = max_size
+    """Redis SETNX-backed nonce store (v1.4).
+
+    Multi-instance safe: every platform-app worker shares the same Redis,
+    so a replay attempt against any instance is rejected. Nonces auto-GC
+    via Redis key TTL.
+    """
+
+    def __init__(self) -> None:
+        import redis
+        from .settings import settings
+        self._r = redis.from_url(settings.redis_url, decode_responses=True)
 
     def check_and_add(self, key_id: str, nonce: str, expiry: int) -> None:
-        now = int(time.time())
-        key = (key_id, nonce)
-        if key in self._store and self._store[key] > now:
+        ttl = max(1, expiry - int(time.time()))
+        # SETNX: returns False if key exists -> replay
+        if not self._r.set(f"nonce:{key_id}:{nonce}", "1", ex=ttl, nx=True):
             raise ValueError("replay detected")
-        if len(self._store) >= self._max:
-            self.gc()
-        self._store[key] = expiry
 
     def gc(self) -> None:
-        now = int(time.time())
-        expired = [k for k, v in self._store.items() if v <= now]
-        for k in expired:
-            self._store.pop(k, None)
+        # No-op: Redis expires keys via the `ex` arg above.
+        pass

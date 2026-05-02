@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir .
 COPY migrations /app/migrations/
 COPY static /app/static/
 
+# Railway sets $PORT (typically 8080). Local docker-compose sets it via
+# the `command:` override. Default to 80 so plain `docker run` also works.
 EXPOSE 80
-
-# docker-compose may override `command:`; keep CMD aligned with compose default
-CMD ["uvicorn", "platform_app.main:app", "--host", "0.0.0.0", "--port", "80", "--workers", "1"]
+CMD uvicorn platform_app.main:app --host 0.0.0.0 --port ${PORT:-80} --workers 1
