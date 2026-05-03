@@ -1,43 +1,1356 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>fiveoranges.ai · Agent 列表</title>
-<style>
-body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 24px; }
-h1 { font-size: 20px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
-.card { padding: 20px; background: white; border: 1px solid #eee; border-radius: 8px; cursor: pointer; transition: box-shadow 0.15s; }
-.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-.card h3 { margin: 0 0 8px 0; font-size: 16px; }
-.card .desc { color: #666; font-size: 13px; }
-.health-healthy { color: #1a8c1a; }
-.health-unhealthy { color: #c00; }
-.logout { float: right; color: #999; cursor: pointer; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>仪表盘 · Dashboard — Five Oranges AI · 运帷 AI</title>
+  <link rel="icon" href="/static/assets/logo.png" type="image/png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --brand: #2D6EA8;
+      --brand-dk: #1F4F7A;
+      --brand-lt: #4A8BC4;
+      --brand-pale: #EEF4FB;
+      --ink: #0F2340;
+      --ink-2: #1E2D45;
+      --txt: #334155;
+      --txt-mute: #64748B;
+      --txt-faint: #94A3B8;
+      --bg: #F8FAFC;
+      --bg-card: #FFFFFF;
+      --bg-pill: #F1F5F9;
+      --line: #E2E8F0;
+      --line-soft: #EEF2F7;
+      --success: #10B981;
+      --success-bg: #D1FAE5;
+      --warning: #F59E0B;
+      --warning-bg: #FEF3C7;
+      --danger:  #DC2626;
+      --danger-bg: #FEE2E2;
+      --info: #2D6EA8;
+      --info-bg: #EEF4FB;
+      --neutral: #6B7280;
+      --neutral-bg: #F1F5F9;
+      --shadow-1: 0 1px 2px rgba(15,35,64,0.04);
+      --shadow-2: 0 8px 24px rgba(15,35,64,0.06);
+      --shadow-3: 0 20px 48px rgba(15,35,64,0.10);
+      --shadow-menu: 0 12px 32px rgba(15,35,64,0.16);
+      --r-md: 10px;
+      --r-lg: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--txt);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; padding: 0; }
+    [data-sora] { font-family: 'Sora', sans-serif; }
+
+    /* ======= Top header ======= */
+    .header {
+      position: sticky; top: 0; z-index: 30;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      height: 68px;
+      display: flex; align-items: center;
+      padding: 0 28px;
+    }
+    @media (max-width: 767px) { .header { padding: 0 16px; height: 60px; } }
+
+    .header-inner {
+      width: 100%;
+      max-width: 1440px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .logo-mark {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 0 0 1px var(--line) inset;
+      padding: 3px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: box-shadow 160ms;
+    }
+    .logo-mark:hover { box-shadow: 0 0 0 1px var(--brand) inset; }
+    .logo-mark img { width: 100%; height: 100%; border-radius: 5px; }
+    .header-divider {
+      width: 1px; height: 22px; background: var(--line); flex-shrink: 0;
+    }
+    .org-link {
+      display: flex; align-items: baseline; gap: 6px;
+      min-width: 0;
+      transition: color 160ms;
+    }
+    .org-link .nm {
+      font-family: 'Sora', sans-serif;
+      font-size: 15px; font-weight: 700;
+      color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .org-link .role {
+      font-size: 11px;
+      color: var(--txt-mute);
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .org-link:hover .nm { color: var(--brand); }
+    @media (max-width: 767px) {
+      .header-divider, .org-link .role { display: none; }
+      .org-link .nm { font-size: 14px; }
+    }
+
+    .header-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; position: relative; }
+    .icon-btn {
+      position: relative;
+      width: 38px; height: 38px;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-mute);
+      transition: background 140ms, color 140ms;
+    }
+    .icon-btn:hover { background: var(--bg-pill); color: var(--ink); }
+    .icon-btn .badge-dot {
+      position: absolute; top: 9px; right: 9px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 0 2px #fff;
+      animation: pulse-emit 1.8s ease-out infinite;
+    }
+    @keyframes pulse-emit {
+      0%   { box-shadow: 0 0 0 2px #fff, 0 0 0 0 rgba(220,38,38,0.5); }
+      100% { box-shadow: 0 0 0 2px #fff, 0 0 0 8px rgba(220,38,38,0); }
+    }
+
+    .has-tip { position: relative; }
+    .has-tip[data-tip]::before {
+      content: attr(data-tip);
+      position: absolute; top: calc(100% + 8px); right: 0;
+      background: var(--ink); color: #fff;
+      padding: 6px 10px; border-radius: 6px;
+      font-size: 11.5px; font-family: 'Sora', sans-serif; font-weight: 500;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      opacity: 0; pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity 160ms, transform 160ms;
+      z-index: 50;
+    }
+    .has-tip:hover[data-tip]::before { opacity: 1; transform: translateY(0); }
+
+    .user-trigger {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 12px 4px 4px;
+      border-radius: 999px;
+      background: transparent;
+      transition: background 140ms;
+      margin-left: 4px;
+    }
+    .user-trigger:hover { background: var(--bg-pill); }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lt) 100%);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Sora', sans-serif; font-weight: 700; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .user-trigger .nm {
+      font-family: 'Sora', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--ink);
+    }
+    .user-trigger svg { color: var(--txt-mute); transition: transform 200ms; }
+    .user-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
+    @media (max-width: 767px) { .user-trigger .nm { display: none; } .user-trigger { padding: 4px; } }
+
+    .menu {
+      position: absolute; right: 0; top: calc(100% + 10px);
+      width: 268px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow-menu);
+      padding: 6px;
+      transform-origin: top right;
+      transform: scale(0.95) translateY(-4px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 160ms, transform 160ms;
+      z-index: 40;
+    }
+    .menu.open { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+    .menu-head {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px;
+      border-bottom: 1px solid var(--line-soft);
+      margin-bottom: 6px;
+    }
+    .menu-head .avatar { width: 40px; height: 40px; font-size: 15px; }
+    .menu-head .info { min-width: 0; flex: 1; }
+    .menu-head .nm-row {
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700; color: var(--ink);
+    }
+    .role-badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 7px;
+      background: var(--brand-pale);
+      color: var(--brand);
+      border-radius: 4px;
+      font-family: 'Sora', sans-serif; font-size: 10px; font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    .menu-head .em {
+      font-size: 11.5px; color: var(--txt-mute);
+      margin-top: 3px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .menu-section { padding: 4px 0; }
+    .menu-section + .menu-section { border-top: 1px solid var(--line-soft); }
+    .menu-item {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-size: 13.5px;
+      color: var(--ink-2);
+      text-align: left;
+      transition: background 120ms, color 120ms;
+    }
+    .menu-item:hover { background: var(--bg-pill); color: var(--ink); }
+    .menu-item .icn { width: 16px; height: 16px; color: var(--txt-mute); flex-shrink: 0; }
+    .menu-item .en { color: var(--txt-faint); font-size: 11px; margin-left: 4px; }
+    .menu-item.danger:hover { background: var(--danger-bg); color: var(--danger); }
+    .menu-item.danger:hover .icn { color: var(--danger); }
+
+    .notif-panel {
+      position: absolute; right: 60px; top: calc(100% + 10px);
+      width: 320px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow-menu);
+      transform-origin: top right;
+      transform: scale(0.95) translateY(-4px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 160ms, transform 160ms;
+      z-index: 40;
+      overflow: hidden;
+    }
+    .notif-panel.open { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+    .notif-h {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .notif-h .t { font-family: 'Sora', sans-serif; font-weight: 700; color: var(--ink); font-size: 13.5px; }
+    .notif-h .all { font-size: 11.5px; color: var(--brand); cursor: pointer; }
+    .notif-h .all:hover { text-decoration: underline; }
+    .notif-list { max-height: 280px; overflow-y: auto; padding: 4px; }
+    .notif-item {
+      display: flex; gap: 10px; padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 120ms;
+      width: 100%; text-align: left;
+    }
+    .notif-item:hover { background: var(--bg-pill); }
+    .notif-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+    .notif-dot.warning { background: var(--warning); }
+    .notif-dot.success { background: var(--success); }
+    .notif-dot.info    { background: var(--brand); }
+    .notif-text { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+    .notif-text .ts { display: block; font-size: 10.5px; color: var(--txt-faint); margin-top: 3px; font-family: 'Sora', sans-serif; }
+    .notif-foot {
+      padding: 10px 14px;
+      border-top: 1px solid var(--line-soft);
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--brand);
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .notif-foot:hover { background: var(--bg-pill); }
+
+    /* ======= Main ======= */
+    .main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 40px 28px 80px;
+    }
+    @media (max-width: 767px) { .main { padding: 24px 16px 60px; } }
+
+    .welcome {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      gap: 24px; flex-wrap: wrap;
+      margin-bottom: 36px;
+      animation: fade-up 540ms ease-out both;
+    }
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .welcome-text { min-width: 0; }
+    .welcome h2 {
+      font-family: 'Sora', sans-serif;
+      font-size: clamp(24px, 3vw, 30px);
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 10px;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .welcome h2 .wave {
+      display: inline-block;
+      transform-origin: 70% 70%;
+      animation: wave 2.4s ease-in-out 1.2s 2;
+    }
+    @keyframes wave {
+      0%, 100% { transform: rotate(0); }
+      15%, 35%, 55% { transform: rotate(14deg); }
+      25%, 45% { transform: rotate(-8deg); }
+    }
+    .welcome .sub {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      font-size: 14px; color: var(--txt-mute); line-height: 1.6;
+    }
+    .welcome .sub .en {
+      color: var(--txt-faint);
+      font-family: 'Sora', sans-serif;
+      letter-spacing: 0.04em;
+      font-size: 12px;
+    }
+    .welcome .sub .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.16);
+    }
+
+    .stats-row {
+      display: flex; gap: 14px; flex-wrap: wrap;
+    }
+    .stat {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      padding: 10px 16px;
+      box-shadow: var(--shadow-1);
+    }
+    .stat .v {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 22px; color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .stat .v .delta {
+      font-size: 11px; font-weight: 600; color: var(--success); margin-left: 6px;
+    }
+    .stat .lbl {
+      font-size: 11.5px; color: var(--txt-mute);
+      margin-top: 4px;
+      letter-spacing: 0.02em;
+    }
+    .stat .lbl .en { color: var(--txt-faint); font-size: 10px; letter-spacing: 0.06em; margin-left: 4px; }
+
+    .section-h {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+      margin: 0 0 20px;
+    }
+    .section-h h3 {
+      font-family: 'Sora', sans-serif;
+      font-size: 18px; font-weight: 700;
+      color: var(--ink);
+      margin: 0;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .section-h h3 .en {
+      font-size: 12px; color: var(--txt-faint); font-weight: 500;
+      letter-spacing: 0.06em;
+    }
+    .section-h .tools { display: flex; align-items: center; gap: 8px; }
+    .chip-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-family: 'Sora', sans-serif;
+      font-size: 12.5px; color: var(--ink-2);
+      transition: border-color 140ms, color 140ms, background 140ms;
+    }
+    .chip-btn:hover { border-color: var(--brand); color: var(--brand); }
+    .view-toggle {
+      display: inline-flex;
+      background: var(--bg-pill);
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .view-toggle button {
+      width: 30px; height: 28px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-mute);
+      transition: background 120ms, color 120ms;
+    }
+    .view-toggle button.on {
+      background: #fff;
+      color: var(--brand);
+      box-shadow: var(--shadow-1);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 1279px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 1023px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 639px)  { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      position: relative;
+      display: flex; flex-direction: column;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 22px 22px 16px;
+      box-shadow: var(--shadow-1);
+      cursor: pointer;
+      overflow: hidden;
+      opacity: 0; transform: translateY(16px);
+      transition:
+        opacity 460ms ease-out,
+        transform 460ms ease-out,
+        border-color 200ms,
+        box-shadow 240ms;
+      min-height: 220px;
+    }
+    .card.in { opacity: 1; transform: translateY(0); }
+    .card:hover {
+      border-color: var(--brand);
+      box-shadow: 0 14px 32px rgba(45,110,168,0.14);
+      transform: translateY(-4px);
+    }
+    .card:active { transform: translateY(-2px) scale(0.99); }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; right: 0;
+      width: 80px; height: 80px;
+      background: radial-gradient(circle at 100% 0%, rgba(45,110,168,0.10) 0%, transparent 70%);
+      opacity: 0; transition: opacity 240ms;
+      pointer-events: none;
+    }
+    .card:hover::before { opacity: 1; }
+    .card.issues::after {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--danger);
+    }
+    .card.offline { opacity: 0.6; }
+    .card.offline.in { opacity: 0.6; }
+    .card.offline:hover { transform: none; border-color: var(--line); box-shadow: var(--shadow-1); }
+
+    /* "Demo" tag for fake/decorative cards so the dashboard is honest about it */
+    .card .demo-tag {
+      position: absolute; top: 14px; right: 50px;
+      font-family: 'Sora', sans-serif;
+      font-size: 9.5px; font-weight: 600;
+      letter-spacing: 0.08em;
+      padding: 3px 7px;
+      background: var(--bg-pill);
+      color: var(--txt-faint);
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .card-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .card-icon {
+      width: 44px; height: 44px;
+      border-radius: 11px;
+      background: var(--brand-pale);
+      color: var(--brand);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .card-more {
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--txt-faint);
+      transition: background 120ms, color 120ms;
+    }
+    .card-more:hover { background: var(--bg-pill); color: var(--ink); }
+
+    .card-title {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--ink);
+      line-height: 1.3;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card-role {
+      font-size: 13px;
+      color: var(--txt-mute);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .card-role .en {
+      color: var(--txt-faint);
+      font-size: 11.5px;
+      margin-left: 4px;
+    }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-family: 'Sora', sans-serif;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .status-pill .en { font-weight: 500; opacity: 0.75; font-size: 10.5px; letter-spacing: 0.04em; margin-left: 2px; }
+    .status-pill.healthy { background: var(--success-bg); color: #047857; }
+    .status-pill.healthy .dot { background: var(--success); }
+    .status-pill.starting { background: var(--info-bg); color: var(--brand); }
+    .status-pill.starting .dot { background: var(--brand); animation: pulse-dot 1.4s ease-out infinite; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.5; transform: scale(1.3); }
+    }
+    .status-pill.maintenance { background: var(--warning-bg); color: #92400E; }
+    .status-pill.maintenance .dot { background: var(--warning); }
+    .status-pill.issues { background: var(--danger-bg); color: #991B1B; }
+    .status-pill.issues .dot { background: var(--danger); animation: shake-dot 0.6s ease-in-out infinite; }
+    @keyframes shake-dot {
+      0%, 100% { transform: translateX(0); }
+      25%      { transform: translateX(1px); }
+      75%      { transform: translateX(-1px); }
+    }
+    .status-pill.offline { background: var(--neutral-bg); color: var(--neutral); }
+    .status-pill.offline .dot { background: var(--neutral); }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line-soft);
+      margin-top: auto;
+    }
+    .meta-cell .lbl {
+      font-size: 10.5px;
+      color: var(--txt-faint);
+      letter-spacing: 0.04em;
+      margin-bottom: 3px;
+    }
+    .meta-cell .v {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      display: flex; align-items: baseline; gap: 4px;
+    }
+    .meta-cell .v.muted { color: var(--txt-mute); font-weight: 600; font-size: 13px; }
+    .meta-cell .v .delta { font-size: 10.5px; color: var(--success); font-weight: 600; }
+    .meta-cell .v .delta.down { color: var(--danger); }
+
+    .card-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid var(--line-soft);
+      margin: 0 -22px -16px;
+      padding: 12px 22px 0;
+    }
+    .card-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--brand);
+      transition: gap 160ms;
+    }
+    .card:hover .card-cta { gap: 10px; }
+    .card-cta .en { font-size: 10.5px; opacity: 0.7; letter-spacing: 0.06em; font-weight: 500; }
+
+    .activity { margin-top: 56px; }
+    .activity-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+    }
+    .activity-table { width: 100%; border-collapse: collapse; }
+    .activity-table th, .activity-table td {
+      padding: 13px 20px;
+      text-align: left;
+      font-size: 13px;
+      border-bottom: 1px solid var(--line-soft);
+      vertical-align: middle;
+    }
+    .activity-table th {
+      font-family: 'Sora', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--txt-mute);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: #FBFCFD;
+      border-bottom: 1px solid var(--line);
+    }
+    .activity-table tbody tr:last-child td { border-bottom: none; }
+    .activity-table tbody tr { transition: background 120ms; }
+    .activity-table tbody tr:hover { background: rgba(45,110,168,0.03); }
+    .activity-agent {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 600; color: var(--ink);
+    }
+    .activity-agent .av {
+      width: 26px; height: 26px;
+      border-radius: 7px;
+      background: var(--brand-pale);
+      color: var(--brand);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .activity-action { color: var(--ink-2); }
+    .activity-by { color: var(--txt-mute); font-size: 12.5px; }
+    .activity-ts {
+      font-family: 'Sora', sans-serif;
+      font-size: 12px;
+      color: var(--txt-mute);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .activity-result {
+      font-family: 'Sora', sans-serif;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      gap: 5px; align-items: center;
+    }
+    .activity-result.ok      { background: var(--success-bg); color: #047857; }
+    .activity-result.warn    { background: var(--warning-bg); color: #92400E; }
+    .activity-result.fail    { background: var(--danger-bg); color: #991B1B; }
+    .activity-result.running { background: var(--info-bg); color: var(--brand); }
+    .activity-result.running .spin {
+      width: 10px; height: 10px; border: 1.5px solid var(--brand); border-right-color: transparent;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .activity-foot {
+      padding: 12px 20px;
+      border-top: 1px solid var(--line-soft);
+      display: flex; justify-content: center;
+    }
+    .activity-foot a {
+      font-family: 'Sora', sans-serif;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--brand);
+      transition: color 160ms;
+    }
+    .activity-foot a:hover { color: var(--brand-dk); }
+
+    @media (max-width: 767px) {
+      .activity-table th:nth-child(3),
+      .activity-table td:nth-child(3) { display: none; }
+    }
+
+    .foot {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 28px;
+      border-top: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      font-size: 12px;
+      color: var(--txt-mute);
+    }
+    .foot .copy { font-family: 'Sora', sans-serif; }
+    .foot ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 18px; flex-wrap: wrap; }
+    .foot a { transition: color 140ms; }
+    .foot a:hover { color: var(--brand); }
+    .foot .en { color: var(--txt-faint); font-size: 10.5px; letter-spacing: 0.04em; margin-left: 4px; }
+    .foot .status-link {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .foot .status-link::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 2px rgba(16,185,129,0.20);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
 </head>
 <body>
-<h1>我的 Agents <span class="logout" onclick="logout()">退出</span></h1>
-<div id="list" class="grid"></div>
-<script>
-async function logout() {
-  await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
-  location.href = '/';
-}
-async function load() {
-  const r = await fetch('/api/agents', { credentials: 'same-origin' });
-  if (r.status === 401) { location.href = '/'; return; }
-  const data = await r.json();
-  document.getElementById('list').innerHTML = data.agents.map(a => `
-    <div class="card" onclick="location.href='${a.url}'">
-      <h3>${a.display_name}</h3>
-      <div class="desc">${a.description || ''}</div>
-      <div class="health-${a.health}">● ${a.health}</div>
-    </div>
-  `).join('');
-}
-load();
-</script>
+  <div data-screen-label="Dashboard">
+
+    <header class="header">
+      <div class="header-inner">
+        <div class="header-left">
+          <a href="/" class="logo-mark" aria-label="Dashboard 首页">
+            <img src="/static/assets/logo.png" alt="Five Oranges AI" />
+          </a>
+          <span class="header-divider"></span>
+          <a href="/" class="org-link" aria-label="返回 Dashboard">
+            <span class="nm" id="org-name">工作台</span>
+            <span class="role">Workspace</span>
+          </a>
+        </div>
+
+        <div class="header-right">
+          <button class="icon-btn has-tip" id="btn-help" data-tip="帮助 · Help" aria-label="帮助 · Help">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </button>
+
+          <button class="icon-btn has-tip" id="btn-notif" data-tip="通知 · Notifications" aria-label="通知 · Notifications" aria-expanded="false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="badge-dot" aria-label="未读通知"></span>
+          </button>
+
+          <button class="user-trigger" id="btn-user" aria-haspopup="menu" aria-expanded="false">
+            <span class="avatar" id="user-avatar" aria-hidden="true">·</span>
+            <span class="nm" id="user-name">···</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+
+          <div class="notif-panel" id="notif-panel" role="dialog" aria-label="通知">
+            <div class="notif-h">
+              <span class="t">通知 · 2 条未读</span>
+              <span class="all">全部已读</span>
+            </div>
+            <div class="notif-list">
+              <button class="notif-item">
+                <span class="notif-dot warning"></span>
+                <span class="notif-text">
+                  <strong>报价引擎</strong> 收到 3 条新询价请求，等待审核
+                  <span class="ts">12 分钟前 · 12 minutes ago</span>
+                </span>
+              </button>
+              <button class="notif-item">
+                <span class="notif-dot info"></span>
+                <span class="notif-text">
+                  CEO 驾驶舱 周报已生成，可点击查看
+                  <span class="ts">1 小时前 · 1 hour ago</span>
+                </span>
+              </button>
+              <button class="notif-item">
+                <span class="notif-dot success"></span>
+                <span class="notif-text">
+                  超级小陈 完成 4 月销售台账分析
+                  <span class="ts">今天 09:15</span>
+                </span>
+              </button>
+            </div>
+            <div class="notif-foot">查看全部通知 · See all</div>
+          </div>
+
+          <div class="menu" id="user-menu" role="menu">
+            <div class="menu-head">
+              <span class="avatar" id="menu-avatar" aria-hidden="true">·</span>
+              <div class="info">
+                <div class="nm-row">
+                  <span id="menu-name">···</span>
+                  <span class="role-badge">管理员 · Admin</span>
+                </div>
+                <div class="em" id="menu-email">—</div>
+              </div>
+            </div>
+            <div class="menu-section">
+              <button class="menu-item" role="menuitem">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                个人设置<span class="en">Profile</span>
+              </button>
+              <button class="menu-item" role="menuitem">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/><line x1="9" y1="17" x2="9" y2="17.01"/></svg>
+                团队管理<span class="en">Team</span>
+              </button>
+              <button class="menu-item" role="menuitem">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                API 密钥<span class="en">API Keys</span>
+              </button>
+            </div>
+            <div class="menu-section">
+              <button class="menu-item" role="menuitem">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                帮助文档<span class="en">Help docs</span>
+              </button>
+              <button class="menu-item" role="menuitem">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                联系支持<span class="en">Support</span>
+              </button>
+            </div>
+            <div class="menu-section">
+              <button class="menu-item danger" role="menuitem" id="btn-signout">
+                <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                退出<span class="en">Sign out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+
+      <section class="welcome">
+        <div class="welcome-text">
+          <h2 id="greeting">你好 <span class="wave">👋</span></h2>
+          <div class="sub">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="agents-summary">加载智能体中…</span>
+            <span class="en" id="agents-summary-en">Loading agents…</span>
+          </div>
+        </div>
+
+        <div class="stats-row" aria-label="今日概览">
+          <div class="stat">
+            <div class="v">142<span class="delta">↑ 18%</span></div>
+            <div class="lbl">今日处理任务<span class="en">TODAY</span></div>
+          </div>
+          <div class="stat">
+            <div class="v">23.4 <span style="font-size:12px;color:var(--txt-mute);font-weight:600;">小时</span></div>
+            <div class="lbl">本周节省工时<span class="en">SAVED</span></div>
+          </div>
+          <div class="stat">
+            <div class="v">99.8<span style="font-size:14px;color:var(--txt-mute);">%</span></div>
+            <div class="lbl">在线率<span class="en">UPTIME</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-h">
+          <h3>我的智能体 <span class="en">My Agents</span></h3>
+          <div class="tools">
+            <button class="chip-btn">
+              全部状态
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="view-toggle" role="tablist" aria-label="视图切换">
+              <button class="on" aria-label="网格视图" role="tab" aria-selected="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              </button>
+              <button aria-label="列表视图" role="tab" aria-selected="false">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" id="agent-grid">
+
+          <!-- Real agents are prepended here at runtime by JS. -->
+
+          <!-- ======= Fake / decorative agents (preview of upcoming capabilities) ======= -->
+
+          <a class="card" href="#" data-fake="quote" onclick="event.preventDefault();">
+            <span class="demo-tag">Demo</span>
+            <div class="card-head">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </div>
+              <button class="card-more" aria-label="更多" onclick="event.preventDefault();event.stopPropagation();">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </div>
+            <div class="card-title">银湖石墨 – 报价引擎</div>
+            <div class="card-role">智能报价生成<span class="en">· Quote Engine</span></div>
+            <div class="status-pill healthy">
+              <span class="dot"></span>
+              运行正常<span class="en">· Healthy</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta-cell">
+                <div class="lbl">本周报价 · WEEK</div>
+                <div class="v">86 <span class="delta">↑ 24%</span></div>
+              </div>
+              <div class="meta-cell">
+                <div class="lbl">上次使用 · LAST</div>
+                <div class="v muted">28 分钟前</div>
+              </div>
+            </div>
+            <div class="card-foot">
+              <span style="font-size:11px;color:var(--txt-faint);font-family:'Sora',sans-serif;letter-spacing:0.04em;">v1.8</span>
+              <span class="card-cta">
+                进入<span class="en">Enter</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+              </span>
+            </div>
+          </a>
+
+          <a class="card" href="#" data-fake="ceo" onclick="event.preventDefault();">
+            <span class="demo-tag">Demo</span>
+            <div class="card-head">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
+              </div>
+              <button class="card-more" aria-label="更多" onclick="event.preventDefault();event.stopPropagation();">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </div>
+            <div class="card-title">银湖石墨 – CEO 驾驶舱</div>
+            <div class="card-role">经营简报与预警<span class="en">· Executive Briefing</span></div>
+            <div class="status-pill maintenance">
+              <span class="dot"></span>
+              维护中<span class="en">· Maintenance</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta-cell">
+                <div class="lbl">本月简报 · MONTH</div>
+                <div class="v">12 <span style="font-size:11px;font-weight:600;color:var(--txt-mute);">/ 20</span></div>
+              </div>
+              <div class="meta-cell">
+                <div class="lbl">预计恢复 · ETA</div>
+                <div class="v muted">17:30 完成</div>
+              </div>
+            </div>
+            <div class="card-foot">
+              <span style="font-size:11px;color:var(--txt-faint);font-family:'Sora',sans-serif;letter-spacing:0.04em;">数据源切换升级</span>
+              <span class="card-cta">
+                进入<span class="en">Enter</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+              </span>
+            </div>
+          </a>
+
+          <a class="card issues" href="#" data-fake="furnace" onclick="event.preventDefault();">
+            <span class="demo-tag">Demo</span>
+            <div class="card-head">
+              <div class="card-icon" style="background: var(--danger-bg); color: var(--danger);">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 8C14.5 8 14 6 12 6s-2.5 2-2.5 2"/><path d="M12 13c-2 0-3 1-3 1l1.5 6h3l1.5-6s-1-1-3-1z"/><path d="M5 8a7 7 0 0 1 14 0"/></svg>
+              </div>
+              <button class="card-more" aria-label="更多" onclick="event.preventDefault();event.stopPropagation();">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </div>
+            <div class="card-title">石墨化炉监控</div>
+            <div class="card-role">设备异常检测<span class="en">· Equipment Monitor</span></div>
+            <div class="status-pill issues">
+              <span class="dot"></span>
+              异常 · 2 号炉停机<span class="en">· Issues</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta-cell">
+                <div class="lbl">异常告警 · ALERTS</div>
+                <div class="v" style="color:var(--danger);">3 <span class="delta down">↑ 200%</span></div>
+              </div>
+              <div class="meta-cell">
+                <div class="lbl">告警时间 · TIME</div>
+                <div class="v muted">14 分钟前</div>
+              </div>
+            </div>
+            <div class="card-foot">
+              <span style="font-size:11px;color:var(--danger);font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">需立即处理</span>
+              <span class="card-cta">
+                查看<span class="en">View</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+              </span>
+            </div>
+          </a>
+
+          <a class="card" href="#" data-fake="contract" onclick="event.preventDefault();">
+            <span class="demo-tag">Demo</span>
+            <div class="card-head">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              <button class="card-more" aria-label="更多" onclick="event.preventDefault();event.stopPropagation();">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </div>
+            <div class="card-title">合同审阅助手</div>
+            <div class="card-role">条款比对与风险点<span class="en">· Contract Review</span></div>
+            <div class="status-pill starting">
+              <span class="dot"></span>
+              启动中<span class="en">· Starting up</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta-cell">
+                <div class="lbl">本月审阅 · MONTH</div>
+                <div class="v">— —</div>
+              </div>
+              <div class="meta-cell">
+                <div class="lbl">预计就绪 · READY IN</div>
+                <div class="v muted">约 90 秒</div>
+              </div>
+            </div>
+            <div class="card-foot">
+              <span style="font-size:11px;color:var(--brand);font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">正在加载知识库...</span>
+              <span class="card-cta">
+                进入<span class="en">Enter</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+              </span>
+            </div>
+          </a>
+
+          <a class="card offline" href="#" data-fake="weekly" aria-disabled="true" onclick="event.preventDefault();">
+            <span class="demo-tag">Demo</span>
+            <div class="card-head">
+              <div class="card-icon" style="background: var(--neutral-bg); color: var(--neutral);">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <button class="card-more" aria-label="更多" onclick="event.preventDefault();event.stopPropagation();">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </div>
+            <div class="card-title">销售周报推送</div>
+            <div class="card-role">企业微信群推送<span class="en">· Weekly Briefing</span></div>
+            <div class="status-pill offline">
+              <span class="dot"></span>
+              已停用<span class="en">· Offline</span>
+            </div>
+            <div class="meta-grid">
+              <div class="meta-cell">
+                <div class="lbl">最近运行 · LAST RUN</div>
+                <div class="v muted">3 天前</div>
+              </div>
+              <div class="meta-cell">
+                <div class="lbl">停用原因 · REASON</div>
+                <div class="v muted" style="font-size:12px;">主动暂停</div>
+              </div>
+            </div>
+            <div class="card-foot">
+              <span style="font-size:11px;color:var(--txt-faint);font-family:'Sora',sans-serif;letter-spacing:0.04em;">联系 CS 重启</span>
+              <span class="card-cta" style="color:var(--txt-faint);">
+                已停用
+              </span>
+            </div>
+          </a>
+
+        </div>
+      </section>
+
+      <section class="activity">
+        <div class="section-h">
+          <h3>最近活动 <span class="en">Recent Activity</span></h3>
+          <div class="tools">
+            <button class="chip-btn">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+              筛选
+            </button>
+          </div>
+        </div>
+
+        <div class="activity-card">
+          <table class="activity-table" aria-label="最近活动记录">
+            <thead>
+              <tr>
+                <th>智能体 · Agent</th>
+                <th>动作 · Action</th>
+                <th>由谁 · By</th>
+                <th>时间 · Time</th>
+                <th>结果 · Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="activity-agent">
+                    <span class="av"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" ry="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></span>
+                    超级小陈
+                  </div>
+                </td>
+                <td class="activity-action">完成 4 月销售台账分析</td>
+                <td class="activity-by">许总</td>
+                <td class="activity-ts">5 分钟前</td>
+                <td><span class="activity-result ok">✓ 成功</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="activity-agent">
+                    <span class="av"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                    报价引擎
+                  </div>
+                </td>
+                <td class="activity-action">生成 CUST-007 报价单 v3</td>
+                <td class="activity-by">王经理</td>
+                <td class="activity-ts">28 分钟前</td>
+                <td><span class="activity-result ok">✓ 成功</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="activity-agent">
+                    <span class="av" style="background: var(--danger-bg); color: var(--danger);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                    石墨化炉监控
+                  </div>
+                </td>
+                <td class="activity-action">检测到 2 号炉异常停机</td>
+                <td class="activity-by">系统自动</td>
+                <td class="activity-ts">14 分钟前</td>
+                <td><span class="activity-result fail">! 告警</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="activity-agent">
+                    <span class="av"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+                    CEO 驾驶舱
+                  </div>
+                </td>
+                <td class="activity-action">生成本周经营简报</td>
+                <td class="activity-by">系统自动</td>
+                <td class="activity-ts">1 小时前</td>
+                <td><span class="activity-result running"><span class="spin"></span>处理中</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="activity-agent">
+                    <span class="av"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" ry="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></span>
+                    超级小陈
+                  </div>
+                </td>
+                <td class="activity-action">导出销售台账 4 月</td>
+                <td class="activity-by">许总</td>
+                <td class="activity-ts">今天 09:15</td>
+                <td><span class="activity-result ok">✓ 成功</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="activity-agent">
+                    <span class="av"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                    报价引擎
+                  </div>
+                </td>
+                <td class="activity-action">批量更新成本系数 v4.2</td>
+                <td class="activity-by">系统自动</td>
+                <td class="activity-ts">昨天 17:42</td>
+                <td><span class="activity-result warn">⚠ 部分</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="activity-foot">
+            <a href="#">查看全部活动 · View all activity →</a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="foot">
+      <div class="copy">© 2026 Five Oranges AI · 运帷 AI. All rights reserved.</div>
+      <ul>
+        <li><a class="status-link" href="#">系统状态<span class="en">STATUS</span></a></li>
+        <li><a href="#">隐私<span class="en">PRIVACY</span></a></li>
+        <li><a href="#">条款<span class="en">TERMS</span></a></li>
+        <li><a href="mailto:contact@fiveoranges.ai">联系<span class="en">CONTACT</span></a></li>
+      </ul>
+    </footer>
+  </div>
+
+  <script>
+    /* SVG icon for the dynamically-rendered real-agent card. */
+    const ICON_AGENT = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" ry="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>';
+    const ICON_ARROW = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>';
+    const ICON_DOTS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
+
+    function escHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
+      }[c]));
+    }
+
+    function buildRealCard(a) {
+      const name = escHtml(a.display_name || a.agent || 'Agent');
+      const desc = escHtml(a.description || `${a.client} · ${a.agent}`);
+      const url  = escHtml(a.url);
+      const isHealthy = (a.health || '').toLowerCase() === 'healthy';
+      const pillClass = isHealthy ? 'healthy' : 'issues';
+      const pillLabel = isHealthy ? '运行正常' : '需关注';
+      const pillEn    = isHealthy ? 'Healthy' : 'Attention';
+      return `
+        <a class="card" href="${url}" data-real="${escHtml(a.client)}/${escHtml(a.agent)}">
+          <div class="card-head">
+            <div class="card-icon">${ICON_AGENT}</div>
+            <button class="card-more" aria-label="更多" onclick="event.preventDefault();event.stopPropagation();">${ICON_DOTS}</button>
+          </div>
+          <div class="card-title" title="${name}">${name}</div>
+          <div class="card-role">${desc}</div>
+          <div class="status-pill ${pillClass}">
+            <span class="dot"></span>
+            ${pillLabel}<span class="en">· ${pillEn}</span>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-cell">
+              <div class="lbl">租户 · TENANT</div>
+              <div class="v muted" style="font-size:13px;">${escHtml(a.client)}</div>
+            </div>
+            <div class="meta-cell">
+              <div class="lbl">代号 · ID</div>
+              <div class="v muted" style="font-size:13px;">${escHtml(a.agent)}</div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span style="font-size:11px;color:var(--brand);font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">已开通</span>
+            <span class="card-cta">
+              进入<span class="en">Enter</span>
+              ${ICON_ARROW}
+            </span>
+          </div>
+        </a>
+      `;
+    }
+
+    function getInitial(name) {
+      if (!name) return '·';
+      return Array.from(name)[0];
+    }
+
+    function setGreeting(displayName) {
+      const h = new Date().getHours();
+      const name = displayName || '';
+      let g;
+      if (h >= 6 && h < 11)        g = `早上好，${name} ☀️`;
+      else if (h >= 11 && h < 14)  g = `午安，${name}`;
+      else if (h >= 14 && h < 18)  g = `下午好，${name}`;
+      else if (h >= 18 && h < 23)  g = `晚上好，${name} 🌙`;
+      else                         g = `还在工作，${name}？早点休息`;
+      const el = document.getElementById('greeting');
+      el.textContent = g;
+      if (h >= 6 && h < 18) {
+        el.insertAdjacentHTML('beforeend', ' <span class="wave">👋</span>');
+      }
+    }
+
+    async function bootstrap() {
+      let me = null;
+      try {
+        const r = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
+        if (r.status === 401) { location.href = '/'; return; }
+        if (r.ok) me = await r.json();
+      } catch (_) { /* fall through to defaults */ }
+
+      const displayName = (me && (me.display_name || me.username)) || '用户';
+      const username    = (me && me.username) || '';
+      document.getElementById('user-name').textContent = displayName;
+      document.getElementById('user-avatar').textContent = getInitial(displayName);
+      document.getElementById('menu-name').textContent = displayName;
+      document.getElementById('menu-avatar').textContent = getInitial(displayName);
+      document.getElementById('menu-email').textContent = username || '—';
+      setGreeting(displayName);
+
+      let agents = [];
+      try {
+        const r = await fetch('/api/agents', { credentials: 'same-origin', cache: 'no-store' });
+        if (r.status === 401) { location.href = '/'; return; }
+        if (r.ok) {
+          const data = await r.json();
+          agents = data.agents || [];
+        }
+      } catch (_) { /* render fakes only */ }
+
+      const realCount = agents.length;
+      const sumZh = document.getElementById('agents-summary');
+      const sumEn = document.getElementById('agents-summary-en');
+      if (realCount > 0) {
+        sumZh.textContent = `你有 ${realCount} 个智能体已开通`;
+        sumEn.textContent = `${realCount} agent${realCount === 1 ? '' : 's'} ready`;
+        const firstClient = agents[0].client;
+        if (agents.every(a => a.client === firstClient)) {
+          document.getElementById('org-name').textContent = firstClient;
+        }
+      } else {
+        sumZh.textContent = '暂无已开通的智能体';
+        sumEn.textContent = 'No agents provisioned yet';
+      }
+
+      const grid = document.getElementById('agent-grid');
+      if (agents.length) {
+        grid.insertAdjacentHTML('afterbegin', agents.map(buildRealCard).join(''));
+      }
+
+      const cards = document.querySelectorAll('.card');
+      cards.forEach((c, i) => setTimeout(() => c.classList.add('in'), 120 + i * 80));
+    }
+
+    /* ===== Dropdowns ===== */
+    const userBtn   = document.getElementById('btn-user');
+    const userMenu  = document.getElementById('user-menu');
+    const notifBtn  = document.getElementById('btn-notif');
+    const notifPnl  = document.getElementById('notif-panel');
+
+    function closeAll() {
+      userMenu.classList.remove('open');
+      notifPnl.classList.remove('open');
+      userBtn.setAttribute('aria-expanded', 'false');
+      notifBtn.setAttribute('aria-expanded', 'false');
+    }
+    userBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = userMenu.classList.contains('open');
+      closeAll();
+      if (!open) {
+        userMenu.classList.add('open');
+        userBtn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    notifBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = notifPnl.classList.contains('open');
+      closeAll();
+      if (!open) {
+        notifPnl.classList.add('open');
+        notifBtn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!userMenu.contains(e.target) && !userBtn.contains(e.target)
+          && !notifPnl.contains(e.target) && !notifBtn.contains(e.target)) {
+        closeAll();
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAll();
+    });
+
+    /* ===== Sign out ===== */
+    document.getElementById('btn-signout').addEventListener('click', async () => {
+      try {
+        await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      } catch (_) {}
+      location.href = '/';
+    });
+
+    /* ===== View toggle (visual) ===== */
+    document.querySelectorAll('.view-toggle button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.view-toggle button').forEach(x => {
+          x.classList.remove('on');
+          x.setAttribute('aria-selected', 'false');
+        });
+        b.classList.add('on');
+        b.setAttribute('aria-selected', 'true');
+      });
+    });
+
+    bootstrap();
+  </script>
 </body>
 </html>
