@@ -33,9 +33,24 @@ async def reverse_proxy(
 
     body = await request.body()
 
+    # Internal Docker tenants (http://agent-foo:8000) don't care about the
+    # forwarded Host header for routing, so we forward the public host so
+    # the agent's HMAC verify sees the host the user's browser sent.
+    #
+    # External HTTPS tenants (e.g. https://gendan.fiveoranges.ai) sit behind
+    # a CDN/Vercel/Cloudflare that routes by Host header — forwarding the
+    # platform's public Host (app.fiveoranges.ai) makes the upstream router
+    # 404 because it's looking for a project bound to that Host.
+    # For those we forward the upstream URL's host and sign the HMAC with
+    # the same value so the agent verifies cleanly.
+    public_host = request.headers.get("host", "")
+    upstream_host = httpx.URL(upstream_url).host
+    is_external_https = tenant["container_url"].startswith("https://")
+    sign_host = upstream_host if is_external_https else public_host
+
     auth_headers = hmac_sign.sign(
         secret=tenant["hmac_secret_current"], key_id=tenant["hmac_key_id_current"],
-        method=request.method, host=request.headers.get("host", ""),
+        method=request.method, host=sign_host,
         path=upstream_path,
         client=client_id, agent=agent_id,
         user_id=user["id"], user_role="user", user_name=user.get("display_name", ""),
@@ -46,12 +61,10 @@ async def reverse_proxy(
         v = request.headers.get(h)
         if v:
             forward_headers[h] = v
-    # Forward the public-facing Host so the agent's verify() sees the same
-    # host the platform put in the HMAC payload. httpx would otherwise set
-    # Host to the upstream URL's host (the docker service name).
-    public_host = request.headers.get("host", "")
-    if public_host:
+    if not is_external_https and public_host:
         forward_headers["host"] = public_host
+    # else: leave Host unset; httpx defaults to upstream URL host, which is
+    # what we signed and what external CDNs need for routing.
     nonce = make_csp_nonce()
     forward_headers["X-CSP-Nonce"] = nonce
 
