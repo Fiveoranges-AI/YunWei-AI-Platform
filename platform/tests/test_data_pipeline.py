@@ -39,21 +39,28 @@ def client():
 @pytest.fixture
 def user_with_acl(tmp_data_root):
     db.init()
+    now = int(time.time())
     db.main().execute(
         "INSERT INTO users (id, username, password_hash, display_name, created_at) "
         "VALUES (%s,%s,%s,%s,%s)",
-        ("u_eason", "eason", auth.hash_password("p"), "Eason", int(time.time())),
+        ("u_eason", "eason", auth.hash_password("p"), "Eason", now),
+    )
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, "
+        "onboarding_stage, created_at) "
+        "VALUES (%s,%s,%s,'trial','active',%s)",
+        ("yinhu", "Yinhu", "Yinhu", now),
     )
     db.main().execute(
         "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
         "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-        ("yinhu", "x", "Yinhu", "http://x", "s", "k", "u_x", int(time.time())),
+        ("yinhu", "x", "Yinhu", "http://x", "s", "k", "u_x", now),
     )
     db.main().execute(
-        "INSERT INTO user_tenant (user_id, client_id, agent_id, role, granted_at) "
-        "VALUES (%s,%s,%s,%s,%s)",
-        ("u_eason", "yinhu", "x", "user", int(time.time())),
+        "INSERT INTO enterprise_members (user_id, enterprise_id, role, granted_at) "
+        "VALUES (%s,%s,%s,%s)",
+        ("u_eason", "yinhu", "member", now),
     )
     sid, _ = auth.create_session("u_eason", "127.0.0.1", "test")
     return sid

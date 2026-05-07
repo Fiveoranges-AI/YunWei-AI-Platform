@@ -1,7 +1,8 @@
 """Read-only API for the 数据中心 console (docs/data-layer.md M2 §3.2).
 
-All endpoints require an authenticated session and validate that the user
-has at least one user_tenant row for the requested ``client_id``.
+All endpoints require an authenticated session and validate that the
+``client`` query param is an enterprise the user has access to (either
+via ``enterprise_members`` or, exceptionally, via ``agent_grants``).
 
 Endpoints:
 - GET /api/data/clients
@@ -33,9 +34,13 @@ _SEARCHABLE_TYPES = {"string", "enum"}
 # ─── helpers ────────────────────────────────────────────────────
 
 def _user_clients(user_id: str) -> list[str]:
+    """All enterprise IDs the user can see — by membership or by an
+    explicit agent_grant on any agent under that client."""
     rows = db.main().execute(
-        "SELECT DISTINCT client_id FROM user_tenant WHERE user_id=%s",
-        (user_id,),
+        "SELECT enterprise_id AS client_id FROM enterprise_members WHERE user_id=%s "
+        "UNION "
+        "SELECT DISTINCT client_id FROM agent_grants WHERE user_id=%s",
+        (user_id, user_id),
     ).fetchall()
     return [r["client_id"] for r in rows]
 

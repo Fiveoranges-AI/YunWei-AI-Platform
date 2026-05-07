@@ -35,25 +35,33 @@ def client():
 
 @pytest.fixture
 def user_with_acl(tmp_data_root):
-    """Create a user, seed user_tenant ACL on (yinhu, super-xiaochen),
-    return (user_id, session_id)."""
+    """Create a user, an enterprise, a tenant, and an enterprise_members
+    row that gives the user blanket access to (yinhu, super-xiaochen).
+    Returns (user_id, session_id)."""
     db.init()
     user_id = "u_eason"
+    now = int(time.time())
     db.main().execute(
         "INSERT INTO users (id, username, password_hash, display_name, created_at) "
         "VALUES (%s,%s,%s,%s,%s)",
-        (user_id, "eason", auth.hash_password("p"), "Eason", int(time.time())),
+        (user_id, "eason", auth.hash_password("p"), "Eason", now),
+    )
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, "
+        "onboarding_stage, created_at) "
+        "VALUES (%s,%s,%s,'trial','active',%s)",
+        ("yinhu", "银湖", "银湖", now),
     )
     db.main().execute(
         "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
         "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-        ("yinhu", "super-xiaochen", "银湖", "http://x", "s", "k", "uid_yinhu_x", int(time.time())),
+        ("yinhu", "super-xiaochen", "银湖", "http://x", "s", "k", "uid_yinhu_x", now),
     )
     db.main().execute(
-        "INSERT INTO user_tenant (user_id, client_id, agent_id, role, granted_at) "
-        "VALUES (%s,%s,%s,%s,%s)",
-        (user_id, "yinhu", "super-xiaochen", "user", int(time.time())),
+        "INSERT INTO enterprise_members (user_id, enterprise_id, role, granted_at) "
+        "VALUES (%s,%s,%s,%s)",
+        (user_id, "yinhu", "member", now),
     )
     sid, _csrf = auth.create_session(user_id, "127.0.0.1", "test")
     return user_id, sid

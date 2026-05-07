@@ -30,6 +30,14 @@ def cmd_add_tenant(args):
     secret = secrets.token_urlsafe(32)
     key_id = f"k-{int(time.time())}"
     uid = str(uuid.uuid4())
+    # Auto-provision the enterprise if this is the first agent for the client.
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, "
+        "onboarding_stage, created_at) "
+        "VALUES (%s, %s, %s, 'trial', 'signed_up', %s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (args.client, args.client, args.display_name, _now()),
+    )
     db.main().execute(
         "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
         "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
@@ -53,28 +61,66 @@ def cmd_add_tenant(args):
 
 
 def cmd_grant(args):
+    """Default: grant *enterprise membership* (blanket access to all
+    agents). Use ``--agent-only`` for the consultant exception path —
+    writes to agent_grants instead.
+    """
     db.init()
     user_id = f"u_{args.username}"
+    if args.agent_only:
+        if not args.agent:
+            sys.exit("--agent-only requires the agent argument")
+        db.main().execute(
+            "INSERT INTO agent_grants (user_id, client_id, agent_id, role, granted_at, granted_by) "
+            "VALUES (%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT (user_id, client_id, agent_id) DO UPDATE "
+            "SET role=EXCLUDED.role, granted_at=EXCLUDED.granted_at, granted_by=EXCLUDED.granted_by",
+            (user_id, args.client, args.agent, args.role, _now(), "cli"),
+        )
+        db.invalidate_acl(user_id, args.client, args.agent)
+        print(f"granted (agent-only) {args.username} -> {args.client}/{args.agent} ({args.role})")
+        return
+    role = args.role if args.role in ("owner", "admin", "member") else "member"
     db.main().execute(
-        "INSERT INTO user_tenant (user_id, client_id, agent_id, role, granted_at, granted_by) "
-        "VALUES (%s,%s,%s,%s,%s,%s) "
-        "ON CONFLICT (user_id, client_id, agent_id) DO UPDATE "
+        "INSERT INTO enterprise_members (user_id, enterprise_id, role, granted_at, granted_by) "
+        "VALUES (%s,%s,%s,%s,%s) "
+        "ON CONFLICT (user_id, enterprise_id) DO UPDATE "
         "SET role=EXCLUDED.role, granted_at=EXCLUDED.granted_at, granted_by=EXCLUDED.granted_by",
-        (user_id, args.client, args.agent, args.role, _now(), "cli"),
+        (user_id, args.client, role, _now(), "cli"),
     )
-    db.invalidate_acl(user_id, args.client, args.agent)
-    print(f"granted {args.username} -> {args.client}/{args.agent} ({args.role})")
+    # Invalidate ACL cache for any agent the user might have queried.
+    # We don't know which agents, so invalidate for all known agents under
+    # this client — cheap, since this is a CLI command, not a hot path.
+    for r in db.main().execute(
+        "SELECT agent_id FROM tenants WHERE client_id=%s", (args.client,)
+    ).fetchall():
+        db.invalidate_acl(user_id, args.client, r["agent_id"])
+    print(f"granted {args.username} as {role} of enterprise {args.client}")
 
 
 def cmd_revoke(args):
     db.init()
     user_id = f"u_{args.username}"
+    if args.agent_only:
+        if not args.agent:
+            sys.exit("--agent-only requires the agent argument")
+        db.main().execute(
+            "DELETE FROM agent_grants "
+            "WHERE user_id=%s AND client_id=%s AND agent_id=%s",
+            (user_id, args.client, args.agent),
+        )
+        db.invalidate_acl(user_id, args.client, args.agent)
+        print(f"revoked agent_grant {args.username} on {args.client}/{args.agent}")
+        return
     db.main().execute(
-        "DELETE FROM user_tenant WHERE user_id=%s AND client_id=%s AND agent_id=%s",
-        (user_id, args.client, args.agent),
+        "DELETE FROM enterprise_members WHERE user_id=%s AND enterprise_id=%s",
+        (user_id, args.client),
     )
-    db.invalidate_acl(user_id, args.client, args.agent)
-    print("revoked")
+    for r in db.main().execute(
+        "SELECT agent_id FROM tenants WHERE client_id=%s", (args.client,)
+    ).fetchall():
+        db.invalidate_acl(user_id, args.client, r["agent_id"])
+    print(f"revoked membership of {args.username} from enterprise {args.client}")
 
 
 def cmd_rotate_key(args):
@@ -128,13 +174,23 @@ def main():
     s.add_argument("--container-url", required=True)
     s.set_defaults(func=cmd_add_tenant)
 
-    s = sp.add_parser("grant")
-    s.add_argument("username"); s.add_argument("client"); s.add_argument("agent")
-    s.add_argument("--role", default="user")
+    s = sp.add_parser("grant",
+        help="Grant enterprise membership (default) or per-agent grant.")
+    s.add_argument("username")
+    s.add_argument("client", help="enterprise_id")
+    s.add_argument("agent", nargs="?", help="required only with --agent-only")
+    s.add_argument("--role", default="member",
+        help="member | admin | owner (enterprise) | user (--agent-only)")
+    s.add_argument("--agent-only", action="store_true",
+        help="Write to agent_grants instead of enterprise_members.")
     s.set_defaults(func=cmd_grant)
 
-    s = sp.add_parser("revoke")
-    s.add_argument("username"); s.add_argument("client"); s.add_argument("agent")
+    s = sp.add_parser("revoke",
+        help="Revoke enterprise membership (default) or per-agent grant.")
+    s.add_argument("username")
+    s.add_argument("client")
+    s.add_argument("agent", nargs="?")
+    s.add_argument("--agent-only", action="store_true")
     s.set_defaults(func=cmd_revoke)
 
     s = sp.add_parser("rotate-tenant-key")

@@ -25,11 +25,18 @@ def me(request: Request):
 @router.get("/api/agents")
 def agents(request: Request):
     user = _user_from_request(request)
+    # Visible agents = enterprise membership ∪ per-agent grants.
     rows = db.main().execute(
-        "SELECT t.client_id, t.agent_id, t.display_name, t.icon_url, t.description, t.health "
-        "FROM tenants t JOIN user_tenant ut ON t.client_id=ut.client_id AND t.agent_id=ut.agent_id "
-        "WHERE ut.user_id=%s AND t.active=1",
-        (user["id"],),
+        "SELECT t.client_id, t.agent_id, t.display_name, t.icon_url, "
+        "       t.description, t.health "
+        "FROM tenants t "
+        "WHERE t.active=1 AND ("
+        "  t.client_id IN (SELECT enterprise_id FROM enterprise_members WHERE user_id=%s) "
+        "  OR (t.client_id, t.agent_id) IN ("
+        "       SELECT client_id, agent_id FROM agent_grants WHERE user_id=%s)"
+        ") "
+        "ORDER BY t.display_name",
+        (user["id"], user["id"]),
     ).fetchall()
     return {"agents": [
         {"client": r["client_id"], "agent": r["agent_id"],

@@ -9,7 +9,8 @@ def test_init_creates_tables():
     ).fetchall()
     names = {r["table_name"] for r in rows}
     assert {"users", "tenants", "user_tenant", "platform_sessions",
-            "api_keys", "proxy_log"} <= names
+            "api_keys", "proxy_log",
+            "enterprises", "enterprise_members", "agent_grants"} <= names
 
 
 def test_proxy_log_writable():
