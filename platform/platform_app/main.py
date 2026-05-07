@@ -53,6 +53,23 @@ def data_console(request: Request):
     return FileResponse(_STATIC / "data.html", headers=_NO_STORE)
 
 
+@app.api_route("/admin", methods=["GET", "HEAD"])
+def admin_dashboard(request: Request):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return FileResponse(_STATIC / "admin.html", headers=_NO_STORE)
+
+
+# Must be declared *before* the customer-agent catch-all below — otherwise
+# /enterprise/<id> would match the {client}/{agent} pattern and get
+# reverse-proxied as if it were a tenant request.
+@app.api_route("/enterprise/{enterprise_id}", methods=["GET", "HEAD"])
+def enterprise_page(enterprise_id: str, request: Request):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return FileResponse(_STATIC / "enterprise.html", headers=_NO_STORE)
+
+
 @app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def catch_all(full_path: str, request: Request):
     m = PATH_RE.match("/" + full_path)

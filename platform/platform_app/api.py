@@ -19,7 +19,13 @@ def _user_from_request(request: Request) -> dict:
 @router.get("/api/me")
 def me(request: Request):
     user = _user_from_request(request)
-    return {"id": user["id"], "username": user["username"], "display_name": user["display_name"]}
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "display_name": user["display_name"],
+        "is_platform_admin": db.is_platform_admin(user["id"]),
+        "enterprises": db.list_user_enterprises(user["id"]),
+    }
 
 
 @router.get("/api/agents")

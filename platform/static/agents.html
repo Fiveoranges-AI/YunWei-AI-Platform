@@ -3,39 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>fiveoranges.ai · Agent 列表</title>
+<title>fiveoranges.ai · 我的工作台</title>
 <style>
-body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 24px; }
-h1 { font-size: 20px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
-.card { padding: 20px; background: white; border: 1px solid #eee; border-radius: 8px; cursor: pointer; transition: box-shadow 0.15s; }
-.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-.card h3 { margin: 0 0 8px 0; font-size: 16px; }
-.card .desc { color: #666; font-size: 13px; }
-.health-healthy { color: #1a8c1a; }
-.health-unhealthy { color: #c00; }
-.logout { float: right; color: #999; cursor: pointer; }
+  body { font-family: -apple-system, sans-serif; max-width: 920px; margin: 40px auto; padding: 24px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; flex: 1; }
+  .nav-link {
+    color: #1f6feb; font-size: 13px; text-decoration: none; padding: 6px 12px;
+    border: 1px solid #dbeafe; border-radius: 4px; background: #eff6ff;
+  }
+  .nav-link:hover { background: #dbeafe; }
+  .logout { color: #999; cursor: pointer; font-size: 13px; }
+  h2 { font-size: 13px; font-weight: 500; color: #6b7280; text-transform: uppercase;
+       letter-spacing: 0.5px; margin: 32px 0 12px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .card { padding: 18px; background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+          cursor: pointer; transition: box-shadow 0.15s; text-decoration: none; color: #111; }
+  .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .card h3 { margin: 0 0 6px 0; font-size: 15px; }
+  .card .desc { color: #6b7280; font-size: 12px; min-height: 18px; }
+  .health-healthy { color: #1a8c1a; font-size: 12px; margin-top: 6px; }
+  .health-unhealthy { color: #c00; font-size: 12px; margin-top: 6px; }
+  .health-unknown { color: #9ca3af; font-size: 12px; margin-top: 6px; }
+  .pill { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 3px;
+          font-weight: 500; vertical-align: 1px; margin-left: 6px; }
+  .pill.role-owner { background: #ede9fe; color: #6d28d9; }
+  .pill.role-admin { background: #dbeafe; color: #1e40af; }
+  .pill.role-member { background: #f3f4f6; color: #374151; }
+  .empty { color: #9ca3af; font-size: 13px; }
 </style>
 </head>
 <body>
-<h1>我的 Agents <span class="logout" onclick="logout()">退出</span></h1>
-<div id="list" class="grid"></div>
+
+<header>
+  <h1>我的工作台</h1>
+  <a class="nav-link" href="/data">📊 数据中心</a>
+  <a id="admin-link" class="nav-link" href="/admin" style="display:none">⚙️ 平台管理</a>
+  <span class="logout" onclick="logout()">退出</span>
+</header>
+
+<h2>所属企业</h2>
+<div id="enterprises" class="grid"></div>
+
+<h2>Agents</h2>
+<div id="agents" class="grid"></div>
+
 <script>
 async function logout() {
   await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
   location.href = '/';
 }
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, ch =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 async function load() {
+  const me = await fetch('/api/me', { credentials: 'same-origin' });
+  if (me.status === 401) { location.href = '/'; return; }
+  const meData = await me.json();
+  if (meData.is_platform_admin) {
+    document.getElementById('admin-link').style.display = '';
+  }
+
+  // Enterprises
+  const eDiv = document.getElementById('enterprises');
+  if (!meData.enterprises.length) {
+    eDiv.innerHTML = '<div class="empty">您不属于任何企业 — 联系管理员被加入。</div>';
+  } else {
+    eDiv.innerHTML = meData.enterprises.map(e => `
+      <a class="card" href="/enterprise/${encodeURIComponent(e.id)}">
+        <h3>${escapeHtml(e.display_name)} <span class="pill role-${escapeHtml(e.role)}">${escapeHtml(e.role)}</span></h3>
+        <div class="desc">${escapeHtml(e.legal_name)}</div>
+      </a>
+    `).join('');
+  }
+
+  // Agents
   const r = await fetch('/api/agents', { credentials: 'same-origin' });
-  if (r.status === 401) { location.href = '/'; return; }
   const data = await r.json();
-  document.getElementById('list').innerHTML = data.agents.map(a => `
-    <div class="card" onclick="location.href='${a.url}'">
-      <h3>${a.display_name}</h3>
-      <div class="desc">${a.description || ''}</div>
-      <div class="health-${a.health}">● ${a.health}</div>
-    </div>
-  `).join('');
+  const aDiv = document.getElementById('agents');
+  if (!data.agents.length) {
+    aDiv.innerHTML = '<div class="empty">您还没有可用的 agent。</div>';
+  } else {
+    aDiv.innerHTML = data.agents.map(a => `
+      <a class="card" href="${escapeHtml(a.url)}">
+        <h3>${escapeHtml(a.display_name)}</h3>
+        <div class="desc">${escapeHtml(a.description || '')}</div>
+        <div class="health-${escapeHtml(a.health || 'unknown')}">● ${escapeHtml(a.health || 'unknown')}</div>
+      </a>
+    `).join('');
+  }
 }
 load();
 </script>
