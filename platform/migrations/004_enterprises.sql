@@ -66,16 +66,21 @@ FROM tenants
 GROUP BY client_id
 ON CONFLICT (id) DO NOTHING;
 
--- Backfill enterprise_members from legacy user_tenant rows. user_tenant
--- had a role column (typically 'user'); map anything outside the new
--- vocabulary to 'member'.
-INSERT INTO enterprise_members (user_id, enterprise_id, role, granted_at, granted_by)
-SELECT DISTINCT ON (user_id, client_id)
-  user_id,
-  client_id,
-  CASE WHEN role IN ('owner','admin','member') THEN role ELSE 'member' END,
-  granted_at,
-  granted_by
-FROM user_tenant
-ORDER BY user_id, client_id, granted_at DESC
-ON CONFLICT (user_id, enterprise_id) DO NOTHING;
+-- Backfill enterprise_members from legacy user_tenant rows. Guarded so
+-- that re-runs are safe after migration 006 drops user_tenant.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema='public' AND table_name='user_tenant') THEN
+    INSERT INTO enterprise_members (user_id, enterprise_id, role, granted_at, granted_by)
+    SELECT DISTINCT ON (user_id, client_id)
+      user_id,
+      client_id,
+      CASE WHEN role IN ('owner','admin','member') THEN role ELSE 'member' END,
+      granted_at,
+      granted_by
+    FROM user_tenant
+    ORDER BY user_id, client_id, granted_at DESC
+    ON CONFLICT (user_id, enterprise_id) DO NOTHING;
+  END IF;
+END $$;

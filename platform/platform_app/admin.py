@@ -155,8 +155,63 @@ def cmd_clear_prev_key(args):
 
 def cmd_list_users(args):
     db.init()
-    for r in db.main().execute("SELECT id, username, display_name, last_login FROM users").fetchall():
-        print(f"{r['id']:20} {r['username']:15} {r['display_name']:20} last_login={r['last_login']}")
+    for r in db.main().execute(
+        "SELECT id, username, display_name, last_login, is_platform_admin FROM users"
+    ).fetchall():
+        flag = " [PLATFORM ADMIN]" if r["is_platform_admin"] else ""
+        print(f"{r['id']:20} {r['username']:15} {r['display_name']:20} "
+              f"last_login={r['last_login']}{flag}")
+
+
+def cmd_add_enterprise(args):
+    db.init()
+    eid = args.id.strip().lower()
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, industry, "
+        "region, plan, onboarding_stage, created_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (eid, args.legal_name or eid, args.display_name or eid,
+         args.industry, args.region, args.plan, "signed_up", _now()),
+    )
+    print(f"created enterprise id={eid}")
+
+
+def cmd_list_enterprises(args):
+    db.init()
+    rows = db.main().execute(
+        "SELECT e.id, e.display_name, e.plan, e.onboarding_stage, e.active, "
+        "(SELECT COUNT(*) FROM enterprise_members em WHERE em.enterprise_id=e.id) AS members, "
+        "(SELECT COUNT(*) FROM tenants t WHERE t.client_id=e.id AND t.active=1) AS agents "
+        "FROM enterprises e ORDER BY e.created_at DESC"
+    ).fetchall()
+    for r in rows:
+        active = "" if r["active"] else " [INACTIVE]"
+        print(f"{r['id']:20} {r['display_name']:20} plan={r['plan']:10} "
+              f"stage={r['onboarding_stage']:10} members={r['members']} "
+              f"agents={r['agents']}{active}")
+
+
+def cmd_promote_admin(args):
+    db.init()
+    res = db.main().execute(
+        "UPDATE users SET is_platform_admin=1 WHERE username=%s RETURNING id",
+        (args.username,),
+    ).fetchone()
+    if not res:
+        sys.exit(f"user not found: {args.username}")
+    print(f"promoted {args.username} → platform admin")
+
+
+def cmd_demote_admin(args):
+    db.init()
+    res = db.main().execute(
+        "UPDATE users SET is_platform_admin=0 WHERE username=%s RETURNING id",
+        (args.username,),
+    ).fetchone()
+    if not res:
+        sys.exit(f"user not found: {args.username}")
+    print(f"demoted {args.username}")
 
 
 def main():
@@ -203,6 +258,29 @@ def main():
 
     s = sp.add_parser("list-users")
     s.set_defaults(func=cmd_list_users)
+
+    s = sp.add_parser("add-enterprise",
+        help="Create an enterprise (auto-created on add-tenant for new client_ids).")
+    s.add_argument("id", help="enterprise_id (= legacy client_id)")
+    s.add_argument("--legal-name")
+    s.add_argument("--display-name")
+    s.add_argument("--industry")
+    s.add_argument("--region")
+    s.add_argument("--plan", default="trial",
+        choices=["trial", "standard", "enterprise"])
+    s.set_defaults(func=cmd_add_enterprise)
+
+    s = sp.add_parser("list-enterprises")
+    s.set_defaults(func=cmd_list_enterprises)
+
+    s = sp.add_parser("promote-admin",
+        help="Promote a user to platform admin (cross-enterprise access).")
+    s.add_argument("username")
+    s.set_defaults(func=cmd_promote_admin)
+
+    s = sp.add_parser("demote-admin")
+    s.add_argument("username")
+    s.set_defaults(func=cmd_demote_admin)
 
     args = p.parse_args()
     args.func(args)

@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import api, db, firewall, proxy
+from . import admin_api, api, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
 from .settings import settings
 
@@ -26,6 +26,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(api.router)
 app.include_router(data_api.router)
+app.include_router(admin_api.router)
+app.include_router(enterprise_api.router)
 
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")

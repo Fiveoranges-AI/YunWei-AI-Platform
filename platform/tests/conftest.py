@@ -25,7 +25,7 @@ def _clean_state():
     with _db.main()._get().cursor() as cur:
         cur.execute(
             "TRUNCATE api_keys, platform_sessions, agent_grants, "
-            "enterprise_members, user_tenant, tenants, enterprises, users, "
+            "enterprise_members, tenants, enterprises, users, "
             "proxy_log, bronze_files, silver_mappings RESTART IDENTITY CASCADE"
         )
     # Flush Redis test DB

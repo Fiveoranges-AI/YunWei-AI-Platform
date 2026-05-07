@@ -8,9 +8,11 @@ def test_init_creates_tables():
         "WHERE table_schema='public' AND table_type='BASE TABLE'"
     ).fetchall()
     names = {r["table_name"] for r in rows}
-    assert {"users", "tenants", "user_tenant", "platform_sessions",
+    assert {"users", "tenants", "platform_sessions",
             "api_keys", "proxy_log",
             "enterprises", "enterprise_members", "agent_grants"} <= names
+    # 006 dropped the legacy ACL table.
+    assert "user_tenant" not in names
 
 
 def test_proxy_log_writable():

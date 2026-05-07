@@ -179,6 +179,26 @@ def list_user_enterprises(user_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# ─── Platform admin (cross-enterprise) ──────────────────────────
+
+def is_platform_admin(user_id: str) -> bool:
+    row = main().execute(
+        "SELECT is_platform_admin FROM users WHERE id=%s", (user_id,),
+    ).fetchone()
+    return bool(row and row["is_platform_admin"])
+
+
+def invalidate_acl_for_enterprise(user_id: str, enterprise_id: str) -> None:
+    """Drop cached has_acl entries for every (client, agent) under the
+    enterprise — used after membership add/remove."""
+    rows = main().execute(
+        "SELECT agent_id FROM tenants WHERE client_id=%s",
+        (enterprise_id,),
+    ).fetchall()
+    for r in rows:
+        invalidate_acl(user_id, enterprise_id, r["agent_id"])
+
+
 # ─── proxy_log ──────────────────────────────────────────────────
 
 def write_proxy_log(
