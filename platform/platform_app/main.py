@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from . import api, db, firewall, proxy
+from .data_layer import api as data_api
 from .settings import settings
 
 PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(api.router)
+app.include_router(data_api.router)
 
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
@@ -40,6 +42,13 @@ def index(request: Request):
     # after login until the user manually refreshes (Cmd+Shift+R).
     page = "agents.html" if request.cookies.get("app_session") else "login.html"
     return FileResponse(_STATIC / page, headers=_NO_STORE)
+
+
+@app.api_route("/data", methods=["GET", "HEAD"])
+def data_console(request: Request):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return FileResponse(_STATIC / "data.html", headers=_NO_STORE)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
