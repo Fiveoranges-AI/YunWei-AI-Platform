@@ -143,7 +143,7 @@ def mock_anthropic(monkeypatch):
 
 @pytest.fixture
 def with_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-test-fake")
+    monkeypatch.setattr(settings, "assistant_api_key", "sk-test-fake")
     yield
 
 
@@ -406,7 +406,7 @@ def test_chat_endpoint_requires_acl(http_client, user_session):
 
 
 def test_chat_endpoint_503_when_no_api_key(http_client, user_session, monkeypatch):
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "assistant_api_key", "")
     r = http_client.post(
         "/api/data/assistant/chat",
         json={"client": "yinhu", "message": "hi"},
@@ -439,12 +439,12 @@ def test_chat_endpoint_succeeds_end_to_end(
 
 
 def test_assistant_status_reflects_config(http_client, user_session, monkeypatch):
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "assistant_api_key", "")
     r1 = http_client.get("/api/data/assistant/status",
                          cookies={"app_session": user_session})
     assert r1.json()["enabled"] is False
 
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-fake")
+    monkeypatch.setattr(settings, "assistant_api_key", "sk-fake")
     r2 = http_client.get("/api/data/assistant/status",
                          cookies={"app_session": user_session})
     assert r2.json()["enabled"] is True

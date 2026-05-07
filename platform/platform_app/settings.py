@@ -18,10 +18,26 @@ class Settings:
     data_root = os.environ.get("PLATFORM_DATA_ROOT", str(_REPO_ROOT / "data"))
     # Data center sidebar assistant (docs/data-layer.md §3.3). Optional —
     # absence disables the assistant chat but everything else still works.
-    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    assistant_model = os.environ.get(
-        "ASSISTANT_MODEL", "claude-opus-4-7"
+    #
+    # Uses the anthropic Python SDK against DeepSeek's Anthropic-
+    # compatible endpoint (https://api.deepseek.com/anthropic). DeepSeek
+    # supports Anthropic's tools, thinking, output_config.effort, and
+    # cache_control verbatim; budget_tokens / top_k / anthropic-beta /
+    # anthropic-version are ignored. See:
+    #   https://api-docs.deepseek.com/guides/anthropic_api
+    # Toggling back to Claude proper is one env-var flip:
+    #   ASSISTANT_BASE_URL=https://api.anthropic.com
+    #   ASSISTANT_MODEL=claude-opus-4-7
+    #   (key in ANTHROPIC_API_KEY)
+    assistant_api_key = (
+        os.environ.get("DEEPSEEK_API_KEY")
+        or os.environ.get("ANTHROPIC_API_KEY")
+        or ""
     )
+    assistant_base_url = os.environ.get(
+        "ASSISTANT_BASE_URL", "https://api.deepseek.com/anthropic"
+    )
+    assistant_model = os.environ.get("ASSISTANT_MODEL", "deepseek-v4-flash")
     assistant_effort = os.environ.get("ASSISTANT_EFFORT", "medium")
     assistant_max_tool_iterations = int(
         os.environ.get("ASSISTANT_MAX_TOOL_ITERATIONS", "8")

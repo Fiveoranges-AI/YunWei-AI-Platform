@@ -500,8 +500,9 @@ def assistant_status(request: Request) -> dict:
     _user_from_request(request)
     from ..settings import settings as s
     return {
-        "enabled": bool(s.anthropic_api_key),
-        "model": s.assistant_model if s.anthropic_api_key else None,
+        "enabled": bool(s.assistant_api_key),
+        "model": s.assistant_model if s.assistant_api_key else None,
+        "base_url": s.assistant_base_url if s.assistant_api_key else None,
     }
 
 

@@ -1,17 +1,23 @@
 """Data center sidebar assistant (docs/data-layer.md §3.3).
 
 A platform-side chat-style agent that wraps the data layer's read/write
-APIs as tools. Uses the official ``anthropic`` Python SDK — kernel runtime
-is not reused (open question §11.5 resolved in favor of platform-owned).
+APIs as tools. Uses the ``anthropic`` Python SDK — kernel runtime is not
+reused (open question §11.5 resolved in favor of platform-owned).
+
+Provider-agnostic by virtue of the SDK's ``base_url`` knob. Currently
+points at DeepSeek's Anthropic-compatible endpoint (model
+``deepseek-v4-flash``); the endpoint accepts the full Anthropic tool /
+thinking / output_config / cache_control vocabulary. Toggling back to
+Claude is a one-env-var flip — see settings.py.
 
 Design notes:
-- The system prompt + tool definitions are stable across requests, so we
+- System prompt + tool definitions are stable across requests, so we
   put a ``cache_control`` breakpoint on the last system block. Tenant-
-  specific state (current health, bronze listing) is injected as the
-  first user message so it lives *after* the cache breakpoint and
+  specific live state (silver health + bronze listing) is injected as
+  the first user message so it lives *after* the cache breakpoint and
   doesn't invalidate the cached prefix.
 - Tools call into the data_layer modules directly — the API layer above
-  has already validated session + ACL, so the assistant can trust its
+  has already validated session + ACL, so the assistant trusts its
   ``client_id`` arg.
 - Adaptive thinking is enabled (per Anthropic best practice for tool-
   using agents); thinking content is omitted from responses by default.
@@ -382,8 +388,8 @@ def _dispatch_tool(name: str, args: dict, *, client_id: str, user_id: str) -> An
 # ─── Chat orchestration ─────────────────────────────────────────
 
 class AssistantNotConfigured(RuntimeError):
-    """Raised when ANTHROPIC_API_KEY is missing — surfaced to UI as a
-    503 so the assistant chat can be hidden / disabled cleanly."""
+    """Raised when no assistant API key is configured — surfaced to UI
+    as a 503 so the chat can be hidden / disabled cleanly."""
 
 
 @dataclass
@@ -415,10 +421,15 @@ def chat(
     contains user/assistant/tool blocks in the Anthropic message format).
     ``user_text`` is the new turn the user just typed.
     """
-    if not settings.anthropic_api_key:
-        raise AssistantNotConfigured("ANTHROPIC_API_KEY not set")
+    if not settings.assistant_api_key:
+        raise AssistantNotConfigured(
+            "DEEPSEEK_API_KEY (or ANTHROPIC_API_KEY) not set"
+        )
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = anthropic.Anthropic(
+        api_key=settings.assistant_api_key,
+        base_url=settings.assistant_base_url,
+    )
 
     # First user turn — prepend tenant context so the assistant has live
     # state without polluting the cached system prompt.
