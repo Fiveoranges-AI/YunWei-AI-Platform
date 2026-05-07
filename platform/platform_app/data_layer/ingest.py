@@ -51,6 +51,133 @@ def _slug(s: str) -> str:
     return _SHEET_NAME_SAFE.sub("_", s)[:64] or "sheet"
 
 
+class PDFParseError(RuntimeError):
+    """Raised when a PDF can't be parsed into tables. The assistant
+    surfaces this back to the user with a "use Excel template" fallback
+    (docs/data-layer.md §4.3 best-effort contract)."""
+
+
+def ingest_pdf(
+    *,
+    client_id: str,
+    original_filename: str,
+    file_bytes: bytes,
+    uploaded_by: str | None,
+) -> IngestResult:
+    """Best-effort PDF → bronze. Born-digital tables only — uses
+    pdfplumber. Failure raises PDFParseError so the caller (or
+    assistant) can prompt the user to switch to an Excel upload.
+    """
+    import pdfplumber
+
+    paths.ensure_tenant_dirs(client_id)
+    checksum = compute_sha256(file_bytes)
+
+    existing = repo.find_by_checksum(client_id, checksum)
+    if existing:
+        same = [r for r in repo.list_bronze_files(client_id, "file_pdf")
+                if r["checksum_sha256"] == checksum]
+        return IngestResult(
+            duplicate=True, checksum=checksum, sheets=[],
+            existing_file_ids=[r["id"] for r in same],
+        )
+
+    upload_id = uuid.uuid4().hex
+    upload_path = paths.uploads_dir(client_id) / f"{upload_id}.pdf"
+    upload_path.write_bytes(file_bytes)
+
+    bronze_root = paths.bronze_dir(client_id, "file_pdf")
+    today = date.today().isoformat()
+    day_dir = bronze_root / today
+    day_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[Path] = []
+    sheets: list[IngestedSheet] = []
+    file_stem = _slug(Path(original_filename).stem)
+    try:
+        with pdfplumber.open(upload_path) as pdf:
+            tables: list[list[list[str]]] = []
+            for page in pdf.pages:
+                page_tables = page.extract_tables() or []
+                tables.extend(page_tables)
+        if not tables:
+            raise PDFParseError(
+                "未识别出表格 — 请用 Excel 模板上传或开启 OCR 扩展"
+            )
+        for table_idx, table in enumerate(tables):
+            if not table or len(table) < 2:
+                continue
+            header, *body = table
+            cols = [str(c).strip() if c else f"col_{i}"
+                    for i, c in enumerate(header)]
+            df = pd.DataFrame(body, columns=cols).dropna(how="all")
+            if df.empty:
+                continue
+            parquet_name = f"{file_stem}__table_{table_idx}.parquet"
+            parquet_path = day_dir / parquet_name
+            df = df.astype(object).where(pd.notna(df), None)
+            df.to_parquet(parquet_path, index=False)
+            written.append(parquet_path)
+            rel = parquet_path.relative_to(paths.data_root()).as_posix()
+            meta = {
+                "source_type": "file_pdf",
+                "tenant": client_id,
+                "ingested_at": int(time.time()),
+                "ingested_by": uploaded_by,
+                "original_filename": original_filename,
+                "sheet_name": f"table_{table_idx}",
+                "row_count": int(len(df)),
+                "checksum_sha256": checksum,
+                "columns": [str(c) for c in df.columns],
+            }
+            (parquet_path.with_suffix(".json")).write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2)
+            )
+            file_id = repo.insert_bronze_file(
+                client_id=client_id,
+                source_type="file_pdf",
+                bronze_path=rel,
+                original_filename=original_filename,
+                sheet_name=f"table_{table_idx}",
+                row_count=int(len(df)),
+                checksum_sha256=checksum,
+                uploaded_by=uploaded_by,
+                meta=meta,
+            )
+            sheets.append(IngestedSheet(
+                bronze_file_id=file_id,
+                bronze_path=rel,
+                sheet_name=f"table_{table_idx}",
+                row_count=int(len(df)),
+                columns=[str(c) for c in df.columns],
+            ))
+        if not sheets:
+            raise PDFParseError(
+                "PDF 中的表格为空 — 请用 Excel 模板手填"
+            )
+    except PDFParseError:
+        for p in written:
+            try:
+                p.unlink(missing_ok=True)
+                p.with_suffix(".json").unlink(missing_ok=True)
+            except OSError:
+                pass
+        upload_path.unlink(missing_ok=True)
+        raise
+    except Exception:
+        for p in written:
+            try:
+                p.unlink(missing_ok=True)
+                p.with_suffix(".json").unlink(missing_ok=True)
+            except OSError:
+                pass
+        upload_path.unlink(missing_ok=True)
+        raise
+
+    return IngestResult(duplicate=False, checksum=checksum,
+                        sheets=sheets, existing_file_ids=[])
+
+
 def ingest_excel(
     *,
     client_id: str,

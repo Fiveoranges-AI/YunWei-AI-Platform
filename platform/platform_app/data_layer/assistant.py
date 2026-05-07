@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 import anthropic
 from ..settings import settings
-from . import ingest, paths, repo, silver_db, silver_schema, transform
+from . import ingest, manual, paths, repo, silver_db, silver_schema, transform
 
 
 _SYSTEM_PROMPT_TEMPLATE = """\
@@ -37,8 +37,10 @@ Your scope:
    Keep the proposal short. Ask the user to confirm before committing.
 2. **建映射** — once confirmed, call ``create_mapping_and_transform`` to
    commit the mapping and materialize silver rows.
-3. **手填一条** — for now, point users at the assistant flow (M4 wires
-   this up properly).
+3. **手填一条** — for new rows that don't come from a file. First call
+   ``get_silver_table_schema`` to see the required fields, gather them
+   from the user (one or two questions if many fields), confirm, then
+   call ``manual_entry`` to commit.
 4. **回答"我数据齐了吗"** — read silver health + bronze listing and
    answer in plain language.
 
@@ -173,6 +175,53 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "get_silver_table_schema",
+        "description": (
+            "Returns the field list for a silver table — useful before "
+            "asking the user for manual_entry input. Marks system-managed "
+            "fields (source_type, created_at, etc) and primary keys."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "silver_table": {
+                    "type": "string",
+                    "enum": ["customers", "orders", "order_items",
+                             "order_source_records", "boss_query_logs"],
+                },
+            },
+            "required": ["silver_table"],
+        },
+    },
+    {
+        "name": "manual_entry",
+        "description": (
+            "Double-writes one row directly to silver and a bronze audit "
+            "copy. WRITE OPERATION: confirm with the user before calling. "
+            "Re-entry of the same primary key upserts the silver row; "
+            "bronze appends a new audit copy each time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "silver_table": {
+                    "type": "string",
+                    "enum": ["customers", "orders", "order_items",
+                             "order_source_records", "boss_query_logs"],
+                },
+                "fields": {
+                    "type": "object",
+                    "description": (
+                        "User-provided values keyed by silver column name. "
+                        "Omit columns the user didn't specify — defaults "
+                        "are filled for required system columns."
+                    ),
+                },
+            },
+            "required": ["silver_table", "fields"],
+        },
+    },
+    {
         "name": "cascade_delete_bronze",
         "description": (
             "Soft-deletes a bronze file and removes any silver rows that "
@@ -276,6 +325,24 @@ def _tool_create_mapping_and_transform(
     }
 
 
+def _tool_get_silver_table_schema(silver_table: str) -> dict:
+    try:
+        return manual.schema_for_form(silver_table)
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+def _tool_manual_entry(client_id: str, user_id: str, silver_table: str,
+                       fields: dict) -> dict:
+    try:
+        return manual.record_manual_entry(
+            client_id=client_id, silver_table=silver_table,
+            fields=fields, user_id=user_id,
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+
+
 def _tool_cascade_delete_bronze(client_id: str, bronze_file_id: str) -> dict:
     matching = [r for r in repo.list_bronze_files(client_id)
                 if r["id"] == bronze_file_id]
@@ -300,6 +367,12 @@ def _dispatch_tool(name: str, args: dict, *, client_id: str, user_id: str) -> An
         return _tool_create_mapping_and_transform(
             client_id, user_id,
             args["bronze_file_id"], args["silver_table"], args["column_map"],
+        )
+    if name == "get_silver_table_schema":
+        return _tool_get_silver_table_schema(args["silver_table"])
+    if name == "manual_entry":
+        return _tool_manual_entry(
+            client_id, user_id, args["silver_table"], args["fields"],
         )
     if name == "cascade_delete_bronze":
         return _tool_cascade_delete_bronze(client_id, args["bronze_file_id"])

@@ -19,7 +19,15 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Path, Query, Req
 import duckdb
 from .. import db
 from ..api import _user_from_request
-from . import assistant as assistant_mod, ingest, paths, repo, silver_schema, transform
+from . import (
+    assistant as assistant_mod,
+    ingest,
+    manual,
+    paths,
+    repo,
+    silver_schema,
+    transform,
+)
 
 router = APIRouter(prefix="/api/data")
 
@@ -263,17 +271,29 @@ async def upload(
                                   "limit_bytes": _MAX_UPLOAD_BYTES})
 
     suffix = (file.filename or "").lower().rsplit(".", 1)[-1]
-    if suffix not in ("xlsx", "xls", "csv"):
+    if suffix not in ("xlsx", "xls", "csv", "pdf"):
         raise HTTPException(400, {"error": "unsupported_format",
-                                  "message": "仅支持 .xlsx / .xls / .csv"})
+                                  "message": "仅支持 .xlsx / .xls / .csv / .pdf"})
 
     try:
-        result = ingest.ingest_excel(
-            client_id=client,
-            original_filename=file.filename or "upload",
-            file_bytes=blob,
-            uploaded_by=user["id"],
-        )
+        if suffix == "pdf":
+            result = ingest.ingest_pdf(
+                client_id=client,
+                original_filename=file.filename or "upload.pdf",
+                file_bytes=blob,
+                uploaded_by=user["id"],
+            )
+        else:
+            result = ingest.ingest_excel(
+                client_id=client,
+                original_filename=file.filename or "upload",
+                file_bytes=blob,
+                uploaded_by=user["id"],
+            )
+    except ingest.PDFParseError as e:
+        # Best-effort contract (§4.3): surface the failure structurally
+        # so the assistant can suggest the Excel-template fallback.
+        raise HTTPException(422, {"error": "pdf_parse_failed", "message": str(e)})
     except Exception as e:
         raise HTTPException(400, {"error": "ingest_failed", "message": str(e)})
 
@@ -388,6 +408,54 @@ def create_mapping(
         "rows_written": result.rows_written,
         "rows_skipped": result.rows_skipped,
     }
+
+
+@router.get("/schema/{silver_table}")
+def get_form_schema(
+    request: Request,
+    silver_table: str = Path(..., pattern=r"^[a-z_]+$"),
+) -> dict:
+    """Returns the canonical column list for a silver table — used by the
+    assistant (and any future manual-entry form UI) to know which fields
+    to ask the user for. Read-only; no client_id needed since the schema
+    is per-platform, not per-tenant."""
+    _user_from_request(request)
+    try:
+        return manual.schema_for_form(silver_table)
+    except ValueError:
+        raise HTTPException(404, {"error": "unknown_silver_table"})
+
+
+@router.post("/manual/{silver_table}")
+def manual_entry(
+    request: Request,
+    silver_table: str = Path(..., pattern=r"^[a-z_]+$"),
+    body: dict = Body(...),
+) -> dict:
+    """Double-write one row to bronze + silver (docs/data-layer.md §4.4).
+
+    Body::
+
+        {"client": "yinhu", "fields": {"display_name": "甲公司", ...}}
+
+    Re-entry of the same primary key is upsert; bronze appends a new
+    audit copy each time so edit history is preserved.
+    """
+    user = _user_from_request(request)
+    client = body.get("client")
+    fields = body.get("fields") or {}
+    if not (client and isinstance(fields, dict)):
+        raise HTTPException(400, {"error": "missing_fields"})
+    _require_client_acl(user, client)
+    try:
+        return manual.record_manual_entry(
+            client_id=client,
+            silver_table=silver_table,
+            fields=fields,
+            user_id=user["id"],
+        )
+    except ValueError as e:
+        raise HTTPException(400, {"error": "invalid_request", "message": str(e)})
 
 
 @router.post("/assistant/chat")
