@@ -1,4 +1,8 @@
 import os
+from pathlib import Path
+
+# Repo root: .../agent-platform/  (this file is .../platform/platform_app/settings.py)
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings:
@@ -10,6 +14,8 @@ class Settings:
     # Optional with defaults:
     host_app = os.environ.get("PLATFORM_HOST_APP", "app.fiveoranges.ai")
     host_api = os.environ.get("PLATFORM_HOST_API", "api.fiveoranges.ai")
+    # Lakehouse root (docs/data-layer.md §2). Tenants live under <data_root>/tenants/<client_id>/.
+    data_root = os.environ.get("PLATFORM_DATA_ROOT", str(_REPO_ROOT / "data"))
     session_lifetime_seconds = 8 * 3600
     csrf_lifetime_seconds = 8 * 3600
     rate_limit_login_per_min_per_ip = 5

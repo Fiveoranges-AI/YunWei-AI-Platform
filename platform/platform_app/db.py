@@ -55,13 +55,12 @@ def init() -> None:
 
 
 def _migrate() -> None:
-    main_sql = (Path(__file__).parent.parent / "migrations" / "001_init.sql").read_text()
-    proxy_sql = (Path(__file__).parent.parent / "migrations" / "002_proxy_log.sql").read_text()
+    migrations_dir = Path(__file__).parent.parent / "migrations"
+    files = sorted(migrations_dir.glob("[0-9][0-9][0-9]_*.sql"))
     assert _MAIN
-    # psycopg can run multi-statement SQL via cursor.execute when no params
     with _MAIN._get().cursor() as cur:
-        cur.execute(main_sql)
-        cur.execute(proxy_sql)
+        for f in files:
+            cur.execute(f.read_text())
 
 
 def main() -> _DB:
