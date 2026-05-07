@@ -14,11 +14,11 @@ Write paths come in M3+ via the assistant; this file stays read-only.
 from __future__ import annotations
 import json
 from typing import Any
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Body, File, Form, HTTPException, Path, Query, Request, UploadFile
 import duckdb
 from .. import db
 from ..api import _user_from_request
-from . import paths, repo, silver_schema
+from . import ingest, paths, repo, silver_schema, transform
 
 router = APIRouter(prefix="/api/data")
 
@@ -232,3 +232,177 @@ def _bronze_row_view(row: dict) -> dict:
         "ingested_at": row["ingested_at"],
         "bronze_path": row["bronze_path"],
     }
+
+
+# ─── upload (M3 §4.2) ───────────────────────────────────────────
+
+# Hard cap matches docs/data-layer.md §10 risk row "大 Excel 内存爆".
+_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+
+@router.post("/upload")
+async def upload(
+    request: Request,
+    client: str = Form(...),
+    file: UploadFile = File(...),
+) -> dict:
+    """Excel/CSV upload → bronze parquet (one row per sheet). Returns sheet
+    previews so the assistant can render them in chat.
+    """
+    user = _user_from_request(request)
+    _require_client_acl(user, client)
+
+    blob = await file.read()
+    if len(blob) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, {"error": "file_too_large",
+                                  "limit_bytes": _MAX_UPLOAD_BYTES})
+
+    suffix = (file.filename or "").lower().rsplit(".", 1)[-1]
+    if suffix not in ("xlsx", "xls", "csv"):
+        raise HTTPException(400, {"error": "unsupported_format",
+                                  "message": "仅支持 .xlsx / .xls / .csv"})
+
+    try:
+        result = ingest.ingest_excel(
+            client_id=client,
+            original_filename=file.filename or "upload",
+            file_bytes=blob,
+            uploaded_by=user["id"],
+        )
+    except Exception as e:
+        raise HTTPException(400, {"error": "ingest_failed", "message": str(e)})
+
+    if result.duplicate:
+        return {"duplicate": True, "checksum": result.checksum,
+                "existing_file_ids": result.existing_file_ids}
+
+    sheets_view = []
+    for s in result.sheets:
+        preview = ingest.read_bronze_preview(client, s.bronze_file_id, limit=50)
+        sheets_view.append({
+            "bronze_file_id": s.bronze_file_id,
+            "sheet_name": s.sheet_name,
+            "row_count": s.row_count,
+            "columns": preview["columns"],
+            "preview_rows": preview["rows"],
+        })
+    return {"duplicate": False, "checksum": result.checksum, "sheets": sheets_view}
+
+
+@router.get("/bronze/{file_id}/preview")
+def bronze_preview(
+    request: Request,
+    file_id: str = Path(..., pattern=r"^[a-f0-9]{32}$"),
+    client: str = Query(...),
+    limit: int = Query(50, ge=1, le=500),
+) -> dict:
+    user = _user_from_request(request)
+    _require_client_acl(user, client)
+    try:
+        return ingest.read_bronze_preview(client, file_id, limit=limit)
+    except FileNotFoundError:
+        raise HTTPException(404, {"error": "bronze_file_not_found"})
+
+
+@router.delete("/bronze/{file_id}")
+def bronze_delete(
+    request: Request,
+    file_id: str = Path(..., pattern=r"^[a-f0-9]{32}$"),
+    client: str = Query(...),
+) -> dict:
+    """Soft-delete bronze + cascade silver rows that originated from it (AC-D7)."""
+    user = _user_from_request(request)
+    _require_client_acl(user, client)
+    matching = [r for r in repo.list_bronze_files(client) if r["id"] == file_id]
+    if not matching:
+        raise HTTPException(404, {"error": "bronze_file_not_found"})
+    silver_deleted = transform.cascade_delete_silver(client, file_id)
+    repo.soft_delete_bronze_file(file_id)
+    return {"ok": True, "silver_rows_deleted": silver_deleted}
+
+
+# ─── mapping (M3 §5) ────────────────────────────────────────────
+
+@router.post("/mapping")
+def create_mapping(
+    request: Request,
+    body: dict = Body(...),
+) -> dict:
+    """Build a bronze→silver column mapping and immediately materialize.
+
+    Body schema::
+
+        {
+          "client": "yinhu",
+          "bronze_file_id": "...",          # source for the run + filename pattern
+          "silver_table": "orders",
+          "column_map": {"客户名": "customer_name_snapshot", ...}
+        }
+    """
+    user = _user_from_request(request)
+    client = body.get("client")
+    bronze_file_id = body.get("bronze_file_id")
+    silver_table = body.get("silver_table")
+    column_map = body.get("column_map") or {}
+    if not (client and bronze_file_id and silver_table and isinstance(column_map, dict)):
+        raise HTTPException(400, {"error": "missing_fields"})
+    _require_client_acl(user, client)
+
+    if silver_table not in silver_schema.load().tables:
+        raise HTTPException(400, {"error": "unknown_silver_table"})
+
+    bronze_row = next(
+        (r for r in repo.list_bronze_files(client) if r["id"] == bronze_file_id),
+        None,
+    )
+    if bronze_row is None:
+        raise HTTPException(404, {"error": "bronze_file_not_found"})
+
+    bronze_columns = list(json.loads(bronze_row["meta_json"]).get("columns", []))
+    mapping_id = repo.insert_silver_mapping(
+        client_id=client,
+        source_type=bronze_row["source_type"],
+        filename_pattern=bronze_row["original_filename"] or "",
+        sheet_pattern=bronze_row["sheet_name"],
+        silver_table=silver_table,
+        column_map=column_map,
+        bronze_columns_snapshot=bronze_columns,
+        created_by=user["id"],
+    )
+
+    # Auto-trigger transform after mapping created (§5.2).
+    result = transform.materialize(
+        client_id=client,
+        bronze_file_id=bronze_file_id,
+        silver_table=silver_table,
+        column_map=column_map,
+    )
+    return {
+        "mapping_id": mapping_id,
+        "silver_table": result.silver_table,
+        "rows_written": result.rows_written,
+        "rows_skipped": result.rows_skipped,
+    }
+
+
+@router.get("/mappings")
+def list_mappings(
+    request: Request,
+    client: str = Query(...),
+    source_type: str | None = Query(None),
+) -> dict:
+    user = _user_from_request(request)
+    _require_client_acl(user, client)
+    rows = repo.list_silver_mappings(client, source_type)
+    return {"mappings": [
+        {
+            "id": r["id"],
+            "source_type": r["source_type"],
+            "filename_pattern": r["filename_pattern"],
+            "sheet_pattern": r["sheet_pattern"],
+            "silver_table": r["silver_table"],
+            "column_map": json.loads(r["column_map"]),
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]}
