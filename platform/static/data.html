@@ -99,10 +99,37 @@
     border-top: 1px solid var(--border); padding: 12px; display: flex; gap: 8px;
   }
   .composer textarea {
-    flex: 1; resize: none; height: 40px; padding: 8px; border: 1px solid var(--border);
-    border-radius: 4px; font-family: inherit; font-size: 13px; background: #f3f4f6; color: #9ca3af;
+    flex: 1; resize: none; height: 60px; padding: 8px; border: 1px solid var(--border);
+    border-radius: 4px; font-family: inherit; font-size: 13px;
   }
-  .composer button { padding: 0 14px; border-radius: 4px; border: 1px solid var(--border); background: #f3f4f6; color: #9ca3af; cursor: not-allowed; font-size: 13px; }
+  .composer textarea:disabled { background: #f3f4f6; color: #9ca3af; }
+  .composer button {
+    padding: 0 14px; border-radius: 4px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; cursor: pointer; font-size: 13px;
+  }
+  .composer button:disabled { background: #f3f4f6; color: #9ca3af; border-color: var(--border); cursor: not-allowed; }
+
+  /* Chat bubbles */
+  .msg { margin-bottom: 12px; font-size: 13px; line-height: 1.5; }
+  .msg.user { text-align: right; }
+  .msg.user .bubble { background: var(--accent); color: #fff; }
+  .msg.assistant .bubble { background: #f3f4f6; color: #111; }
+  .msg .bubble {
+    display: inline-block; padding: 8px 12px; border-radius: 8px;
+    max-width: 90%; text-align: left; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tool-call {
+    font-size: 11px; color: var(--muted); padding: 4px 8px; margin: 4px 0;
+    background: #fafafa; border-left: 2px solid var(--border);
+  }
+  .tool-call.error { color: var(--warn); border-left-color: var(--warn); }
+  .pending { color: var(--muted); font-style: italic; font-size: 12px; padding: 4px 0; }
+  .stub {
+    background: var(--bg); border: 1px dashed var(--border);
+    border-radius: 8px; padding: 14px; font-size: 12px; color: var(--muted);
+  }
+  .stub h3 { margin: 0 0 6px 0; font-size: 13px; color: #111; }
 </style>
 </head>
 <body>
@@ -158,22 +185,11 @@
   </div>
 
   <aside>
-    <header><span class="title">导入助手</span></header>
-    <div class="chat-body">
-      <div class="stub">
-        <h3>Assistant 占位 <span class="badge">M3 接通</span></h3>
-        <p>这是 docs/data-layer.md §3.3 描述的侧栏 chat-style agent。M2 阶段它先以骨架形式存在,M3 才接通工具调用。届时它会承担:</p>
-        <ul>
-          <li>拖文件给我 — 上传 Excel/CSV/PDF</li>
-          <li>建映射 — 自动猜 sheet 列 → silver 列</li>
-          <li>手填一条 — 引导式录入 silver 表</li>
-          <li>回答"我数据齐了吗"</li>
-        </ul>
-      </div>
-    </div>
+    <header><span class="title" id="asst-title">导入助手</span></header>
+    <div class="chat-body" id="chat-body"></div>
     <div class="composer">
-      <textarea readonly placeholder="（M3 启用后可在此对话）"></textarea>
-      <button disabled>发送</button>
+      <textarea id="composer-input" placeholder="向助手提问或描述要做什么..."></textarea>
+      <button id="composer-send">发送</button>
     </div>
   </aside>
 </main>
@@ -289,6 +305,105 @@ async function renderBronze() {
     : '<tr><td colspan="6" class="empty">尚无 bronze 文件 — 通过侧栏助手上传</td></tr>';
 }
 
+// ─── Assistant chat ────────────────────────────────────────────
+const chatState = { history: [], pending: false, enabled: false };
+
+async function checkAssistantStatus() {
+  try {
+    const s = await api('/api/data/assistant/status');
+    chatState.enabled = s.enabled;
+    document.getElementById('asst-title').textContent =
+      s.enabled ? `导入助手 · ${s.model}` : '导入助手 (未配置)';
+  } catch { chatState.enabled = false; }
+  applyAssistantUI();
+}
+
+function applyAssistantUI() {
+  const body = document.getElementById('chat-body');
+  const input = document.getElementById('composer-input');
+  const send = document.getElementById('composer-send');
+  if (!chatState.enabled) {
+    body.innerHTML = `
+      <div class="stub">
+        <h3>导入助手未配置</h3>
+        ANTHROPIC_API_KEY 未设置,聊天暂不可用。后端配置后刷新即可。<br><br>
+        助手启用后将承担:拖文件上传、列映射、手填一条、回答"我数据齐了吗"。
+      </div>`;
+    input.disabled = true; send.disabled = true;
+    return;
+  }
+  if (!body.innerHTML.trim() || body.querySelector('.stub')) {
+    body.innerHTML = `<div class="msg assistant"><div class="bubble">您好。把 Excel 拖到这里,或者直接告诉我您要做什么。<br>
+    例如:"我上传了什么?" / "把销售单第一列映射到客户名"。</div></div>`;
+  }
+  input.disabled = chatState.pending; send.disabled = chatState.pending;
+}
+
+function renderChat() {
+  const body = document.getElementById('chat-body');
+  const renderBlocks = (m) => {
+    if (typeof m.content === 'string') return escapeHtml(m.content);
+    return m.content.map(b => {
+      if (b.type === 'text') return escapeHtml(b.text);
+      if (b.type === 'tool_use') return `<div class="tool-call">🔧 ${escapeHtml(b.name)}(${escapeHtml(JSON.stringify(b.input || {}))})</div>`;
+      if (b.type === 'tool_result') return ''; // collapse — visible via tool_invocations
+      return '';
+    }).join('');
+  };
+  // Skip the first synthetic user message (kickoff context) — show only what user typed
+  const visible = chatState.history.filter((m, i) => {
+    if (i === 0 && m.role === 'user' && typeof m.content === 'string'
+        && m.content.includes('[当前租户状态]')) return false;
+    return true;
+  });
+  body.innerHTML = visible.map(m => {
+    const html = renderBlocks(m);
+    if (!html.trim()) return '';
+    return `<div class="msg ${m.role}"><div class="bubble">${html}</div></div>`;
+  }).join('') + (chatState.pending ? '<div class="pending">助手思考中…</div>' : '');
+  body.scrollTop = body.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById('composer-input');
+  const text = input.value.trim();
+  if (!text || chatState.pending) return;
+  input.value = '';
+  chatState.pending = true;
+  // Optimistic: show user msg immediately
+  chatState.history.push({ role: 'user', content: text });
+  renderChat();
+  applyAssistantUI();
+  try {
+    const r = await fetch('/api/data/assistant/chat', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client: state.client,
+        // Replace optimistic last-user with what server received
+        history: chatState.history.slice(0, -1),
+        message: text,
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      chatState.history.push({
+        role: 'assistant',
+        content: [{ type: 'text', text: `(错误: ${err.detail?.message || err.message || r.status})` }],
+      });
+    } else {
+      const body = await r.json();
+      chatState.history = body.messages;
+    }
+  } finally {
+    chatState.pending = false;
+    renderChat();
+    applyAssistantUI();
+    // Refresh main panels — the assistant may have changed silver / bronze state
+    refresh();
+  }
+}
+
 // ─── Boot ──────────────────────────────────────────────────────
 async function boot() {
   const { clients } = await api('/api/data/clients');
@@ -310,6 +425,13 @@ async function boot() {
   });
   document.getElementById('prev').onclick = () => { state.offset = Math.max(0, state.offset - state.limit); renderBrowser(); };
   document.getElementById('next').onclick = () => { state.offset += state.limit; renderBrowser(); };
+
+  // Assistant wiring
+  document.getElementById('composer-send').onclick = sendChat;
+  document.getElementById('composer-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendChat(); }
+  });
+  await checkAssistantStatus();
 
   refresh();
 }

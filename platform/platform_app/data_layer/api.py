@@ -19,7 +19,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Path, Query, Req
 import duckdb
 from .. import db
 from ..api import _user_from_request
-from . import ingest, paths, repo, silver_schema, transform
+from . import assistant as assistant_mod, ingest, paths, repo, silver_schema, transform
 
 router = APIRouter(prefix="/api/data")
 
@@ -387,6 +387,53 @@ def create_mapping(
         "silver_table": result.silver_table,
         "rows_written": result.rows_written,
         "rows_skipped": result.rows_skipped,
+    }
+
+
+@router.post("/assistant/chat")
+def assistant_chat(request: Request, body: dict = Body(...)) -> dict:
+    """Run one user turn through the data-center sidebar assistant.
+
+    Body::
+
+        {"client": "yinhu", "history": [...], "message": "上传一份销售单"}
+
+    ``history`` is the prior transcript (the assistant returns the new
+    full transcript so the client can persist it). Returns 503 if the
+    backend's ANTHROPIC_API_KEY is unset — the UI uses that to disable
+    the chat composer cleanly.
+    """
+    user = _user_from_request(request)
+    client = body.get("client")
+    user_text = (body.get("message") or "").strip()
+    history = body.get("history") or []
+    if not (client and user_text):
+        raise HTTPException(400, {"error": "missing_fields"})
+    _require_client_acl(user, client)
+    try:
+        result = assistant_mod.chat(
+            client_id=client, user_id=user["id"],
+            history=history, user_text=user_text,
+        )
+    except assistant_mod.AssistantNotConfigured:
+        raise HTTPException(503, {"error": "assistant_disabled",
+                                  "message": "ANTHROPIC_API_KEY 未配置,导入助手暂不可用"})
+    return {
+        "messages": result.messages,
+        "final_text": result.final_text,
+        "tool_invocations": result.tool_invocations,
+        "usage": result.usage,
+    }
+
+
+@router.get("/assistant/status")
+def assistant_status(request: Request) -> dict:
+    """UI uses this to decide whether to enable the chat composer."""
+    _user_from_request(request)
+    from ..settings import settings as s
+    return {
+        "enabled": bool(s.anthropic_api_key),
+        "model": s.assistant_model if s.anthropic_api_key else None,
     }
 
 

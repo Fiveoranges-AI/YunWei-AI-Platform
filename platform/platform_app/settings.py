@@ -16,6 +16,16 @@ class Settings:
     host_api = os.environ.get("PLATFORM_HOST_API", "api.fiveoranges.ai")
     # Lakehouse root (docs/data-layer.md §2). Tenants live under <data_root>/tenants/<client_id>/.
     data_root = os.environ.get("PLATFORM_DATA_ROOT", str(_REPO_ROOT / "data"))
+    # Data center sidebar assistant (docs/data-layer.md §3.3). Optional —
+    # absence disables the assistant chat but everything else still works.
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    assistant_model = os.environ.get(
+        "ASSISTANT_MODEL", "claude-opus-4-7"
+    )
+    assistant_effort = os.environ.get("ASSISTANT_EFFORT", "medium")
+    assistant_max_tool_iterations = int(
+        os.environ.get("ASSISTANT_MAX_TOOL_ITERATIONS", "8")
+    )
     session_lifetime_seconds = 8 * 3600
     csrf_lifetime_seconds = 8 * 3600
     rate_limit_login_per_min_per_ip = 5
