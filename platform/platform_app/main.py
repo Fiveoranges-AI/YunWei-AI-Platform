@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from . import admin_api, api, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
+from .daily_report import api as daily_report_api
 from .settings import settings
 
 PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
@@ -28,6 +29,7 @@ app.include_router(api.router)
 app.include_router(data_api.router)
 app.include_router(admin_api.router)
 app.include_router(enterprise_api.router)
+app.include_router(daily_report_api.router)
 
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
