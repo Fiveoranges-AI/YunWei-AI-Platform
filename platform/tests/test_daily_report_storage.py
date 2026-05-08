@@ -73,3 +73,34 @@ def test_update_push_status():
     row = storage.get_by_id(rid)
     assert row.push_status == "failed"
     assert row.push_error == "dingtalk 429"
+
+
+def test_list_reports_orders_desc_and_caps_limit():
+    _seed_tenant()
+    storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 4))
+    storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 5))
+    storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    rows = storage.list_reports(tenant_id="yinhu", limit=2)
+    assert [r.report_date for r in rows] == [date(2026, 5, 6), date(2026, 5, 5)]
+
+
+def test_delete_report_for_regenerate():
+    _seed_tenant()
+    rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    storage.delete_by_tenant_date(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    assert storage.get_by_id(rid) is None
+
+
+def test_subscription_create_and_list():
+    _seed_tenant()
+    sub_id = storage.create_subscription(
+        tenant_id="yinhu", recipient_label="许总",
+        push_channel="dingtalk", push_target="userid_xu",
+        push_cron="30 7 * * 1-5",
+        sections_enabled=["sales", "production", "chat", "customer_news"],
+    )
+    subs = storage.list_enabled_subscriptions()
+    assert len(subs) == 1
+    assert subs[0].id == sub_id
+    assert subs[0].push_target == "userid_xu"
+    assert subs[0].sections_enabled == ["sales", "production", "chat", "customer_news"]

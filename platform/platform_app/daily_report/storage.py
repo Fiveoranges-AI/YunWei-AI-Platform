@@ -105,3 +105,52 @@ def update_push_status(*, report_id: str, status: PushStatus, error: str | None)
         "UPDATE daily_reports SET push_status=%s, push_error=%s WHERE id=%s",
         (status, error, report_id),
     )
+
+
+def list_reports(*, tenant_id: str, limit: int = 30) -> list[Report]:
+    rows = db.main().execute(
+        "SELECT * FROM daily_reports WHERE tenant_id=%s "
+        "ORDER BY report_date DESC LIMIT %s",
+        (tenant_id, limit),
+    ).fetchall()
+    return [_row_to_report(r) for r in rows]
+
+
+def delete_by_tenant_date(*, tenant_id: str, report_date: date) -> None:
+    db.main().execute(
+        "DELETE FROM daily_reports WHERE tenant_id=%s AND report_date=%s",
+        (tenant_id, report_date),
+    )
+
+
+def create_subscription(
+    *, tenant_id: str, recipient_label: str,
+    push_channel: str, push_target: str, push_cron: str,
+    sections_enabled: list[str], timezone: str = "Asia/Shanghai",
+) -> str:
+    row = db.main().execute(
+        "INSERT INTO daily_report_subscriptions "
+        "(tenant_id, recipient_label, push_channel, push_target, push_cron, "
+        "timezone, sections_enabled) VALUES (%s, %s, %s, %s, %s, %s, %s) "
+        "RETURNING id",
+        (tenant_id, recipient_label, push_channel, push_target, push_cron,
+         timezone, sections_enabled),
+    ).fetchone()
+    return str(row["id"])
+
+
+def list_enabled_subscriptions() -> list[Subscription]:
+    rows = db.main().execute(
+        "SELECT * FROM daily_report_subscriptions WHERE enabled = true"
+    ).fetchall()
+    return [
+        Subscription(
+            id=str(r["id"]), tenant_id=r["tenant_id"],
+            recipient_label=r["recipient_label"],
+            push_channel=r["push_channel"], push_target=r["push_target"],
+            push_cron=r["push_cron"], timezone=r["timezone"],
+            sections_enabled=list(r["sections_enabled"]),
+            enabled=r["enabled"],
+        )
+        for r in rows
+    ]
