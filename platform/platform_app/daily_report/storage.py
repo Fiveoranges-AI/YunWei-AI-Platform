@@ -75,3 +75,33 @@ def get_by_id(report_id: str) -> Report | None:
         "SELECT * FROM daily_reports WHERE id=%s", (report_id,)
     ).fetchone()
     return _row_to_report(row) if row else None
+
+
+def write_result(
+    *, report_id: str, status: ReportStatus,
+    content_md: str, content_html: str,
+    sections_json: dict[str, Any], raw_collectors: dict[str, Any],
+    generated_at: datetime,
+) -> None:
+    db.main().execute(
+        "UPDATE daily_reports SET status=%s, content_md=%s, content_html=%s, "
+        "sections_json=%s, raw_collectors=%s, generated_at=%s, error=NULL "
+        "WHERE id=%s",
+        (status, content_md, content_html,
+         json.dumps(sections_json), json.dumps(raw_collectors),
+         generated_at, report_id),
+    )
+
+
+def write_failure(*, report_id: str, status: ReportStatus, error: str) -> None:
+    db.main().execute(
+        "UPDATE daily_reports SET status=%s, error=%s WHERE id=%s",
+        (status, error, report_id),
+    )
+
+
+def update_push_status(*, report_id: str, status: PushStatus, error: str | None) -> None:
+    db.main().execute(
+        "UPDATE daily_reports SET push_status=%s, push_error=%s WHERE id=%s",
+        (status, error, report_id),
+    )

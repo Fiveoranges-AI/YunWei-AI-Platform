@@ -1,5 +1,5 @@
 """Tests for daily_report.storage."""
-from datetime import date
+from datetime import date, datetime
 import pytest
 from platform_app.daily_report import storage
 
@@ -32,3 +32,44 @@ def test_create_running_idempotent_on_unique():
     rid1 = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
     rid2 = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
     assert rid1 == rid2  # returns existing row, not raise
+
+
+def test_write_result_ready_sets_content_and_status():
+    _seed_tenant()
+    rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    storage.write_result(
+        report_id=rid,
+        status="ready",
+        content_md="# foo",
+        content_html="<h1>foo</h1>",
+        sections_json={"sales": {"status": "ok"}},
+        raw_collectors={"sales": {"raw": "..."}},
+        generated_at=datetime(2026, 5, 6, 7, 30, 11),
+    )
+    row = storage.get_by_id(rid)
+    assert row.status == "ready"
+    assert row.content_md == "# foo"
+    assert row.content_html == "<h1>foo</h1>"
+    assert row.sections_json == {"sales": {"status": "ok"}}
+    assert row.error is None
+
+
+def test_write_failure_records_error_no_content():
+    _seed_tenant()
+    rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    storage.write_failure(report_id=rid, status="failed", error="container unreachable")
+    row = storage.get_by_id(rid)
+    assert row.status == "failed"
+    assert row.error == "container unreachable"
+    assert row.content_md is None
+
+
+def test_update_push_status():
+    _seed_tenant()
+    rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    storage.update_push_status(report_id=rid, status="sent", error=None)
+    assert storage.get_by_id(rid).push_status == "sent"
+    storage.update_push_status(report_id=rid, status="failed", error="dingtalk 429")
+    row = storage.get_by_id(rid)
+    assert row.push_status == "failed"
+    assert row.push_error == "dingtalk 429"
