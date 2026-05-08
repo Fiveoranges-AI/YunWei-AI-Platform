@@ -101,6 +101,36 @@ def test_cross_tenant_access_denied(client):
     assert resp.status_code == 403
 
 
+def test_platform_admin_can_access_other_tenant(client):
+    """Platform admins (users.is_platform_admin=1) bypass tenant ACL."""
+    # Seed a platform-admin user with no enterprise_members/agent_grants ties.
+    db.main().execute(
+        "INSERT INTO users (id, username, password_hash, display_name, "
+        "is_platform_admin, created_at) VALUES "
+        "('u_admin','root','x','Root',1,0)"
+    )
+    db.main().execute(
+        "INSERT INTO platform_sessions (id, user_id, csrf_token, created_at, expires_at) "
+        "VALUES ('sess-admin','u_admin','csrf-a',0,9999999999)"
+    )
+    # Seed a tenant the admin is *not* a member of.
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, onboarding_stage, created_at) "
+        "VALUES ('other','Other','Other','trial','active',0)"
+    )
+    db.main().execute(
+        "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
+        "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
+        "VALUES ('other','daily-report','x','http://x','s','k1','o-d-uid',0)"
+    )
+    resp = client.get(
+        "/api/daily-report/reports?tenant=other",
+        cookies={"app_session": "sess-admin"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["reports"] == []
+
+
 def test_regenerate_deletes_existing_and_returns_new_id(client, monkeypatch):
     _, sid = _seed_user_and_tenant()
     old_rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))

@@ -107,6 +107,23 @@ async def test_run_timeout_marks_timeout():
 
 
 @pytest.mark.asyncio
+async def test_run_partial_when_sections_empty():
+    """Empty sections must not be classified as ready (empty set ⊆ {"ok"} bug)."""
+    _seed_yinhu_daily_report_tenant()
+    payload = {**_FIXTURE}
+    payload["sections"] = {}
+    with respx.mock() as mock:
+        mock.post("http://yinhu-container.test:8000/daily-report/_internal/generate").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        rid = await orchestrator.run(
+            tenant_id="yinhu", report_date=date(2026, 5, 6),
+            pusher=None, subscription=None,
+        )
+    assert storage.get_by_id(rid).status == "partial"
+
+
+@pytest.mark.asyncio
 async def test_run_partial_when_some_sections_failed():
     _seed_yinhu_daily_report_tenant()
     payload = {**_FIXTURE}

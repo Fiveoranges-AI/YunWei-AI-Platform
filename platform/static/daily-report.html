@@ -7,7 +7,10 @@
 <h1>日报中心</h1>
 <div id="reports">加载中...</div>
 <script>
-fetch('/api/daily-report/reports?tenant=yinhu')
+const params = new URLSearchParams(location.search);
+const tenant = params.get('tenant') || 'yinhu';
+document.querySelector('h1').textContent = '日报中心 · ' + tenant;
+fetch('/api/daily-report/reports?tenant=' + encodeURIComponent(tenant))
   .then(r => r.json())
   .then(d => {
     const el = document.getElementById('reports');
@@ -17,6 +20,7 @@ fetch('/api/daily-report/reports?tenant=yinhu')
       '<a href="/daily-report/' + r.id + '">' + r.report_date + '</a> · ' + r.status +
       '</div>'
     ).join('');
-  });
+  })
+  .catch(() => { document.getElementById('reports').textContent = '加载失败'; });
 </script>
 </body></html>
