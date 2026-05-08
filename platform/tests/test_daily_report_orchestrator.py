@@ -125,3 +125,37 @@ async def test_run_partial_when_some_sections_failed():
             pusher=None, subscription=None,
         )
     assert storage.get_by_id(rid).status == "partial"
+
+
+@pytest.mark.asyncio
+async def test_run_calls_pusher_when_subscription_given():
+    _seed_yinhu_daily_report_tenant()
+    sub_id = storage.create_subscription(
+        tenant_id="yinhu", recipient_label="许总",
+        push_channel="dingtalk", push_target="userid_xu",
+        push_cron="30 7 * * 1-5",
+        sections_enabled=["sales", "production", "chat", "customer_news"],
+    )
+    sub = next(s for s in storage.list_enabled_subscriptions() if s.id == sub_id)
+
+    captured = []
+
+    class _CapturingPusher:
+        async def push(self, **kw):
+            captured.append(kw)
+            from platform_app.daily_report.pushers.base import PushResult
+            return PushResult(success=True, error=None)
+
+    with respx.mock() as mock:
+        mock.post("http://yinhu-container.test:8000/daily-report/_internal/generate").mock(
+            return_value=httpx.Response(200, json=_FIXTURE)
+        )
+        rid = await orchestrator.run(
+            tenant_id="yinhu", report_date=date(2026, 5, 6),
+            pusher=_CapturingPusher(), subscription=sub,
+        )
+    assert len(captured) == 1
+    assert captured[0]["subscription"].push_target == "userid_xu"
+    assert "银湖经营快报" in captured[0]["title"]
+    assert captured[0]["link_url"].endswith(f"/daily-report/{rid}")
+    assert storage.get_by_id(rid).push_status == "sent"
