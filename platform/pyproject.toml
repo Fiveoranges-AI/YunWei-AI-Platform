@@ -29,6 +29,13 @@ dev = [
 [project.scripts]
 platform-admin = "platform_app.admin:main"
 
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+# Add the worktree's platform/ directory to sys.path so tests import
+# platform_app from the local working tree rather than the editable install
+# pointing at the main worktree (which uses a shared .venv).
+pythonpath = ["."]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
