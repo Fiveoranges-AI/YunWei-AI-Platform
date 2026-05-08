@@ -217,7 +217,7 @@ export default function PhilosophySection() {
 
       <div className="container relative z-10">
         <div style={{ maxWidth: "640px" }}>
-          <span className="section-label" style={{ background: "rgba(96,165,250,0.10)", color: "#60A5FA", borderColor: "rgba(96,165,250,0.30)" }}>
+          <span className="section-label">
             <span className="slash-accent" style={{ width: "20px", height: "2px", background: "#60A5FA" }} />
             <span style={{ color: "#60A5FA" }}>我们的理念 · OUR PHILOSOPHY</span>
           </span>
