@@ -1,0 +1,17 @@
+{
+  "tenant_id": "yinhu",
+  "report_date": "2026-05-06",
+  "markdown": "# 银湖经营快报 · 2026-05-06 周三\n\n## 销售（昨日）\n- 昨日成交 ¥1,238,400（环比 +12%）\n- 本月累计 ¥18.4M / 目标 ¥25M（73.6%）\n\n## 生产\n- 在产订单 23 单；**延期 3 单**（PR-2026-04-180）\n\n## 群要事\n- 邦普采购林总询问6.10前能否追加300套，**许总未回复**\n\n## 客户动态\n- 邦普：[发布 2026 Q1 财报](https://example.com/news/1)\n",
+  "sections": {
+    "sales":         {"status": "ok",  "data": {"yesterday_total": 1238400}},
+    "production":    {"status": "ok",  "data": {"in_progress_count": 23}},
+    "chat":          {"status": "ok",  "data": {"messages_in_window": 142}},
+    "customer_news": {"status": "ok",  "data": {"items": [{"customer": "邦普"}]}}
+  },
+  "sources": [
+    "kingdee/sales_orders", "kingdee/production_orders",
+    "dingtalk/group/cidXXX1", "tavily/example.com/news/1"
+  ],
+  "generated_at": "2026-05-06T07:30:11+08:00",
+  "duration_ms": 14823
+}
