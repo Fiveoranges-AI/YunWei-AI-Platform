@@ -50,5 +50,12 @@ class Settings:
     clock_skew_seconds = 5
     health_probe_interval_seconds = 30
 
+    # DingTalk corp app credentials (for daily report push).
+    # Optional at startup so platform can run without the daily-report feature.
+    dingtalk_client_id = os.environ.get("DINGTALK_CLIENT_ID", "")
+    dingtalk_client_secret = os.environ.get("DINGTALK_CLIENT_SECRET", "")
+    dingtalk_agent_id = os.environ.get("DINGTALK_AGENT_ID", "")
+    dingtalk_robot_code = os.environ.get("DINGTALK_ROBOT_CODE", "")
+
 
 settings = Settings()
