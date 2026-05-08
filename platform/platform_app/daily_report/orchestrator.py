@@ -12,6 +12,7 @@ from . import storage, markdown_render
 from .pushers.base import Pusher
 from .. import db, hmac_sign
 
+_RETRY_DELAY_SECONDS = 30  # overridable in tests
 _HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
 
 
@@ -31,7 +32,14 @@ async def run(
                               error="tenant (yinhu, daily-report) not registered")
         return rid
 
-    payload = await _call_container(tenant=tenant, report_date=report_date)
+    try:
+        payload = await _call_container_with_retry(tenant=tenant, report_date=report_date)
+    except _ContainerTimeout as e:
+        storage.write_failure(report_id=rid, status="timeout", error=str(e))
+        return rid
+    except _ContainerError as e:
+        storage.write_failure(report_id=rid, status="failed", error=str(e))
+        return rid
 
     storage.write_result(
         report_id=rid,
@@ -75,6 +83,36 @@ def _card_title(d: date) -> str:
 def _dashboard_host() -> str:
     from ..settings import settings
     return settings.host_app
+
+
+class _ContainerTimeout(Exception):
+    pass
+
+
+class _ContainerError(Exception):
+    pass
+
+
+async def _call_container_with_retry(*, tenant: dict, report_date: date) -> dict:
+    """Try once, retry once after 30s on 5xx or transient connection error."""
+    try:
+        return await _call_container(tenant=tenant, report_date=report_date)
+    except httpx.ReadTimeout as e:
+        raise _ContainerTimeout(f"read timeout: {e}")
+    except (httpx.HTTPStatusError, httpx.ConnectError) as first:
+        await asyncio.sleep(_RETRY_DELAY_SECONDS)
+        try:
+            return await _call_container(tenant=tenant, report_date=report_date)
+        except httpx.ReadTimeout as e:
+            raise _ContainerTimeout(f"read timeout on retry: {e}")
+        except (httpx.HTTPStatusError, httpx.ConnectError) as second:
+            raise _ContainerError(f"first={_short(first)} retry={_short(second)}")
+
+
+def _short(e: Exception) -> str:
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"{e.response.status_code}"
+    return type(e).__name__
 
 
 async def _call_container(*, tenant: dict, report_date: date) -> dict:
