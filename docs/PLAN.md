@@ -2384,17 +2384,7 @@ curl -i -X POST https://app.fiveoranges.ai/yinhu/super-xiaochen/chat \
 - [ ] **Step 8: 拿掉 ADMIN_BOOTSTRAP_PASSWORD 改正式密码**
 ```bash
 docker compose -f ops/docker-compose.yml exec platform-app \
-  python -m platform_app.admin reset-password xuzong  # ← 这条命令我们没实现,先简单 SQL 替代:
-docker compose -f ops/docker-compose.yml exec platform-app \
-  python -c "
-from platform_app import auth, db
-import getpass
-db.init()
-pw = getpass.getpass('New password: ')
-db.main().execute('UPDATE users SET password_hash=? WHERE username=?',
-  (auth.hash_password(pw), 'xuzong'))
-print('done')
-"
+  platform-admin set-password xuzong       # 交互式输入新密码;改完自动撤销现存 session
 ```
 
 - [ ] **Step 9: 给许总试用**
