@@ -99,3 +99,30 @@ def test_cross_tenant_access_denied(client):
         cookies={"app_session": sid},
     )
     assert resp.status_code == 403
+
+
+def test_regenerate_deletes_existing_and_returns_new_id(client, monkeypatch):
+    _, sid = _seed_user_and_tenant()
+    old_rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    storage.write_failure(report_id=old_rid, status="failed", error="x")
+
+    new_rid_holder = {}
+
+    async def fake_run(**kw):
+        from platform_app.daily_report import storage as s
+        rid = s.create_running(tenant_id=kw["tenant_id"], report_date=kw["report_date"])
+        new_rid_holder["rid"] = rid
+        return rid
+
+    from platform_app.daily_report import api as api_mod
+    monkeypatch.setattr(api_mod, "_orchestrator_run", fake_run)
+
+    resp = client.post(
+        "/api/daily-report/reports/yinhu/regenerate",
+        json={"date": "2026-05-06"},
+        cookies={"app_session": sid},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["report_id"] == new_rid_holder["rid"]
+    assert body["report_id"] != old_rid  # new row

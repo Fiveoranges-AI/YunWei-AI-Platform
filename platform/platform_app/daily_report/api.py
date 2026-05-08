@@ -1,10 +1,24 @@
 """REST + HTML routes for daily report dashboard."""
 from __future__ import annotations
+from datetime import date as _date_cls
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel
 from .. import api as platform_api, db
-from . import storage
+from . import orchestrator, storage
+from .pushers.dingtalk import DingTalkPusher
 
 router = APIRouter()
+
+_pusher = DingTalkPusher()
+
+
+class RegenerateBody(BaseModel):
+    date: str  # YYYY-MM-DD
+
+
+# Indirection for tests.
+async def _orchestrator_run(**kw):
+    return await orchestrator.run(**kw)
 
 
 @router.get("/api/daily-report/reports")
@@ -44,6 +58,24 @@ def get_report(request: Request, report_id: str):
         "error": row.error,
         "generated_at": row.generated_at.isoformat() if row.generated_at else None,
     }
+
+
+@router.post("/api/daily-report/reports/{tenant}/regenerate")
+async def regenerate(request: Request, tenant: str, body: RegenerateBody):
+    user = platform_api._user_from_request(request)
+    _enforce_tenant_acl(user, tenant)
+    try:
+        rd = _date_cls.fromisoformat(body.date)
+    except ValueError:
+        raise HTTPException(400, {"error": "bad_date"})
+    storage.delete_by_tenant_date(tenant_id=tenant, report_date=rd)
+    # Look up active subscription for this tenant (single recipient in MVP).
+    sub = next((s for s in storage.list_enabled_subscriptions() if s.tenant_id == tenant), None)
+    rid = await _orchestrator_run(
+        tenant_id=tenant, report_date=rd,
+        pusher=_pusher if sub else None, subscription=sub,
+    )
+    return {"report_id": rid}
 
 
 def _enforce_tenant_acl(user: dict, tenant: str) -> None:
