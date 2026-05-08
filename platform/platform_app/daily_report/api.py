@@ -1,7 +1,9 @@
 """REST + HTML routes for daily report dashboard."""
 from __future__ import annotations
 from datetime import date as _date_cls
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from .. import api as platform_api, db
 from . import orchestrator, storage
@@ -76,6 +78,25 @@ async def regenerate(request: Request, tenant: str, body: RegenerateBody):
         pusher=_pusher if sub else None, subscription=sub,
     )
     return {"report_id": rid}
+
+
+_STATIC = Path(__file__).resolve().parent.parent.parent / "static"
+_NO_STORE = {"Cache-Control": "no-store, must-revalidate"}
+
+
+@router.get("/daily-report")
+@router.get("/daily-report/")
+def html_list(request: Request):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return FileResponse(_STATIC / "daily-report.html", headers=_NO_STORE)
+
+
+@router.get("/daily-report/{report_id}")
+def html_detail(request: Request, report_id: str):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return FileResponse(_STATIC / "daily-report-detail.html", headers=_NO_STORE)
 
 
 def _enforce_tenant_acl(user: dict, tenant: str) -> None:

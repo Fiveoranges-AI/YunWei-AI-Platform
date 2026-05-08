@@ -126,3 +126,24 @@ def test_regenerate_deletes_existing_and_returns_new_id(client, monkeypatch):
     body = resp.json()
     assert body["report_id"] == new_rid_holder["rid"]
     assert body["report_id"] != old_rid  # new row
+
+
+def test_html_list_page_redirects_to_login_when_no_cookie(client):
+    resp = client.get("/daily-report", follow_redirects=False)
+    assert resp.status_code == 200
+    assert b"<title>" in resp.content
+
+
+def test_html_list_page_when_logged_in(client):
+    _, sid = _seed_user_and_tenant()
+    resp = client.get("/daily-report", cookies={"app_session": sid})
+    assert resp.status_code == 200
+    assert b"daily" in resp.content.lower() or b"\xe6\x97\xa5\xe6\x8a\xa5" in resp.content
+
+
+def test_html_detail_page(client):
+    _, sid = _seed_user_and_tenant()
+    rid = storage.create_running(tenant_id="yinhu", report_date=date(2026, 5, 6))
+    resp = client.get(f"/daily-report/{rid}", cookies={"app_session": sid})
+    assert resp.status_code == 200
+    assert b"<html" in resp.content
