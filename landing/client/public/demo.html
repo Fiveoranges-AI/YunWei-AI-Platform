@@ -76,7 +76,8 @@
     /* =================== Sidebar header =================== */
     .sb-brand {
       display: flex; align-items: center; gap: 10px;
-      padding: 16px 18px;
+      height: 64px;
+      padding: 0 18px;
       border-bottom: 1px solid var(--line);
       background: #fff;
     }
@@ -208,7 +209,8 @@
     /* =================== Topbar =================== */
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 28px;
+      height: 64px;
+      padding: 0 28px;
       border-bottom: 1px solid var(--line);
       background: #fff;
       flex-shrink: 0;
@@ -219,12 +221,19 @@
       min-width: 0;
     }
     .topbar .home {
-      width: 32px; height: 32px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 32px; padding: 0 10px 0 9px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      font-family: 'Sora', sans-serif;
+      font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em;
+      text-decoration: none;
+      flex-shrink: 0;
       color: var(--txt-mute);
       transition: background 140ms, color 140ms;
     }
-    .topbar .home:hover { background: var(--bg-pill); color: var(--brand); }
+    .topbar .home:hover { background: var(--bg-pill); color: var(--brand); border-color: rgba(45,110,168,0.32); }
     .topbar .title {
       font-family: 'Sora', sans-serif;
       font-size: 16px; font-weight: 700;
@@ -268,7 +277,9 @@
     @media (max-width: 767px) {
       .stage { grid-template-columns: 1fr; }
       .sidebar { display: none; }
-      .topbar { padding: 12px 16px; }
+      .topbar { padding: 0 16px; }
+      .topbar .home .lbl { display: none; }
+      .topbar .home { padding: 0; width: 32px; justify-content: center; }
     }
 
     /* =================== Conversation thread =================== */
@@ -754,13 +765,15 @@
     <main class="main">
       <header class="topbar">
         <div class="crumbs">
-          <a href="/" class="home" aria-label="返回首页">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          </a>
           <h1 class="title" id="thread-title">本月订单完成进度</h1>
           <span class="pill-sandbox"><span class="dot"></span>Sandbox · 沙盒</span>
         </div>
         <div class="actions">
+          <a href="/" class="home" aria-label="返回首页 · Back to homepage" title="返回首页">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5L12 4l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>
+            <span class="lbl">返回首页</span>
+          </a>
+          <span style="width:1px;height:20px;background:var(--line);margin:0 4px;" aria-hidden="true"></span>
           <button class="icn-btn" id="btn-skip" title="跳过演示动画" aria-label="跳过动画">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
           </button>

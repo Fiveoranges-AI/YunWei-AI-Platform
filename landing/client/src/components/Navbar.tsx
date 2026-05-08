@@ -150,51 +150,78 @@ function DemoBtn() {
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      aria-label="Demo · 演示"
+      aria-label="Try Live Demo · 立即体验演示"
       style={{
         position: "relative",
         display: "inline-flex",
         alignItems: "center",
-        justifyContent: "center",
-        width: "40px",
-        height: "40px",
-        borderRadius: "10px",
-        background: hover ? "rgba(45,110,168,0.10)" : "transparent",
-        color: hover ? "var(--brand-blue)" : "#0F2340",
+        gap: "8px",
+        padding: "9px 16px 9px 14px",
+        borderRadius: "999px",
+        background: hover
+          ? "linear-gradient(135deg, rgba(45,110,168,0.16) 0%, rgba(45,110,168,0.10) 100%)"
+          : "linear-gradient(135deg, rgba(45,110,168,0.10) 0%, rgba(45,110,168,0.04) 100%)",
+        color: "var(--brand-blue)",
+        fontFamily: "Sora, sans-serif",
+        fontWeight: 600,
+        fontSize: "13.5px",
+        letterSpacing: "0.01em",
         textDecoration: "none",
-        transition: "background 180ms ease-out, color 180ms ease-out",
+        border: hover ? "1px solid rgba(45,110,168,0.42)" : "1px solid rgba(45,110,168,0.26)",
+        boxShadow: hover
+          ? "0 0 0 4px rgba(45,110,168,0.12), 0 6px 16px rgba(45,110,168,0.18)"
+          : "0 1px 2px rgba(45,110,168,0.08)",
+        transition:
+          "background 200ms ease-out, border-color 200ms ease-out, box-shadow 220ms ease-out, transform 200ms ease-out",
+        transform: hover ? "translateY(-1px)" : "translateY(0)",
         outline: "none",
+        whiteSpace: "nowrap",
       }}
     >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M10 9.5v5l4.5 -2.5z" fill="currentColor" stroke="none" />
-      </svg>
+      {/* live pulse dot — left of label, signals "interactive" */}
       <span
         aria-hidden
-        style={{ position: "absolute", top: "7px", right: "7px", width: "7px", height: "7px", pointerEvents: "none" }}
+        style={{ position: "relative", display: "inline-flex", width: "8px", height: "8px", flexShrink: 0 }}
       >
+        <span
+          style={{
+            position: "absolute",
+            inset: "-3px",
+            borderRadius: "999px",
+            background: "#10B981",
+            animation: "navLivePulse 1.8s ease-out infinite",
+            opacity: 0.45,
+          }}
+        />
         <span
           style={{
             position: "absolute",
             inset: 0,
             borderRadius: "999px",
-            background: "#34D399",
-            animation: "navLivePulse 1.8s ease-out infinite",
-            opacity: 0.55,
-          }}
-        />
-        <span
-          style={{
-            position: "absolute",
-            inset: "1.5px",
-            borderRadius: "999px",
             background: "#10B981",
-            boxShadow: "0 0 0 1.5px #fff",
           }}
         />
       </span>
-      <CnTooltip text="Demo · 演示" show={hover} />
+      <span>Live Demo</span>
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+        style={{
+          transition: "transform 200ms ease-out",
+          transform: hover ? "translateX(2px)" : "translateX(0)",
+        }}
+      >
+        <path d="M5 12h14" />
+        <path d="M13 5l7 7-7 7" />
+      </svg>
+      <CnTooltip text="立即体验演示" show={hover} />
     </a>
   );
 }
@@ -427,21 +454,43 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — side panel, ~340px, bilingual labels visible */}
       {open && (
-        <div
-          className="drawer-panel lg:hidden"
-          style={{
-            background: "#fff",
-            borderTop: "1px solid #E2E8F0",
-            boxShadow: "0 12px 30px rgba(15,35,64,0.08)",
-          }}
-        >
+        <>
           <div
-            className="container"
+            className="drawer-scrim lg:hidden"
+            onClick={closeDrawer}
+            aria-hidden
             style={{
-              paddingTop: "20px",
-              paddingBottom: "28px",
+              position: "fixed",
+              top: "76px",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(15,35,64,0.42)",
+              backdropFilter: "blur(2px)",
+              WebkitBackdropFilter: "blur(2px)",
+              zIndex: 1,
+            }}
+          />
+          <div
+            className="drawer-panel lg:hidden"
+            style={{
+              position: "fixed",
+              top: "76px",
+              right: 0,
+              bottom: 0,
+              width: "min(340px, 88vw)",
+              background: "#fff",
+              borderLeft: "1px solid #E2E8F0",
+              boxShadow: "-12px 0 30px rgba(15,35,64,0.10)",
+              overflowY: "auto",
+              zIndex: 2,
+            }}
+          >
+          <div
+            style={{
+              padding: "20px 20px 28px",
               display: "flex",
               flexDirection: "column",
               gap: "4px",
@@ -488,18 +537,21 @@ export default function Navbar() {
                 justifyContent: "space-between",
                 padding: "14px 20px",
                 borderRadius: "10px",
-                border: "1px solid rgba(15,35,64,0.14)",
-                color: "#0F2340",
+                border: "1.5px solid rgba(45,110,168,0.32)",
+                background:
+                  "linear-gradient(135deg, rgba(45,110,168,0.10) 0%, rgba(45,110,168,0.04) 100%)",
+                color: "var(--brand-blue)",
                 fontFamily: "Sora, sans-serif",
-                fontWeight: 500,
+                fontWeight: 600,
                 fontSize: "15px",
                 textDecoration: "none",
                 marginTop: "4px",
+                boxShadow: "0 1px 2px rgba(45,110,168,0.08)",
               }}
             >
               <span style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
                 <LiveDot />
-                Demo · 演示
+                Live Demo · 立即体验
               </span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 12h14M13 6l6 6-6 6" />
@@ -560,7 +612,8 @@ export default function Navbar() {
               Contact · 联系我们
             </a>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </header>
   );
