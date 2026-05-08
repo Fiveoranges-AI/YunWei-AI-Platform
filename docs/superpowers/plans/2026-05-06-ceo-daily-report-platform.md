@@ -17,7 +17,7 @@
 ## File Map
 
 **New files:**
-- `platform/migrations/005_daily_reports.sql` — two new tables (003 = data layer, 004 = enterprises are already taken)
+- `platform/migrations/008_daily_reports.sql` — two new tables (003-007 already taken: data_layer, enterprises, platform_admin, drop_user_tenant, erp_credentials)
 - `platform/platform_app/daily_report/__init__.py`
 - `platform/platform_app/daily_report/storage.py` — dataclasses + CRUD
 - `platform/platform_app/daily_report/orchestrator.py` — `async run(tenant_id, date)`
@@ -98,12 +98,12 @@ git commit -m "chore(daily-report): add croniter + markdown-it-py deps"
 ## Task 2: Migration 004 — create daily_reports + daily_report_subscriptions
 
 **Files:**
-- Create: `platform/migrations/005_daily_reports.sql`
+- Create: `platform/migrations/008_daily_reports.sql`
 - Modify: `platform/tests/conftest.py` (add new tables to TRUNCATE list)
 
 - [ ] **Step 1: Write migration SQL**
 
-Create `platform/migrations/005_daily_reports.sql`:
+Create `platform/migrations/008_daily_reports.sql`:
 
 ```sql
 -- 004 · CEO daily report storage + subscriptions.
@@ -204,7 +204,7 @@ subscriptions exists: daily_report_subscriptions
 - [ ] **Step 5: Commit**
 
 ```bash
-git add platform/migrations/005_daily_reports.sql platform/tests/conftest.py
+git add platform/migrations/008_daily_reports.sql platform/tests/conftest.py
 git commit -m "feat(daily-report): migration 004 — daily_reports + subscriptions tables"
 ```
 

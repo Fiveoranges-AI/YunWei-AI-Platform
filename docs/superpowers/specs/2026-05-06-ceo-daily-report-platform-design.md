@@ -37,7 +37,7 @@ Response 200:
 
 | 工作流 | 是否依赖容器侧 | 是否依赖钉钉审批 | 是否依赖银湖 IT 输入 |
 |---|---|---|---|
-| Postgres migration `004_daily_reports.sql` | ❌ | ❌ | ❌ |
+| Postgres migration `008_daily_reports.sql` | ❌ | ❌ | ❌ |
 | `storage.py` CRUD | ❌ | ❌ | ❌ |
 | `orchestrator.py`（用 fake 容器响应跑通） | ❌ | ❌ | ❌ |
 | `scheduler.py`（APScheduler + jobstore） | ❌ | ❌ | ❌ |
@@ -137,7 +137,7 @@ platform/platform_app/
 
 ## 4. 数据模型
 
-### 4.1 Postgres 迁移 `platform/migrations/004_daily_reports.sql`
+### 4.1 Postgres 迁移 `platform/migrations/008_daily_reports.sql`
 
 ```sql
 CREATE TABLE daily_reports (
@@ -214,7 +214,7 @@ expires_at = now + ttl * 0.9    # 90% TTL，避免边界过期
 | `daily_report/api.py` | ~250 | FastAPI router；endpoints 见 §6 |
 | `daily_report/web/daily-report.html` | ~150 | 列表 |
 | `daily_report/web/daily-report-detail.html` | ~200 | 详情：marked.js 渲染 + 重跑按钮 + 问小陈链接 |
-| `migrations/004_daily_reports.sql` | ~40 | 见 §4.1 |
+| `migrations/008_daily_reports.sql` | ~40 | 见 §4.1 |
 | 修改 `platform_app/main.py` | +5 | mount router + 启动 scheduler |
 
 ---
