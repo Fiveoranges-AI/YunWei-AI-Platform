@@ -19,9 +19,12 @@ PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(
 async def lifespan(app: FastAPI):
     db.init()
     from . import health
-    task = asyncio.create_task(health.probe_loop())
+    from .daily_report import scheduler as dr_scheduler
+    health_task = asyncio.create_task(health.probe_loop())
+    scheduler_task = asyncio.create_task(dr_scheduler.run_forever())
     yield
-    task.cancel()
+    health_task.cancel()
+    scheduler_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
