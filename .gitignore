@@ -8,3 +8,8 @@ __pycache__/
 *.db-shm
 *.db-wal
 .worktrees/
+
+# app/ (platform chat UI — Phase 1+) build artifacts. Stage 1 of platform/
+# Dockerfile rebuilds dist/ from source.
+/app/node_modules/
+/app/dist/
