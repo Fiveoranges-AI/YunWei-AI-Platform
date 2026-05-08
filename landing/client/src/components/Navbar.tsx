@@ -53,7 +53,7 @@ function CnTooltip({ text, show }: CnTooltipProps) {
           transform: "translateX(-50%) rotate(45deg)",
           width: "10px",
           height: "10px",
-          background: "#0A2540",
+          background: "var(--brand-blue)",
           borderRadius: "2px 0 0 0",
         }}
       />
@@ -427,16 +427,13 @@ export default function Navbar() {
           </span>
 
           <button
-            className="lg:hidden"
+            className="lg:hidden flex items-center justify-center"
             aria-label="Open menu"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
             style={{
               width: "44px",
               height: "44px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
               borderRadius: "10px",
               transition: "background 150ms ease-out, transform 100ms ease-out",
             }}
