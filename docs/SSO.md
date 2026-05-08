@@ -729,11 +729,16 @@ fiveoranges.ai/demo                          ← Vercel 主站 CTA
 ### 13.3 用户管理
 
 ```
-./platform-admin add-user <username> <display_name>     → 提示输入密码,bcrypt 存
-./platform-admin grant <username> <client> <agent> [role]
+./platform-admin add-user <username> <display_name> [--password PWD] [--email MAIL]
+                                                         → 不传 --password 则提示输入,bcrypt 存
+./platform-admin grant <username> <client> <agent> [--role user|admin]
 ./platform-admin revoke <username> <client> <agent>
 ./platform-admin list-users
-./platform-admin reset-password <username>
+./platform-admin set-password <username> [--password PWD]
+                                                         → 改密后自动撤销该用户所有现存 session
+./platform-admin delete-user <username> [--yes]
+                                                         → 级联清 sessions / api_keys / user_tenant;
+                                                           proxy_log 故意保留作审计
 ```
 
 所有操作写 audit log。

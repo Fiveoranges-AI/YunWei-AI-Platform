@@ -113,6 +113,46 @@ def cmd_list_users(args):
         print(f"{r['id']:20} {r['username']:15} {r['display_name']:20} last_login={r['last_login']}")
 
 
+def cmd_set_password(args):
+    db.init()
+    user_id = f"u_{args.username}"
+    row = db.main().execute("SELECT id FROM users WHERE id=%s", (user_id,)).fetchone()
+    if not row:
+        print(f"user not found: {args.username}", file=sys.stderr)
+        sys.exit(1)
+    pw = args.password or getpass.getpass(f"New password for {args.username}: ")
+    db.main().execute(
+        "UPDATE users SET password_hash=%s WHERE id=%s",
+        (auth.hash_password(pw), user_id),
+    )
+    auth.revoke_user_sessions(user_id)
+    print(f"password updated for {user_id}; existing sessions revoked")
+
+
+def cmd_delete_user(args):
+    db.init()
+    user_id = f"u_{args.username}"
+    row = db.main().execute("SELECT id FROM users WHERE id=%s", (user_id,)).fetchone()
+    if not row:
+        print(f"user not found: {args.username}", file=sys.stderr)
+        sys.exit(1)
+    if not args.yes:
+        confirm = input(f"DELETE user {args.username} and all sessions/keys/grants? [y/N] ").strip().lower()
+        if confirm != "y":
+            print("aborted")
+            return
+    auth.revoke_user_sessions(user_id)
+    db.main().execute("DELETE FROM api_keys WHERE user_id=%s", (user_id,))
+    grants = db.main().execute(
+        "SELECT client_id, agent_id FROM user_tenant WHERE user_id=%s", (user_id,),
+    ).fetchall()
+    for g in grants:
+        db.invalidate_acl(user_id, g["client_id"], g["agent_id"])
+    db.main().execute("DELETE FROM user_tenant WHERE user_id=%s", (user_id,))
+    db.main().execute("DELETE FROM users WHERE id=%s", (user_id,))
+    print(f"deleted user_id={user_id}")
+
+
 def main():
     p = argparse.ArgumentParser(prog="platform-admin")
     sp = p.add_subparsers(dest="cmd", required=True)
@@ -147,6 +187,16 @@ def main():
 
     s = sp.add_parser("list-users")
     s.set_defaults(func=cmd_list_users)
+
+    s = sp.add_parser("set-password")
+    s.add_argument("username")
+    s.add_argument("--password")
+    s.set_defaults(func=cmd_set_password)
+
+    s = sp.add_parser("delete-user")
+    s.add_argument("username")
+    s.add_argument("--yes", action="store_true", help="skip confirmation prompt")
+    s.set_defaults(func=cmd_delete_user)
 
     args = p.parse_args()
     args.func(args)
