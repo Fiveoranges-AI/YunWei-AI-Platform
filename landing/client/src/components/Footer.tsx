@@ -1,153 +1,215 @@
 /* =============================================================
-   Footer — Five Oranges AI
-   Style: White bg, minimal, with logo and nav links
+   Footer — Five Oranges AI · 运帷AI (v1.3)
+   Dark navy 3-column: brand+slogan / navigate / contact.
    ============================================================= */
 
-export default function Footer() {
-  const handleScroll = (href: string) => {
-    const el = document.querySelector(href);
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
+const PORTAL_URL = "https://app.fiveoranges.ai/";
+const DEMO_URL = "/demo.html";
 
+export default function Footer() {
   return (
-    <footer className="bg-white border-t border-slate-100">
-      <div className="container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-10">
-          {/* Brand */}
+    <footer style={{ padding: "4rem 0 2.5rem", background: "#0F2340", color: "#94A3B8" }}>
+      <div className="container">
+        <div className="footer-grid">
+          {/* Brand + slogan */}
           <div>
-            <div className="flex items-center gap-3 mb-4">
-              <img
-                src="/manus-storage/logo_clean_934597e8.png"
-                alt="Five Oranges AI"
-                className="h-10 w-10 object-contain"
-              />
-              <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "1.5rem" }}>
+              <div
+                style={{
+                  width: "52px",
+                  height: "52px",
+                  borderRadius: "12px",
+                  background: "#fff",
+                  padding: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src="/manus-storage/logo_clean_934597e8.png"
+                  alt=""
+                  width={40}
+                  height={40}
+                  style={{ borderRadius: "8px" }}
+                />
+              </div>
+              <div style={{ fontFamily: "Sora, sans-serif" }}>
                 <div
-                  className="font-bold text-sm"
-                  style={{ fontFamily: "Sora, sans-serif", color: "#0F2340" }}
+                  style={{
+                    fontSize: "18px",
+                    fontWeight: 700,
+                    color: "#fff",
+                    letterSpacing: "0.02em",
+                    lineHeight: 1.1,
+                  }}
                 >
-                  Five Oranges AI
+                  FIVE ORANGES
                 </div>
                 <div
-                  className="text-xs font-medium"
-                  style={{ fontFamily: "Manrope, sans-serif", color: "#2D6EA8" }}
+                  style={{
+                    fontSize: "18px",
+                    color: "#60A5FA",
+                    fontWeight: 600,
+                    letterSpacing: "0.18em",
+                    marginTop: "3px",
+                  }}
                 >
-                  运帷AI
+                  运帷 AI
                 </div>
               </div>
             </div>
-            <p
-              className="text-sm leading-relaxed mb-2"
-              style={{ fontFamily: "Manrope, sans-serif", color: "#64748B" }}
-            >
-              AI Transformation for Real-World Enterprises
-            </p>
-            <p
-              className="text-xs"
-              style={{ fontFamily: "Manrope, sans-serif", color: "#94A3B8" }}
-            >
-              让企业从经验驱动，走向数据驱动与智能执行。
-            </p>
+
+            <div style={{ display: "flex", alignItems: "baseline", gap: "14px", flexWrap: "wrap" }}>
+              <span
+                style={{
+                  fontFamily: "Sora, sans-serif",
+                  fontWeight: 700,
+                  fontSize: "1.5rem",
+                  color: "#fff",
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.1,
+                }}
+              >
+                Beyond the scope.
+              </span>
+              <span
+                style={{
+                  fontFamily: "Sora, sans-serif",
+                  fontWeight: 600,
+                  fontSize: "1rem",
+                  color: "#60A5FA",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                进无止境
+              </span>
+            </div>
           </div>
 
-          {/* Navigation */}
+          {/* Navigate */}
           <div>
-            <h4
-              className="font-semibold text-xs uppercase tracking-widest mb-4"
-              style={{ fontFamily: "Sora, sans-serif", color: "#94A3B8" }}
+            <div
+              style={{
+                fontSize: "0.825rem",
+                letterSpacing: "0.18em",
+                color: "#fff",
+                textTransform: "uppercase",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 700,
+                marginBottom: "1rem",
+              }}
             >
-              Navigation
-            </h4>
-            <div className="flex flex-col gap-2">
-              {[
-                { label: "Solutions · 解决方案", href: "#solutions" },
-                { label: "Approach · 实施方法", href: "#approach" },
-                { label: "Use Cases · 应用场景", href: "#usecases" },
-                { label: "About · 关于我们", href: "#about" },
-                { label: "Contact · 联系我们", href: "#contact" },
-              ].map((link) => (
-                <button
-                  key={link.href}
-                  onClick={() => handleScroll(link.href)}
-                  className="text-left text-sm hover:text-blue-600 transition-colors"
-                  style={{ fontFamily: "Manrope, sans-serif", color: "#475569" }}
-                >
-                  {link.label}
-                </button>
-              ))}
+              Navigate
             </div>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.625rem",
+                fontSize: "0.9375rem",
+              }}
+            >
+              <li>
+                <a href="#solutions" className="footer-link" style={{ color: "#94A3B8" }}>
+                  解决方案 · Solutions
+                </a>
+              </li>
+              <li>
+                <a href="#approach" className="footer-link" style={{ color: "#94A3B8" }}>
+                  方法论 · Approach
+                </a>
+              </li>
+              <li>
+                <a href="#use-cases" className="footer-link" style={{ color: "#94A3B8" }}>
+                  案例 · Use Cases
+                </a>
+              </li>
+              <li>
+                <a
+                  href={DEMO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="footer-link"
+                  style={{ color: "#94A3B8" }}
+                >
+                  演示 · Demo
+                </a>
+              </li>
+              <li>
+                <a
+                  href={PORTAL_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="footer-link"
+                  style={{ color: "#60A5FA", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  客户登录 · Client Portal
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M7 17L17 7M7 7h10v10" />
+                  </svg>
+                </a>
+              </li>
+            </ul>
           </div>
 
           {/* Contact */}
           <div>
-            <h4
-              className="font-semibold text-xs uppercase tracking-widest mb-4"
-              style={{ fontFamily: "Sora, sans-serif", color: "#94A3B8" }}
+            <div
+              style={{
+                fontSize: "0.825rem",
+                letterSpacing: "0.18em",
+                color: "#fff",
+                textTransform: "uppercase",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 700,
+                marginBottom: "1rem",
+              }}
             >
-              Contact · 联系方式
-            </h4>
-            <div className="flex flex-col gap-3">
-              <a
-                href="mailto:contact@fiveoranges.ai"
-                className="flex items-center gap-2.5 text-sm hover:text-blue-600 transition-colors"
-                style={{ fontFamily: "Manrope, sans-serif", color: "#475569" }}
-              >
-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-                  <path d="M1.5 3.5h12v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-8z" stroke="#2D6EA8" strokeWidth="1.3"/>
-                  <path d="M1.5 3.5l6 5 6-5" stroke="#2D6EA8" strokeWidth="1.3" strokeLinecap="round"/>
-                </svg>
-                contact@fiveoranges.ai
-              </a>
-              <div
-                className="flex items-center gap-2.5 text-sm"
-                style={{ fontFamily: "Manrope, sans-serif", color: "#475569" }}
-              >
-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-                  <circle cx="7.5" cy="7.5" r="5.5" stroke="#2D6EA8" strokeWidth="1.3"/>
-                  <path d="M7.5 2c-1.8 1.8-2.8 3.6-2.8 5.5s1 3.7 2.8 5.5M7.5 2c1.8 1.8 2.8 3.6 2.8 5.5s-1 3.7-2.8 5.5M2 7.5h11" stroke="#2D6EA8" strokeWidth="1.1"/>
-                </svg>
-                fiveoranges.ai
-              </div>
+              Contact
             </div>
-
-            {/* Five pillars mini */}
-            <div className="mt-6 pt-6 border-t border-slate-100">
-              <p
-                className="text-xs font-semibold uppercase tracking-widest mb-2"
-                style={{ fontFamily: "Sora, sans-serif", color: "#94A3B8" }}
-              >
-                Five Capabilities
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {["Strategy", "Process", "Data", "AI", "Execution"].map((cap) => (
-                  <span
-                    key={cap}
-                    className="text-xs px-2 py-0.5 rounded"
-                    style={{ background: "#EEF4FB", color: "#2D6EA8", fontFamily: "Sora, sans-serif" }}
-                  >
-                    {cap}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.625rem",
+                fontSize: "0.9375rem",
+              }}
+            >
+              <li>
+                <a
+                  href="mailto:contact@fiveoranges.ai"
+                  className="footer-link"
+                  style={{ color: "#94A3B8" }}
+                >
+                  contact@fiveoranges.ai
+                </a>
+              </li>
+              <li>Shanghai · 上海</li>
+            </ul>
           </div>
         </div>
 
-        {/* Bottom bar */}
-        <div className="rule-line mb-6" />
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p
-            className="text-xs"
-            style={{ fontFamily: "Manrope, sans-serif", color: "#94A3B8" }}
-          >
-            © {new Date().getFullYear()} Five Oranges AI (运帷AI). All rights reserved.
-          </p>
-          <p
-            className="text-xs"
-            style={{ fontFamily: "Manrope, sans-serif", color: "#94A3B8" }}
-          >
-            fiveoranges.ai · From fragmented operations to intelligent execution.
-          </p>
+        <div
+          style={{
+            marginTop: "3rem",
+            paddingTop: "1.5rem",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            fontSize: "0.78rem",
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            gap: "0.5rem",
+          }}
+        >
+          <span>© {new Date().getFullYear()} Five Oranges AI · 运帷 AI. All rights reserved.</span>
         </div>
       </div>
     </footer>

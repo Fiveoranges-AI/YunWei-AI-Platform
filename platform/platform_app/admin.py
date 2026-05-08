@@ -30,6 +30,14 @@ def cmd_add_tenant(args):
     secret = secrets.token_urlsafe(32)
     key_id = f"k-{int(time.time())}"
     uid = str(uuid.uuid4())
+    # Auto-provision the enterprise if this is the first agent for the client.
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, "
+        "onboarding_stage, created_at) "
+        "VALUES (%s, %s, %s, 'trial', 'signed_up', %s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (args.client, args.client, args.display_name, _now()),
+    )
     db.main().execute(
         "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
         "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
@@ -53,28 +61,66 @@ def cmd_add_tenant(args):
 
 
 def cmd_grant(args):
+    """Default: grant *enterprise membership* (blanket access to all
+    agents). Use ``--agent-only`` for the consultant exception path —
+    writes to agent_grants instead.
+    """
     db.init()
     user_id = f"u_{args.username}"
+    if args.agent_only:
+        if not args.agent:
+            sys.exit("--agent-only requires the agent argument")
+        db.main().execute(
+            "INSERT INTO agent_grants (user_id, client_id, agent_id, role, granted_at, granted_by) "
+            "VALUES (%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT (user_id, client_id, agent_id) DO UPDATE "
+            "SET role=EXCLUDED.role, granted_at=EXCLUDED.granted_at, granted_by=EXCLUDED.granted_by",
+            (user_id, args.client, args.agent, args.role, _now(), "cli"),
+        )
+        db.invalidate_acl(user_id, args.client, args.agent)
+        print(f"granted (agent-only) {args.username} -> {args.client}/{args.agent} ({args.role})")
+        return
+    role = args.role if args.role in ("owner", "admin", "member") else "member"
     db.main().execute(
-        "INSERT INTO user_tenant (user_id, client_id, agent_id, role, granted_at, granted_by) "
-        "VALUES (%s,%s,%s,%s,%s,%s) "
-        "ON CONFLICT (user_id, client_id, agent_id) DO UPDATE "
+        "INSERT INTO enterprise_members (user_id, enterprise_id, role, granted_at, granted_by) "
+        "VALUES (%s,%s,%s,%s,%s) "
+        "ON CONFLICT (user_id, enterprise_id) DO UPDATE "
         "SET role=EXCLUDED.role, granted_at=EXCLUDED.granted_at, granted_by=EXCLUDED.granted_by",
-        (user_id, args.client, args.agent, args.role, _now(), "cli"),
+        (user_id, args.client, role, _now(), "cli"),
     )
-    db.invalidate_acl(user_id, args.client, args.agent)
-    print(f"granted {args.username} -> {args.client}/{args.agent} ({args.role})")
+    # Invalidate ACL cache for any agent the user might have queried.
+    # We don't know which agents, so invalidate for all known agents under
+    # this client — cheap, since this is a CLI command, not a hot path.
+    for r in db.main().execute(
+        "SELECT agent_id FROM tenants WHERE client_id=%s", (args.client,)
+    ).fetchall():
+        db.invalidate_acl(user_id, args.client, r["agent_id"])
+    print(f"granted {args.username} as {role} of enterprise {args.client}")
 
 
 def cmd_revoke(args):
     db.init()
     user_id = f"u_{args.username}"
+    if args.agent_only:
+        if not args.agent:
+            sys.exit("--agent-only requires the agent argument")
+        db.main().execute(
+            "DELETE FROM agent_grants "
+            "WHERE user_id=%s AND client_id=%s AND agent_id=%s",
+            (user_id, args.client, args.agent),
+        )
+        db.invalidate_acl(user_id, args.client, args.agent)
+        print(f"revoked agent_grant {args.username} on {args.client}/{args.agent}")
+        return
     db.main().execute(
-        "DELETE FROM user_tenant WHERE user_id=%s AND client_id=%s AND agent_id=%s",
-        (user_id, args.client, args.agent),
+        "DELETE FROM enterprise_members WHERE user_id=%s AND enterprise_id=%s",
+        (user_id, args.client),
     )
-    db.invalidate_acl(user_id, args.client, args.agent)
-    print("revoked")
+    for r in db.main().execute(
+        "SELECT agent_id FROM tenants WHERE client_id=%s", (args.client,)
+    ).fetchall():
+        db.invalidate_acl(user_id, args.client, r["agent_id"])
+    print(f"revoked membership of {args.username} from enterprise {args.client}")
 
 
 def cmd_rotate_key(args):
@@ -109,8 +155,63 @@ def cmd_clear_prev_key(args):
 
 def cmd_list_users(args):
     db.init()
-    for r in db.main().execute("SELECT id, username, display_name, last_login FROM users").fetchall():
-        print(f"{r['id']:20} {r['username']:15} {r['display_name']:20} last_login={r['last_login']}")
+    for r in db.main().execute(
+        "SELECT id, username, display_name, last_login, is_platform_admin FROM users"
+    ).fetchall():
+        flag = " [PLATFORM ADMIN]" if r["is_platform_admin"] else ""
+        print(f"{r['id']:20} {r['username']:15} {r['display_name']:20} "
+              f"last_login={r['last_login']}{flag}")
+
+
+def cmd_add_enterprise(args):
+    db.init()
+    eid = args.id.strip().lower()
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, industry, "
+        "region, plan, onboarding_stage, created_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
+        "ON CONFLICT (id) DO NOTHING",
+        (eid, args.legal_name or eid, args.display_name or eid,
+         args.industry, args.region, args.plan, "signed_up", _now()),
+    )
+    print(f"created enterprise id={eid}")
+
+
+def cmd_list_enterprises(args):
+    db.init()
+    rows = db.main().execute(
+        "SELECT e.id, e.display_name, e.plan, e.onboarding_stage, e.active, "
+        "(SELECT COUNT(*) FROM enterprise_members em WHERE em.enterprise_id=e.id) AS members, "
+        "(SELECT COUNT(*) FROM tenants t WHERE t.client_id=e.id AND t.active=1) AS agents "
+        "FROM enterprises e ORDER BY e.created_at DESC"
+    ).fetchall()
+    for r in rows:
+        active = "" if r["active"] else " [INACTIVE]"
+        print(f"{r['id']:20} {r['display_name']:20} plan={r['plan']:10} "
+              f"stage={r['onboarding_stage']:10} members={r['members']} "
+              f"agents={r['agents']}{active}")
+
+
+def cmd_promote_admin(args):
+    db.init()
+    res = db.main().execute(
+        "UPDATE users SET is_platform_admin=1 WHERE username=%s RETURNING id",
+        (args.username,),
+    ).fetchone()
+    if not res:
+        sys.exit(f"user not found: {args.username}")
+    print(f"promoted {args.username} → platform admin")
+
+
+def cmd_demote_admin(args):
+    db.init()
+    res = db.main().execute(
+        "UPDATE users SET is_platform_admin=0 WHERE username=%s RETURNING id",
+        (args.username,),
+    ).fetchone()
+    if not res:
+        sys.exit(f"user not found: {args.username}")
+    print(f"demoted {args.username}")
 
 
 def cmd_set_password(args):
@@ -143,12 +244,29 @@ def cmd_delete_user(args):
             return
     auth.revoke_user_sessions(user_id)
     db.main().execute("DELETE FROM api_keys WHERE user_id=%s", (user_id,))
-    grants = db.main().execute(
-        "SELECT client_id, agent_id FROM user_tenant WHERE user_id=%s", (user_id,),
+    # Collect (client_id, agent_id) pairs we need to invalidate from the
+    # ACL cache: every agent under enterprises the user belongs to, plus
+    # any per-agent grants.
+    pairs: set[tuple[str, str]] = set()
+    enterprises = db.main().execute(
+        "SELECT enterprise_id FROM enterprise_members WHERE user_id=%s",
+        (user_id,),
     ).fetchall()
-    for g in grants:
-        db.invalidate_acl(user_id, g["client_id"], g["agent_id"])
-    db.main().execute("DELETE FROM user_tenant WHERE user_id=%s", (user_id,))
+    for em in enterprises:
+        for t in db.main().execute(
+            "SELECT agent_id FROM tenants WHERE client_id=%s",
+            (em["enterprise_id"],),
+        ).fetchall():
+            pairs.add((em["enterprise_id"], t["agent_id"]))
+    for ag in db.main().execute(
+        "SELECT client_id, agent_id FROM agent_grants WHERE user_id=%s",
+        (user_id,),
+    ).fetchall():
+        pairs.add((ag["client_id"], ag["agent_id"]))
+    for client_id, agent_id in pairs:
+        db.invalidate_acl(user_id, client_id, agent_id)
+    db.main().execute("DELETE FROM agent_grants WHERE user_id=%s", (user_id,))
+    db.main().execute("DELETE FROM enterprise_members WHERE user_id=%s", (user_id,))
     db.main().execute("DELETE FROM users WHERE id=%s", (user_id,))
     print(f"deleted user_id={user_id}")
 
@@ -168,13 +286,23 @@ def main():
     s.add_argument("--container-url", required=True)
     s.set_defaults(func=cmd_add_tenant)
 
-    s = sp.add_parser("grant")
-    s.add_argument("username"); s.add_argument("client"); s.add_argument("agent")
-    s.add_argument("--role", default="user")
+    s = sp.add_parser("grant",
+        help="Grant enterprise membership (default) or per-agent grant.")
+    s.add_argument("username")
+    s.add_argument("client", help="enterprise_id")
+    s.add_argument("agent", nargs="?", help="required only with --agent-only")
+    s.add_argument("--role", default="member",
+        help="member | admin | owner (enterprise) | user (--agent-only)")
+    s.add_argument("--agent-only", action="store_true",
+        help="Write to agent_grants instead of enterprise_members.")
     s.set_defaults(func=cmd_grant)
 
-    s = sp.add_parser("revoke")
-    s.add_argument("username"); s.add_argument("client"); s.add_argument("agent")
+    s = sp.add_parser("revoke",
+        help="Revoke enterprise membership (default) or per-agent grant.")
+    s.add_argument("username")
+    s.add_argument("client")
+    s.add_argument("agent", nargs="?")
+    s.add_argument("--agent-only", action="store_true")
     s.set_defaults(func=cmd_revoke)
 
     s = sp.add_parser("rotate-tenant-key")
@@ -197,6 +325,29 @@ def main():
     s.add_argument("username")
     s.add_argument("--yes", action="store_true", help="skip confirmation prompt")
     s.set_defaults(func=cmd_delete_user)
+
+    s = sp.add_parser("add-enterprise",
+        help="Create an enterprise (auto-created on add-tenant for new client_ids).")
+    s.add_argument("id", help="enterprise_id (= legacy client_id)")
+    s.add_argument("--legal-name")
+    s.add_argument("--display-name")
+    s.add_argument("--industry")
+    s.add_argument("--region")
+    s.add_argument("--plan", default="trial",
+        choices=["trial", "standard", "enterprise"])
+    s.set_defaults(func=cmd_add_enterprise)
+
+    s = sp.add_parser("list-enterprises")
+    s.set_defaults(func=cmd_list_enterprises)
+
+    s = sp.add_parser("promote-admin",
+        help="Promote a user to platform admin (cross-enterprise access).")
+    s.add_argument("username")
+    s.set_defaults(func=cmd_promote_admin)
+
+    s = sp.add_parser("demote-admin")
+    s.add_argument("username")
+    s.set_defaults(func=cmd_demote_admin)
 
     args = p.parse_args()
     args.func(args)

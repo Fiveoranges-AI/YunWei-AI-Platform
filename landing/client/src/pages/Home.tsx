@@ -1,13 +1,14 @@
 /* =============================================================
-   Home — Five Oranges AI Landing Page
-   Assembles all sections in order
+   Home — Five Oranges AI · 运帷AI
+   Section order per v1.3 design:
+   Navbar → Hero → Solutions → Why → Approach → UseCases →
+   Philosophy → CTA → Footer
    ============================================================= */
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import SolutionsSection from "@/components/SolutionsSection";
-import CustomersSection from "@/components/CustomersSection";
 import WhySection from "@/components/WhySection";
 import ApproachSection from "@/components/ApproachSection";
 import UseCasesSection from "@/components/UseCasesSection";
@@ -27,17 +28,17 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
-      <HeroSection />
-      <SolutionsSection />
-      <CustomersSection />
-      <WhySection />
-      <ApproachSection />
-      <UseCasesSection />
-      <PhilosophySection />
-      <CTASection />
+      <main>
+        <HeroSection />
+        <SolutionsSection />
+        <WhySection />
+        <ApproachSection />
+        <UseCasesSection />
+        <PhilosophySection />
+        <CTASection />
+      </main>
       <Footer />
 
-      {/* Scroll to top */}
       {showTop && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
@@ -46,7 +47,13 @@ export default function Home() {
           aria-label="Scroll to top"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M9 14V4M5 8l4-4 4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <path
+              d="M9 14V4M5 8l4-4 4 4"
+              stroke="white"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
       )}

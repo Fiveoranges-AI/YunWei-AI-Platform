@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<title>日报详情 · 运帷 AI</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>body{max-width:800px;margin:24px auto;padding:0 16px;font-family:system-ui;line-height:1.6}</style>
+</head><body>
+<div id="header"></div>
+<div id="content">加载中...</div>
+<script>
+const id = location.pathname.split('/').pop();
+fetch('/api/daily-report/reports/' + id)
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('header').innerHTML =
+      '<h1>' + (d.report_date || '?') + ' · ' + (d.status || '?') + '</h1>' +
+      '<button onclick="regen()">重新生成</button> ' +
+      '<a href="/yinhu/super-xiaochen/?prefill=' +
+        encodeURIComponent('刚才看了' + d.report_date + '的日报，能展开聊聊吗？') +
+        '">问小陈</a>';
+    document.getElementById('content').innerHTML = d.content_html || '<em>报告内容暂缺</em>';
+  });
+function regen() {
+  fetch(location.pathname.replace('/daily-report/', '/api/daily-report/reports/yinhu/regenerate'),
+    {method:'POST', headers:{'content-type':'application/json'},
+     body: JSON.stringify({date: location.pathname.split('/').pop()})});
+  alert('已触发重生成，几秒后刷新页面');
+}
+</script>
+</body></html>

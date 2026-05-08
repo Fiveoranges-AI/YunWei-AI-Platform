@@ -737,7 +737,7 @@ fiveoranges.ai/demo                          ← Vercel 主站 CTA
 ./platform-admin set-password <username> [--password PWD]
                                                          → 改密后自动撤销该用户所有现存 session
 ./platform-admin delete-user <username> [--yes]
-                                                         → 级联清 sessions / api_keys / user_tenant;
+                                                         → 级联清 sessions / api_keys / enterprise_members / agent_grants;
                                                            proxy_log 故意保留作审计
 ```
 

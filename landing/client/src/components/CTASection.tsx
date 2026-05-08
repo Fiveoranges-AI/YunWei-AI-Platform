@@ -1,145 +1,186 @@
 /* =============================================================
-   CTASection — Final call to action + contact
-   Style: Light blue-gray bg with subtle pattern, centered
+   CTA — Ready to see it run on your data? (v1.3)
+   2-column layout: copy + 3-button cluster (Demo / Book / Portal).
    ============================================================= */
 
-import { useEffect, useRef, useState } from "react";
-
-function useInView(threshold = 0.2) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, inView };
-}
+const DEMO_URL = "/demo.html";
+const PORTAL_URL = "https://app.fiveoranges.ai/";
+const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
 
 export default function CTASection() {
-  const { ref, inView } = useInView();
-
   return (
-    <section id="contact" className="py-24 lg:py-32 relative overflow-hidden">
-      {/* Background */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `url(https://d2xsxph8kpxj0f.cloudfront.net/310519663273870289/64xTVtv7XqMZ3588Nzt2Xd/cta_bg-88CTvGGdCovCm6p83giqi7.webp)`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
-      {/* Overlay */}
-      <div className="absolute inset-0" style={{ background: "rgba(238,244,251,0.92)" }} />
-
-      {/* V watermark */}
-      <span
-        className="watermark-v"
-        style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
-      >
-        V
-      </span>
-
-      <div className="container relative z-10" ref={ref}>
-        <div
-          className="max-w-2xl mx-auto text-center"
-          style={{
-            opacity: inView ? 1 : 0,
-            transform: inView ? "translateY(0)" : "translateY(24px)",
-            transition: "opacity 0.6s ease, transform 0.6s ease",
-          }}
-        >
-          <span className="section-label mb-6 inline-flex">
-            <span className="slash-accent" style={{ width: "1rem" }} />
-            Get Started · 开始合作
-          </span>
-
-          <h2
-            className="font-bold leading-tight mb-4"
-            style={{ fontFamily: "Sora, sans-serif", fontSize: "clamp(2rem, 4vw, 3rem)", color: "#0F2340" }}
-          >
-            Ready to Build Your
-            <br />
-            <span style={{ color: "#2D6EA8" }}>AI Operating Layer?</span>
-          </h2>
-
-          <p
-            className="text-base font-medium mb-3"
-            style={{ color: "#2D6EA8", fontFamily: "Manrope, sans-serif" }}
-          >
-            准备好构建你的企业 AI 运营层了吗？
-          </p>
-
-          <p
-            className="text-sm leading-relaxed mb-10"
-            style={{ fontFamily: "Manrope, sans-serif", color: "#475569" }}
-          >
-            Start with a focused strategy call. We'll identify the highest-value AI opportunity
-            in your operations and outline a practical path to implementation — no hype, no demos,
-            just actionable next steps.
-          </p>
-
-          {/* CTA buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <a
-              href="mailto:contact@fiveoranges.ai"
-              className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-lg text-white font-semibold text-sm transition-all duration-200 hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5"
-              style={{ background: "#2D6EA8", fontFamily: "Sora, sans-serif" }}
-            >
-              Book a Strategy Call
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </a>
-            <a
-              href="mailto:contact@fiveoranges.ai"
-              className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-lg font-semibold text-sm border transition-all duration-200 hover:bg-white hover:-translate-y-0.5"
+    <section
+      id="contact"
+      style={{
+        padding: "6rem 0",
+        background: "#FFFFFF",
+        borderTop: "1px solid #E2E8F0",
+      }}
+    >
+      <div className="container">
+        <div className="cta-grid">
+          <div style={{ maxWidth: "620px" }}>
+            <span className="section-label">
+              <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
+              进无止境 · BEYOND THE SCOPE
+            </span>
+            <h2
               style={{
-                fontFamily: "Sora, sans-serif",
+                marginTop: "1rem",
+                fontSize: "clamp(1.85rem, 3.2vw, 2.625rem)",
+                lineHeight: 1.2,
+                fontWeight: 700,
                 color: "#0F2340",
-                borderColor: "rgba(15,35,64,0.25)",
-                background: "rgba(255,255,255,0.7)",
+                letterSpacing: "-0.01em",
+                fontFamily: "Sora, sans-serif",
               }}
             >
-              Contact Five Oranges AI
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 4h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke="currentColor" strokeWidth="1.4"/>
-                <path d="M2 4l6 5 6-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
-            </a>
+              Ready to see it run on your data?
+            </h2>
+            <div
+              style={{
+                marginTop: "0.75rem",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 500,
+                fontSize: "1.0625rem",
+                color: "#475569",
+              }}
+            >
+              想看 AI 在你自己的数据上跑起来吗？
+            </div>
+            <p
+              style={{
+                marginTop: "1.25rem",
+                color: "#475569",
+                fontSize: "1rem",
+                lineHeight: 1.7,
+              }}
+            >
+              预约 30 分钟战略通话。我们将和你一起诊断你最痛的那条流程，并诚实地告诉你——AI 是否是合适的解法。
+            </p>
           </div>
 
-          {/* Contact info */}
           <div
-            className="inline-flex flex-col sm:flex-row gap-6 items-center px-8 py-5 rounded-xl border border-slate-200 bg-white/80"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.875rem",
+              justifyContent: "flex-start",
+            }}
           >
-            <div className="flex items-center gap-2.5">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 4h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke="#2D6EA8" strokeWidth="1.4"/>
-                <path d="M2 4l6 5 6-5" stroke="#2D6EA8" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
-              <a
-                href="mailto:contact@fiveoranges.ai"
-                className="text-sm font-medium hover:underline"
-                style={{ fontFamily: "Manrope, sans-serif", color: "#0F2340" }}
-              >
-                contact@fiveoranges.ai
-              </a>
-            </div>
-            <div className="hidden sm:block w-px h-4 bg-slate-200" />
-            <div className="flex items-center gap-2.5">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="#2D6EA8" strokeWidth="1.4"/>
-                <path d="M8 2c-2 2-3 4-3 6s1 4 3 6M8 2c2 2 3 4 3 6s-1 4-3 6M2 8h12" stroke="#2D6EA8" strokeWidth="1.2"/>
-              </svg>
-              <span
-                className="text-sm font-medium"
-                style={{ fontFamily: "Manrope, sans-serif", color: "#0F2340" }}
-              >
-                fiveoranges.ai
+            <a
+              href={DEMO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover-lift"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "14px 22px",
+                background: "var(--brand-blue)",
+                color: "#fff",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 700,
+                fontSize: "15px",
+                borderRadius: "10px",
+                boxShadow: "0 8px 24px rgba(45,110,168,0.32)",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
+                <span>查看演示</span>
+                <span
+                  style={{
+                    fontSize: "10.5px",
+                    letterSpacing: "0.14em",
+                    opacity: 0.78,
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Try Live Demo
+                </span>
               </span>
-            </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </a>
+
+            <a
+              href={CONTACT_HREF}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "14px 22px",
+                color: "#0F2340",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 700,
+                fontSize: "15px",
+                borderRadius: "10px",
+                border: "1.5px solid rgba(15,35,64,0.18)",
+                background: "#fff",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
+                <span>预约咨询</span>
+                <span
+                  style={{
+                    fontSize: "10.5px",
+                    letterSpacing: "0.14em",
+                    opacity: 0.6,
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Book a Call
+                </span>
+              </span>
+            </a>
+
+            <a
+              href={PORTAL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "14px 22px",
+                color: "var(--brand-blue)",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 700,
+                fontSize: "15px",
+                borderRadius: "10px",
+                border: "1.5px solid rgba(45,110,168,0.5)",
+                background: "#fff",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
+                <span>客户登录</span>
+                <span
+                  style={{
+                    fontSize: "10.5px",
+                    letterSpacing: "0.14em",
+                    opacity: 0.7,
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Client Portal
+                </span>
+              </span>
+            </a>
           </div>
         </div>
       </div>

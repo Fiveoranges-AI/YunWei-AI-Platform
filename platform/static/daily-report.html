@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<title>日报 · 运帷 AI</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+</head><body>
+<h1>日报中心</h1>
+<div id="reports">加载中...</div>
+<script>
+fetch('/api/daily-report/reports?tenant=yinhu')
+  .then(r => r.json())
+  .then(d => {
+    const el = document.getElementById('reports');
+    if (!d.reports || d.reports.length === 0) { el.textContent = '暂无日报'; return; }
+    el.innerHTML = d.reports.map(r =>
+      '<div style="padding:8px;border-bottom:1px solid #eee">' +
+      '<a href="/daily-report/' + r.id + '">' + r.report_date + '</a> · ' + r.status +
+      '</div>'
+    ).join('');
+  });
+</script>
+</body></html>

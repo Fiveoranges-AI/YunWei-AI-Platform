@@ -24,8 +24,10 @@ def _clean_state():
     # Truncate (PostgreSQL CASCADE handles FK chain)
     with _db.main()._get().cursor() as cur:
         cur.execute(
-            "TRUNCATE api_keys, platform_sessions, user_tenant, tenants, users, proxy_log "
-            "RESTART IDENTITY CASCADE"
+            "TRUNCATE api_keys, platform_sessions, agent_grants, "
+            "enterprise_members, tenants, enterprises, users, "
+            "proxy_log, bronze_files, silver_mappings, "
+            "daily_reports, daily_report_subscriptions RESTART IDENTITY CASCADE"
         )
     # Flush Redis test DB
     redis.from_url(os.environ["REDIS_URL"]).flushdb()

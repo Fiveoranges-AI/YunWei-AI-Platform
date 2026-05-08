@@ -1,0 +1,121 @@
+# Silver canonical schema v1 — Manufacturing customer-order tracking MVP (spec §8 v2)
+#
+# Domain focus: 老板查订单 / 收款 / 交付 — the silver-lake / yinhu use case.
+# Five tables:
+#   customers              — customer master with contact + tier + lineage
+#   orders                 — manufacturing customer orders (status / payment / delivery / risk)
+#   order_items            — line items under each order
+#   order_source_records   — original source materials for AI-assisted intake
+#   boss_query_logs        — natural-language queries from boss + generated answers
+#
+# Type notes:
+#   - decimal types MUST be quoted in yaml (flow-style comma is a delimiter otherwise)
+#   - `json` columns store JSON-serialized values (DuckDB JSON type)
+#   - source_type / source_lineage / extra blood-lineage columns appear only on
+#     primary business tables (customers, orders); order_items inherits via FK,
+#     order_source_records IS a source, boss_query_logs is internal log.
+
+schema_version: "1"
+last_updated: "2026-05-05"
+
+tables:
+  customers:
+    description: "Customer master data for order tracking MVP."
+    primary_key: [customer_id]
+    columns:
+      - {name: customer_id, type: string, nullable: false}
+      - {name: display_name, type: string, nullable: false, description: "Customer display name."}
+      - {name: contact_name, type: string, nullable: true}
+      - {name: contact_phone, type: string, nullable: true}
+      - {name: region, type: string, nullable: true}
+      - {name: tier, type: enum, nullable: true, values: [A, B, C, unknown]}
+      - {name: first_order_date, type: date, nullable: true}
+      - {name: notes, type: string, nullable: true}
+      - {name: source_type, type: string, nullable: false, description: "manual_ui | file_excel | erp_kingdee | erp_yongyou | ai_extracted"}
+      - {name: source_lineage, type: json, nullable: true}
+      - {name: extra, type: json, nullable: true}
+      - {name: created_at, type: datetime, nullable: false}
+      - {name: updated_at, type: datetime, nullable: false}
+
+  orders:
+    description: "Manufacturing customer orders tracked for status, payment collection, and delivery."
+    primary_key: [order_id]
+    columns:
+      - {name: order_id, type: string, nullable: false, description: "Unified order ID."}
+      - {name: order_number, type: string, nullable: true, description: "Business-facing order number from contract, ERP, or manual input."}
+      - {name: customer_id, type: string, nullable: false, description: "FK -> customers.customer_id"}
+      - {name: customer_name_snapshot, type: string, nullable: false, description: "Customer name at time of order creation."}
+      - {name: order_date, type: date, nullable: false}
+      - {name: total_amount_cny, type: "decimal(18,2)", nullable: false}
+      - {name: paid_amount_cny, type: "decimal(18,2)", nullable: false, default: 0}
+      - {name: outstanding_amount_cny, type: "decimal(18,2)", nullable: false, description: "total_amount_cny - paid_amount_cny"}
+      - {name: payment_terms, type: string, nullable: true, description: "Original payment terms text."}
+      - {name: expected_payment_date, type: date, nullable: true}
+      - {name: payment_status, type: enum, nullable: false, values: [unknown, unpaid, partial, paid, overdue]}
+      - {name: delivery_deadline, type: date, nullable: true, description: "Promised delivery date."}
+      - {name: actual_ship_date, type: date, nullable: true}
+      - {name: actual_delivery_date, type: date, nullable: true}
+      - {name: status, type: enum, nullable: false, values: [draft, pending_payment, pending_production_order, in_production, pending_shipment, shipped, delivered, pending_collection, completed, needs_attention, cancelled]}
+      - {name: sales_owner, type: string, nullable: true}
+      - {name: follow_up_owner, type: string, nullable: true}
+      - {name: production_owner, type: string, nullable: true}
+      - {name: production_requirements_summary, type: string, nullable: true, description: "AI or user summarized production requirements, not full process routing."}
+      - {name: is_custom_order, type: boolean, nullable: true}
+      - {name: requires_technical_confirmation, type: boolean, nullable: true}
+      - {name: risk_flags, type: json, nullable: true, description: "Array of risk flags such as missing_delivery_date, payment_overdue, delivery_risk."}
+      - {name: notes, type: string, nullable: true}
+      - {name: source_type, type: string, nullable: false, description: "erp_kingdee | erp_yongyou | file_excel | file_pdf | image | pasted_text | manual_ui"}
+      - {name: source_lineage, type: json, nullable: true}
+      - {name: extra, type: json, nullable: true}
+      - {name: created_at, type: datetime, nullable: false}
+      - {name: updated_at, type: datetime, nullable: false}
+
+  order_items:
+    description: "Line items under each customer order."
+    primary_key: [order_item_id]
+    columns:
+      - {name: order_item_id, type: string, nullable: false}
+      - {name: order_id, type: string, nullable: false, description: "FK -> orders.order_id"}
+      - {name: sku, type: string, nullable: true}
+      - {name: product_name, type: string, nullable: false}
+      - {name: model_specification, type: string, nullable: true}
+      - {name: material, type: string, nullable: true, description: "For refractory/material businesses: alumina, zirconia, graphite, etc."}
+      - {name: quantity, type: "decimal(18,3)", nullable: true}
+      - {name: unit, type: string, nullable: true}
+      - {name: unit_price_cny, type: "decimal(18,2)", nullable: true}
+      - {name: subtotal_cny, type: "decimal(18,2)", nullable: true}
+      - {name: production_requirements, type: string, nullable: true}
+      - {name: quality_requirements, type: string, nullable: true}
+      - {name: packaging_requirements, type: string, nullable: true}
+      - {name: remarks, type: string, nullable: true}
+      - {name: extra, type: json, nullable: true}
+      - {name: created_at, type: datetime, nullable: false}
+
+  order_source_records:
+    description: "Original source materials used for AI-assisted order intake."
+    primary_key: [source_record_id]
+    columns:
+      - {name: source_record_id, type: string, nullable: false}
+      - {name: order_id, type: string, nullable: true, description: "FK -> orders.order_id; nullable before order confirmation."}
+      - {name: source_type, type: enum, nullable: false, values: [manual_ui, pasted_text, file_pdf, image, file_excel, voice_transcript]}
+      - {name: raw_text, type: string, nullable: true, description: "Pasted text or OCR transcript."}
+      - {name: file_url, type: string, nullable: true}
+      - {name: original_file_name, type: string, nullable: true}
+      - {name: ai_extraction_json, type: json, nullable: true}
+      - {name: ai_confidence_score, type: "decimal(5,4)", nullable: true}
+      - {name: missing_fields, type: json, nullable: true}
+      - {name: risk_flags, type: json, nullable: true}
+      - {name: confirmed_by_user, type: boolean, nullable: false, default: false}
+      - {name: confirmed_at, type: datetime, nullable: true}
+      - {name: created_at, type: datetime, nullable: false}
+
+  boss_query_logs:
+    description: "Natural language queries made by business owner and generated answers."
+    primary_key: [query_id]
+    columns:
+      - {name: query_id, type: string, nullable: false}
+      - {name: user_question, type: string, nullable: false}
+      - {name: query_intent, type: enum, nullable: true, values: [order_status, unpaid_orders, delivery_deadline, customer_orders, monthly_summary, risk_orders, today_delivery, this_week_delivery, unknown]}
+      - {name: generated_answer, type: string, nullable: true}
+      - {name: related_order_ids, type: json, nullable: true}
+      - {name: created_at, type: datetime, nullable: false}
