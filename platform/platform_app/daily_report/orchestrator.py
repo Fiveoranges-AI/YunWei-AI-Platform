@@ -70,7 +70,7 @@ async def run(
 def _status_from_payload(payload: dict[str, Any]) -> str:
     sections = payload.get("sections", {})
     statuses = {s.get("status") for s in sections.values()}
-    if statuses <= {"ok"}:
+    if statuses and statuses <= {"ok"}:
         return "ready"
     return "partial"
 

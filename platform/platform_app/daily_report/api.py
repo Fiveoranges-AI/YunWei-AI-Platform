@@ -100,12 +100,13 @@ def html_detail(request: Request, report_id: str):
 
 
 def _enforce_tenant_acl(user: dict, tenant: str) -> None:
-    """Allow if user has has_acl(user, tenant, 'daily-report'). Admin bypasses.
+    """Allow if user has has_acl(user, tenant, 'daily-report'). Platform admin bypasses.
 
     Reuses platform's ACL helper (post-migration 004), which checks
-    enterprise_members ∪ agent_grants.
+    enterprise_members ∪ agent_grants. Platform admins (users.is_platform_admin=1)
+    bypass the ACL check, consistent with admin_api._require_platform_admin.
     """
-    if user.get("role") == "admin":
+    if db.is_platform_admin(user["id"]):
         return
     if not db.has_acl(user["id"], tenant, "daily-report"):
         raise HTTPException(403, {"error": "not_authorized_for_tenant"})

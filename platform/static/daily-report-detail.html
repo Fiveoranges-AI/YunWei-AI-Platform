@@ -9,21 +9,26 @@
 <div id="content">加载中...</div>
 <script>
 const id = location.pathname.split('/').pop();
+let reportDate = null;
+let tenantId = null;
 fetch('/api/daily-report/reports/' + id)
   .then(r => r.json())
   .then(d => {
+    reportDate = d.report_date;
+    tenantId = d.tenant_id;
     document.getElementById('header').innerHTML =
       '<h1>' + (d.report_date || '?') + ' · ' + (d.status || '?') + '</h1>' +
       '<button onclick="regen()">重新生成</button> ' +
-      '<a href="/yinhu/super-xiaochen/?prefill=' +
+      '<a href="/' + (d.tenant_id || 'yinhu') + '/super-xiaochen/?prefill=' +
         encodeURIComponent('刚才看了' + d.report_date + '的日报，能展开聊聊吗？') +
         '">问小陈</a>';
     document.getElementById('content').innerHTML = d.content_html || '<em>报告内容暂缺</em>';
   });
 function regen() {
-  fetch(location.pathname.replace('/daily-report/', '/api/daily-report/reports/yinhu/regenerate'),
+  if (!reportDate || !tenantId) return;
+  fetch('/api/daily-report/reports/' + tenantId + '/regenerate',
     {method:'POST', headers:{'content-type':'application/json'},
-     body: JSON.stringify({date: location.pathname.split('/').pop()})});
+     body: JSON.stringify({date: reportDate})});
   alert('已触发重生成，几秒后刷新页面');
 }
 </script>
