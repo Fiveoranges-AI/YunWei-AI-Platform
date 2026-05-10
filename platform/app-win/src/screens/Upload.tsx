@@ -1,19 +1,41 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
+import { setLastBatch, uploadStagedFile } from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 
-type StagedFile = { id: string; name: string; kind: string };
+type StagedStatus = "idle" | "uploading" | "done" | "error" | "unsupported";
+
+type StagedFile = {
+  id: string;
+  name: string;
+  kind: string;
+  blob: File;
+  status: StagedStatus;
+  error?: string;
+  documentId?: string;
+};
 
 export function UploadScreen({ go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
   const [pasted, setPasted] = useState("");
   const [files, setFiles] = useState<StagedFile[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  function addFile(name: string, kind: string) {
-    setFiles((f) => [...f, { id: Math.random().toString(36).slice(2), name, kind }]);
+  function addFile(blob: File, kind: string) {
+    setFiles((f) => [
+      ...f,
+      {
+        id: Math.random().toString(36).slice(2),
+        name: blob.name,
+        kind,
+        blob,
+        status: "idle",
+      },
+    ]);
   }
   function removeFile(id: string) {
     setFiles((f) => f.filter((x) => x.id !== id));
@@ -31,18 +53,104 @@ export function UploadScreen({ go }: { go: GoFn }) {
     const list = e.target.files;
     if (list) {
       for (const f of Array.from(list)) {
-        addFile(f.name, fixedKind ?? detectKind(f.name));
+        addFile(f, fixedKind ?? detectKind(f.name));
       }
     }
     // Reset so picking the same file twice in a row still fires onChange.
     e.target.value = "";
   }
 
+  function onDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragActive) setDragActive(true);
+  }
+  function onDragLeave(e: DragEvent<HTMLDivElement>) {
+    // Only reset when leaving the drop-zone container — child element drags
+    // would otherwise toggle dragActive on every hover transition.
+    const next = e.relatedTarget as Node | null;
+    if (next && (e.currentTarget as HTMLElement).contains(next)) return;
+    setDragActive(false);
+  }
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const dropped = Array.from(e.dataTransfer.files ?? []);
+    for (const f of dropped) {
+      addFile(f, detectKind(f.name));
+    }
+  }
+
+  async function handleSubmit() {
+    if (submitting) return;
+    const idle = files.filter((f) => f.status === "idle" || f.status === "error");
+    if (!idle.length) {
+      // Nothing to upload (only pasted text, or everything already done).
+      // Pasted text has no entity-first endpoint yet — navigate so the user
+      // can still see the review step end-to-end.
+      if (pasted.trim() || files.some((f) => f.status === "done")) {
+        go("review");
+      }
+      return;
+    }
+    setSubmitting(true);
+    setFiles((prev) =>
+      prev.map((f) => (idle.find((x) => x.id === f.id) ? { ...f, status: "uploading", error: undefined } : f)),
+    );
+
+    const results = await Promise.all(
+      idle.map(async (f) => ({ id: f.id, result: await uploadStagedFile(f.blob, f.kind) })),
+    );
+
+    setFiles((prev) =>
+      prev.map((f) => {
+        const r = results.find((x) => x.id === f.id);
+        if (!r) return f;
+        if (r.result.ok) {
+          return { ...f, status: "done", documentId: r.result.documentId, error: undefined };
+        }
+        return {
+          ...f,
+          status: r.result.unsupported ? "unsupported" : "error",
+          error: r.result.error,
+        };
+      }),
+    );
+
+    setSubmitting(false);
+
+    const anySucceeded = results.some((r) => r.result.ok);
+    if (anySucceeded) {
+      // Hand the real backend payload off to the Review screen so it can
+      // render the actual customer / contacts / fields instead of MOCK_REVIEW.
+      setLastBatch({
+        entries: results.map((r) => {
+          const src = idle.find((x) => x.id === r.id);
+          return {
+            filename: src?.name ?? "",
+            kind: src?.kind ?? "",
+            result: r.result,
+          };
+        }),
+      });
+      // Brief pause so the success state is visible before transition.
+      window.setTimeout(() => go("review"), 600);
+    }
+  }
+
   const total = files.length + (pasted.trim() ? 1 : 0);
   const ready = total > 0;
 
   return (
-    <div className="screen" style={{ background: "var(--bg)" }}>
+    <div
+      className="screen"
+      style={{ background: "var(--bg)" }}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -138,11 +246,12 @@ export function UploadScreen({ go }: { go: GoFn }) {
               justifyContent: "center",
               textAlign: "center",
               cursor: "pointer",
-              background: "var(--surface)",
-              border: "2px dashed var(--brand-300)",
+              background: dragActive ? "var(--brand-50)" : "var(--surface)",
+              border: dragActive ? "2px solid var(--brand-500)" : "2px dashed var(--brand-300)",
               borderRadius: 18,
               padding: "20px 12px",
               minHeight: 156,
+              transition: "background 120ms ease, border-color 120ms ease",
             }}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -161,9 +270,11 @@ export function UploadScreen({ go }: { go: GoFn }) {
             >
               {I.cloud(24)}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>上传文件</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
+              {dragActive ? "松开放下" : "上传文件"}
+            </div>
             <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4, lineHeight: 1.45 }}>
-              合同 · 截图 · Excel
+              {dragActive ? "拖到这里直接添加" : "合同 · 截图 · Excel · 拖拽"}
             </div>
           </button>
 
@@ -259,14 +370,19 @@ export function UploadScreen({ go }: { go: GoFn }) {
                       }}
                     >
                       <span>{f.kind}</span>
-                      <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
-                        {I.spark(9)} 待 AI 整理
-                      </span>
+                      <StatusPill file={f} />
                     </div>
                   </div>
                   <button
                     onClick={() => removeFile(f.id)}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--ink-400)" }}
+                    disabled={f.status === "uploading"}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      cursor: f.status === "uploading" ? "not-allowed" : "pointer",
+                      color: "var(--ink-400)",
+                      opacity: f.status === "uploading" ? 0.4 : 1,
+                    }}
                   >
                     {I.close(16)}
                   </button>
@@ -325,17 +441,82 @@ export function UploadScreen({ go }: { go: GoFn }) {
       >
         <div style={{ maxWidth: isDesktop ? 920 : undefined, margin: "0 auto" }}>
           <button
-            onClick={() => go("review")}
-            disabled={!ready}
+            onClick={handleSubmit}
+            disabled={!ready || submitting}
             className="btn btn-primary"
-            style={{ width: "100%", opacity: ready ? 1 : 0.5, cursor: ready ? "pointer" : "not-allowed" }}
+            style={{
+              width: "100%",
+              opacity: ready && !submitting ? 1 : 0.5,
+              cursor: ready && !submitting ? "pointer" : "not-allowed",
+            }}
           >
             {I.spark(15, "#fff")}
-            <span>开始 AI 整理 {ready && `（${total} 项）`}</span>
+            <span>
+              {submitting ? "AI 整理中…" : `开始 AI 整理 ${ready ? `（${total} 项）` : ""}`}
+            </span>
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+function StatusPill({ file }: { file: StagedFile }) {
+  if (file.status === "idle") {
+    return (
+      <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
+        {I.spark(9)} 待 AI 整理
+      </span>
+    );
+  }
+  if (file.status === "uploading") {
+    return (
+      <span
+        className="pill"
+        style={{
+          fontSize: 10,
+          padding: "1px 6px",
+          background: "var(--ai-100)",
+          color: "var(--ai-500)",
+        }}
+      >
+        上传中…
+      </span>
+    );
+  }
+  if (file.status === "done") {
+    // Contract is a two-phase flow on the backend (draft → confirm); the other
+    // kinds commit entities in a single call. Surface the difference so users
+    // know contract still needs review/confirm.
+    const label = file.kind === "合同" ? "✓ 草稿已生成" : "✓ 已录入";
+    return (
+      <span
+        className="pill pill-ok"
+        style={{ fontSize: 10, padding: "1px 6px" }}
+      >
+        {label}
+      </span>
+    );
+  }
+  if (file.status === "unsupported") {
+    return (
+      <span
+        className="pill pill-warn"
+        style={{ fontSize: 10, padding: "1px 6px" }}
+        title={file.error}
+      >
+        暂不支持
+      </span>
+    );
+  }
+  return (
+    <span
+      className="pill pill-risk"
+      style={{ fontSize: 10, padding: "1px 6px" }}
+      title={file.error}
+    >
+      上传失败
+    </span>
   );
 }
 

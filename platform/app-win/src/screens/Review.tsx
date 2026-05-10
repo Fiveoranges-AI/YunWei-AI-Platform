@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { GoFn } from "../App";
 import { getReview } from "../api/client";
+import { batchToReview, getLastBatch } from "../api/ingest";
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
@@ -25,6 +26,15 @@ export function ReviewScreen({ go }: { go: GoFn }) {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    // Prefer a real ingest batch when the user just came from Upload.
+    // Fall back to mock only when /review was opened without an upload
+    // (e.g. directly tapping the tab) — keeps the design preview usable.
+    const batch = getLastBatch();
+    const fromBatch = batch ? batchToReview(batch) : null;
+    if (fromBatch) {
+      setReview(fromBatch);
+      return;
+    }
     getReview("last").then(setReview);
   }, []);
 
@@ -71,8 +81,8 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             <button className="btn btn-secondary" onClick={() => go("upload")}>
               继续上传
             </button>
-            <button className="btn btn-primary" onClick={() => go("detail", { id: "wh" })}>
-              查看客户档案
+            <button className="btn btn-primary" onClick={() => go("list")}>
+              返回客户列表
             </button>
           </div>
         </div>
@@ -174,7 +184,13 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             {/* Customer match */}
             <Section title="归属客户">
               <div className="card" style={{ padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
-                <Mono text="万华" color="#1f6c8a" size={44} radius={12} fontSize={14} />
+                <Mono
+                  text={review.customer.name.slice(0, 2)}
+                  color="#1f6c8a"
+                  size={44}
+                  radius={12}
+                  fontSize={14}
+                />
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-900)" }}>
@@ -195,7 +211,9 @@ export function ReviewScreen({ go }: { go: GoFn }) {
                     }}
                   >
                     <span style={{ color: "var(--ai-500)" }}>{I.spark(11)}</span>
-                    AI 通过名片中"万华化学股份有限公司"匹配到现有客户
+                    {review.customer.isExisting
+                      ? `AI 在数据库中匹配到 "${review.customer.name}"，请确认是否复用`
+                      : `AI 从 ${review.docType || "上传内容"} 识别到新客户 "${review.customer.name}"`}
                   </div>
                 </div>
                 <button
@@ -241,29 +259,31 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             </Section>
 
             {/* Missing fields */}
-            <Section title="待补充字段">
-              <div
-                className="card"
-                style={{ padding: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
-              >
-                <span style={{ color: "var(--warn-500)" }}>{I.warn(14)}</span>
-                <span style={{ fontSize: 12, color: "var(--ink-500)" }}>未识别到：</span>
-                {review.missing.map((m) => (
-                  <button
-                    key={m}
-                    className="pill pill-warn"
-                    style={{
-                      fontSize: 11,
-                      cursor: "pointer",
-                      border: "1px dashed #e5b873",
-                      background: "#fff7e8",
-                    }}
-                  >
-                    + {m}
-                  </button>
-                ))}
-              </div>
-            </Section>
+            {review.missing.length > 0 && (
+              <Section title="待补充字段">
+                <div
+                  className="card"
+                  style={{ padding: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+                >
+                  <span style={{ color: "var(--warn-500)" }}>{I.warn(14)}</span>
+                  <span style={{ fontSize: 12, color: "var(--ink-500)" }}>未识别到：</span>
+                  {review.missing.map((m) => (
+                    <button
+                      key={m}
+                      className="pill pill-warn"
+                      style={{
+                        fontSize: 11,
+                        cursor: "pointer",
+                        border: "1px dashed #e5b873",
+                        background: "#fff7e8",
+                      }}
+                    >
+                      + {m}
+                    </button>
+                  ))}
+                </div>
+              </Section>
+            )}
           </div>
 
           {/* Right column on desktop, below on mobile */}
