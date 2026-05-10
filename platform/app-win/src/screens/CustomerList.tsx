@@ -11,10 +11,30 @@ import type { GoFn } from "../App";
 export function CustomerListScreen({ go }: { go: GoFn }) {
   const [customers, setCustomers] = useState<CustomerDetail[]>([]);
   const [q, setQ] = useState("");
+  const [displayName, setDisplayName] = useState<string>("");
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
     listCustomers().then(setCustomers);
+  }, []);
+
+  useEffect(() => {
+    // Greeting uses the platform's logged-in user. /api/me lives on the
+    // platform host (same origin as /win/), returns { display_name, ... }.
+    let cancelled = false;
+    fetch("/api/me", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (cancelled || !body) return;
+        const name = (body.display_name || body.username || "").trim();
+        if (name) setDisplayName(name);
+      })
+      .catch(() => {
+        /* silently fall back to nameless greeting */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered = customers.filter((c) => q === "" || c.name.includes(q));
@@ -41,7 +61,7 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
           }}
         >
           <div>
-            <div style={{ color: "var(--ink-500)", fontSize: 13 }}>下午好，</div>
+            <div style={{ color: "var(--ink-500)", fontSize: 13 }}>你好，</div>
             <div
               style={{
                 fontSize: isDesktop ? 28 : 22,
@@ -50,7 +70,7 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
                 letterSpacing: "-0.01em",
               }}
             >
-              李总
+              {displayName || "—"}
             </div>
           </div>
           <button
