@@ -48,6 +48,7 @@ from yinhu_brain.services.mistral_ocr_client import (
     parse_pdf_to_markdown,
 )
 from yinhu_brain.services.ingest.provenance import write_provenance
+from yinhu_brain.services.ingest.progress import ProgressCallback, emit_progress
 from yinhu_brain.services.storage import store_upload
 from yinhu_brain.services.ingest.schemas import (
     CONTRACT_TOOL_NAME,
@@ -110,14 +111,17 @@ async def extract_contract_draft(
     original_filename: str,
     content_type: str | None = None,
     uploader: str | None = None,
+    progress: ProgressCallback | None = None,
 ) -> ContractDraft:
     """Phase 1: store the PDF, OCR it, run the LLM, save the draft on the
     Document row. Marks Document.review_status=pending_review. Does NOT
     create Customer/Order/Contract — that happens on confirm."""
     file_path, sha, size = store_upload(pdf_bytes, original_filename)
+    await emit_progress(progress, "stored", "原始文件已保存，开始读取文本")
     ext = Path(original_filename).suffix.lower()
     is_pdf = ext == ".pdf" or (content_type or "").lower() == "application/pdf"
 
+    await emit_progress(progress, "ocr", "正在读取文档文本")
     pages = pdf_utils.extract_text_with_pages(file_path) if is_pdf else []
     pypdf_text = pdf_utils.joined_text(pages) if is_pdf else ""
 
@@ -128,6 +132,7 @@ async def extract_contract_draft(
             "document %r is not a PDF; using Mistral OCR directly",
             original_filename,
         )
+        await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别文档")
         try:
             md = await parse_document_to_markdown(
                 pdf_bytes,
@@ -147,6 +152,7 @@ async def extract_contract_draft(
             "trying Mistral OCR",
             original_filename, len(pypdf_text), len(pages),
         )
+        await emit_progress(progress, "ocr", "扫描件无文本层，正在调用 Mistral OCR")
         try:
             md = await parse_pdf_to_markdown(pdf_bytes, original_filename)
             if md.strip():
@@ -186,6 +192,7 @@ async def extract_contract_draft(
     session.add(doc)
     await session.flush()
 
+    await emit_progress(progress, "extract", "OCR 完成，AI 正在抽取合同字段")
     prompt_template = _PROMPT_PATH.read_text(encoding="utf-8")
     prompt = prompt_template.format(
         filename=original_filename,
@@ -245,6 +252,7 @@ async def extract_contract_draft(
     doc.parse_warnings = warnings
     await session.flush()
 
+    await emit_progress(progress, "match", "字段抽取完成，正在匹配已有客户")
     # Compute match candidates against existing rows so the review UI can
     # offer "merge into existing vs create new" before any DB write.
     customer_hits = await find_customer_candidates(session, result.customer.full_name)

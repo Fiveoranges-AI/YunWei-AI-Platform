@@ -12,14 +12,15 @@ Routes:
 - /api/ingest/wechat_screenshot image → chat_log Document + extracted hints
 
 All three endpoints stream their response as NDJSON
-(``application/x-ndjson``). While the LLM is running, the server emits
-``{"status":"processing"}`` heartbeats every 20 seconds so Cloudflare's
-100-second edge timeout (the source of the historical 524 failures on
-app.fiveoranges.ai) doesn't kill the request mid-extraction. The final
-line of the stream is either ``{"status":"done", ...result}`` (with the
-same fields the legacy JSON shape returned, plus the status sentinel) or
+(``application/x-ndjson``). The server emits named
+``{"status":"progress","stage":"ocr","message":"..."}`` events for UI
+pipeline nodes, plus ``{"status":"processing"}`` heartbeats every 20 seconds
+so Cloudflare's 100-second edge timeout (the source of the historical 524
+failures on app.fiveoranges.ai) doesn't kill the request mid-extraction. The
+final line of the stream is either ``{"status":"done", ...result}`` (with
+the same fields the legacy JSON shape returned, plus the status sentinel) or
 ``{"status":"error", "error": "..."}``. Clients should parse the last
-non-empty line as the result.
+non-empty done/error line as the result.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ from yinhu_brain.services.ingest.contract import (
     commit_contract_extraction,
     extract_contract_draft,
 )
+from yinhu_brain.services.ingest.progress import ProgressCallback
 from yinhu_brain.services.ingest.schemas import ContractConfirmRequest
 from yinhu_brain.services.ingest.wechat import ingest_wechat_screenshot
 from yinhu_brain.services.llm import LLMCallFailed
@@ -65,57 +67,93 @@ _CONTRACT_CONTENT_TYPES = {
 }
 
 
-async def _stream_with_heartbeats(
-    work: Awaitable[dict],
+def _json_line(payload: dict[str, Any]) -> bytes:
+    return (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+async def _stream_with_progress(
+    work_factory: Callable[[ProgressCallback], Awaitable[dict]],
     *,
     session: AsyncSession,
     label: str,
 ) -> AsyncIterator[bytes]:
-    """Run ``work`` to completion while emitting NDJSON heartbeats every
-    ~20s, then emit a final ``{"status":"done",...}`` (or "error") line.
+    """Run ``work`` while streaming named progress events and heartbeats.
 
-    ``work`` must return the success-payload dict; this wrapper adds the
+    ``work_factory`` receives an async ``emit(stage, message)`` callback.
+    Those events are streamed as ``{"status":"progress", ...}`` lines so
+    clients can render the current pipeline node instead of a generic spinner.
+    Heartbeats continue every ~20s to keep long OCR / LLM calls alive.
+
+    The factory must return the success-payload dict; this wrapper adds the
     ``status`` sentinel and handles the session.commit() / rollback so the
     caller's coroutine stays focused on extraction logic.
     """
-    task = asyncio.create_task(work)
-    while not task.done():
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=_HEARTBEAT_SECONDS)
-        except asyncio.TimeoutError:
-            yield b'{"status":"processing"}\n'
-        except BaseException:
-            # The shielded task raised — fall through so the await below
-            # produces the same exception with full traceback.
-            break
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    last_stage = "received"
+    last_message = "服务器已收到文件，准备处理"
+
+    async def emit(stage: str, message: str) -> None:
+        await queue.put({"status": "progress", "stage": stage, "message": message})
+        # Let the stream flush the progress line before a following synchronous
+        # step (for example local PDF text extraction) monopolizes the loop.
+        await asyncio.sleep(0)
+
+    task = asyncio.create_task(work_factory(emit))
+    get_task: asyncio.Task[dict[str, Any]] | None = asyncio.create_task(queue.get())
+
+    try:
+        while True:
+            wait_set = {task}
+            if get_task is not None:
+                wait_set.add(get_task)
+            done, _ = await asyncio.wait(
+                wait_set,
+                timeout=_HEARTBEAT_SECONDS,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if get_task is not None and get_task in done:
+                event = get_task.result()
+                last_stage = str(event.get("stage") or last_stage)
+                last_message = str(event.get("message") or last_message)
+                yield _json_line(event)
+                get_task = asyncio.create_task(queue.get())
+                continue
+            if task in done:
+                if get_task is not None and not get_task.done():
+                    get_task.cancel()
+                while not queue.empty():
+                    event = queue.get_nowait()
+                    last_stage = str(event.get("stage") or last_stage)
+                    last_message = str(event.get("message") or last_message)
+                    yield _json_line(event)
+                break
+            yield _json_line(
+                {
+                    "status": "processing",
+                    "stage": last_stage,
+                    "message": last_message,
+                }
+            )
+    finally:
+        if get_task is not None and not get_task.done():
+            get_task.cancel()
+
     try:
         result = await task
     except LLMCallFailed as exc:
         logger.exception("%s LLM call failed", label)
         await session.rollback()
-        yield (
-            json.dumps(
-                {"status": "error", "error": f"upstream LLM error: {exc!s}"},
-                ensure_ascii=False,
-            )
-            + "\n"
-        ).encode("utf-8")
+        yield _json_line({"status": "error", "error": f"upstream LLM error: {exc!s}"})
         return
     except Exception as exc:
         logger.exception("%s failed", label)
         await session.rollback()
-        yield (
-            json.dumps(
-                {"status": "error", "error": f"{label} failed: {exc!s}"},
-                ensure_ascii=False,
-            )
-            + "\n"
-        ).encode("utf-8")
+        yield _json_line({"status": "error", "error": f"{label} failed: {exc!s}"})
         return
 
     await session.commit()
     payload: dict[str, Any] = {"status": "done", **result}
-    yield (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+    yield _json_line(payload)
 
 
 def _ndjson(stream: AsyncIterator[bytes]) -> StreamingResponse:
@@ -150,13 +188,15 @@ async def upload_contract_preview(
 
     fname = file.filename or "contract.pdf"
 
-    async def _do() -> dict:
+    async def _do(progress: ProgressCallback) -> dict:
+        await progress("received", "服务器已收到合同文件")
         draft = await extract_contract_draft(
             session=session,
             pdf_bytes=pdf_bytes,
             original_filename=fname,
             content_type=file.content_type,
             uploader=uploader,
+            progress=progress,
         )
         needs_review = [
             path
@@ -179,7 +219,7 @@ async def upload_contract_preview(
         }
 
     return _ndjson(
-        _stream_with_heartbeats(_do(), session=session, label="contract draft"),
+        _stream_with_progress(_do, session=session, label="contract draft"),
     )
 
 
@@ -262,13 +302,15 @@ async def upload_business_card(
     fname = file.filename or "card.jpg"
     ct = file.content_type
 
-    async def _do() -> dict:
+    async def _do(progress: ProgressCallback) -> dict:
+        await progress("received", "服务器已收到名片图片")
         result = await ingest_business_card(
             session=session,
             image_bytes=img,
             original_filename=fname,
             content_type=ct,
             uploader=uploader,
+            progress=progress,
         )
         return {
             "document_id": str(result.document_id),
@@ -281,7 +323,7 @@ async def upload_business_card(
         }
 
     return _ndjson(
-        _stream_with_heartbeats(_do(), session=session, label="business_card ingest"),
+        _stream_with_progress(_do, session=session, label="business_card ingest"),
     )
 
 
@@ -300,13 +342,15 @@ async def upload_wechat_screenshot(
     fname = file.filename or "wechat.jpg"
     ct = file.content_type
 
-    async def _do() -> dict:
+    async def _do(progress: ProgressCallback) -> dict:
+        await progress("received", "服务器已收到截图图片")
         r = await ingest_wechat_screenshot(
             session=session,
             image_bytes=img,
             original_filename=fname,
             content_type=ct,
             uploader=uploader,
+            progress=progress,
         )
         return {
             "document_id": str(r.document_id),
@@ -318,5 +362,5 @@ async def upload_wechat_screenshot(
         }
 
     return _ndjson(
-        _stream_with_heartbeats(_do(), session=session, label="wechat ingest"),
+        _stream_with_progress(_do, session=session, label="wechat ingest"),
     )

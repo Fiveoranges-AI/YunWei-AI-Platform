@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
-import { setLastBatch, uploadStagedFile } from "../api/ingest";
+import { setLastBatch, uploadStagedFile, type IngestProgress } from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { markCustomersChanged } from "../lib/customerRefresh";
@@ -15,6 +15,8 @@ type StagedFile = {
   status: StagedStatus;
   error?: string;
   documentId?: string;
+  progressStage?: string;
+  progressMessage?: string;
 };
 
 export function UploadScreen({ go }: { go: GoFn }) {
@@ -43,6 +45,21 @@ export function UploadScreen({ go }: { go: GoFn }) {
   }
   function setFileKind(id: string, kind: string) {
     setFiles((f) => f.map((x) => (x.id === id ? { ...x, kind } : x)));
+  }
+  function applyProgress(id: string, event: IngestProgress) {
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              status: "uploading",
+              progressStage: event.stage,
+              progressMessage: event.message,
+              error: undefined,
+            }
+          : f,
+      ),
+    );
   }
 
   function detectKind(name: string): string {
@@ -103,11 +120,18 @@ export function UploadScreen({ go }: { go: GoFn }) {
     }
     setSubmitting(true);
     setFiles((prev) =>
-      prev.map((f) => (idle.find((x) => x.id === f.id) ? { ...f, status: "uploading", error: undefined } : f)),
+      prev.map((f) =>
+        idle.find((x) => x.id === f.id)
+          ? { ...f, status: "uploading", progressStage: "upload", progressMessage: "等待上传", error: undefined }
+          : f,
+      ),
     );
 
     const results = await Promise.all(
-      idle.map(async (f) => ({ id: f.id, result: await uploadStagedFile(f.blob, f.kind) })),
+      idle.map(async (f) => ({
+        id: f.id,
+        result: await uploadStagedFile(f.blob, f.kind, (event) => applyProgress(f.id, event)),
+      })),
     );
 
     setFiles((prev) =>
@@ -115,11 +139,20 @@ export function UploadScreen({ go }: { go: GoFn }) {
         const r = results.find((x) => x.id === f.id);
         if (!r) return f;
         if (r.result.ok) {
-          return { ...f, status: "done", documentId: r.result.documentId, error: undefined };
+          return {
+            ...f,
+            status: "done",
+            documentId: r.result.documentId,
+            progressStage: "done",
+            progressMessage: f.kind === "合同" ? "草稿已生成，等待复核" : "已完成并写入档案",
+            error: undefined,
+          };
         }
         return {
           ...f,
           status: r.result.unsupported ? "unsupported" : "error",
+          progressStage: r.result.unsupported ? undefined : f.progressStage ?? "upload",
+          progressMessage: r.result.unsupported ? undefined : r.result.error,
           error: r.result.error,
         };
       }),
@@ -394,6 +427,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
                         {f.error}
                       </div>
                     )}
+                    {f.progressStage && f.status !== "unsupported" && <ProgressNodes file={f} />}
                     {isImageFile(f) && f.status !== "uploading" && (
                       <KindSegment value={f.kind} onChange={(kind) => setFileKind(f.id, kind)} />
                     )}
@@ -525,6 +559,116 @@ function KindSegment({ value, onChange }: { value: string; onChange: (kind: stri
           </button>
         );
       })}
+    </div>
+  );
+}
+
+type ProgressNode = {
+  key: string;
+  label: string;
+};
+
+const BASE_PROGRESS_NODES: ProgressNode[] = [
+  { key: "upload", label: "上传" },
+  { key: "received", label: "接收" },
+  { key: "stored", label: "保存" },
+  { key: "ocr", label: "OCR" },
+  { key: "extract", label: "抽取" },
+];
+
+function progressNodesFor(kind: string): ProgressNode[] {
+  if (kind === "合同") {
+    return [...BASE_PROGRESS_NODES, { key: "match", label: "匹配" }, { key: "done", label: "草稿" }];
+  }
+  if (kind === "名片") {
+    return [
+      ...BASE_PROGRESS_NODES,
+      { key: "match", label: "匹配" },
+      { key: "persist", label: "入库" },
+      { key: "done", label: "完成" },
+    ];
+  }
+  return [...BASE_PROGRESS_NODES, { key: "persist", label: "保存" }, { key: "done", label: "完成" }];
+}
+
+function ProgressNodes({ file }: { file: StagedFile }) {
+  const nodes = progressNodesFor(file.kind);
+  const rawIndex = nodes.findIndex((node) => node.key === file.progressStage);
+  const activeIndex = file.status === "done" ? nodes.length - 1 : Math.max(rawIndex, 0);
+
+  return (
+    <div style={{ marginTop: 9 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {nodes.map((node, index) => {
+          const isDone = file.status === "done" || index < activeIndex;
+          const isActive = file.status === "uploading" && index === activeIndex;
+          const isError = file.status === "error" && index === activeIndex;
+          const color = isError
+            ? "var(--risk-700)"
+            : isDone
+              ? "var(--ok-700)"
+              : isActive
+                ? "var(--ai-500)"
+                : "var(--ink-400)";
+          const background = isError
+            ? "var(--risk-100)"
+            : isDone
+              ? "var(--ok-100)"
+              : isActive
+                ? "var(--ai-100)"
+                : "var(--surface-3)";
+          return (
+            <span
+              key={node.key}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                minHeight: 22,
+                padding: "2px 7px 2px 5px",
+                borderRadius: 7,
+                background,
+                color,
+                fontSize: 10,
+                fontWeight: 700,
+                lineHeight: 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 6,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: isDone || isError ? color : "transparent",
+                  color: isDone || isError ? "#fff" : color,
+                  border: isDone || isError ? "none" : `1px solid ${color}`,
+                  flex: "0 0 auto",
+                }}
+              >
+                {isError ? I.warn(9, "#fff") : isDone ? I.check(9, "#fff") : null}
+              </span>
+              {node.label}
+            </span>
+          );
+        })}
+      </div>
+      {file.progressMessage && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: file.status === "error" ? "var(--risk-700)" : "var(--ink-500)",
+            lineHeight: 1.4,
+            wordBreak: "break-word",
+          }}
+        >
+          {file.progressMessage}
+        </div>
+      )}
     </div>
   );
 }
