@@ -29,7 +29,7 @@ import asyncio
 import json
 import logging
 
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -39,6 +39,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from yinhu_brain.db import get_session
 from yinhu_brain.models import Document, DocumentReviewStatus
+from yinhu_brain.services.ingest.auto import auto_ingest
+from yinhu_brain.services.ingest.auto_confirm import (
+    AutoConfirmResult,
+    commit_auto_extraction,
+)
 from yinhu_brain.services.ingest.business_card import ingest_business_card
 from yinhu_brain.services.ingest.contract import (
     MatchCandidate,
@@ -47,6 +52,7 @@ from yinhu_brain.services.ingest.contract import (
 )
 from yinhu_brain.services.ingest.progress import ProgressCallback
 from yinhu_brain.services.ingest.schemas import ContractConfirmRequest
+from yinhu_brain.services.ingest.unified_schemas import AutoConfirmRequest
 from yinhu_brain.services.ingest.wechat import ingest_wechat_screenshot
 from yinhu_brain.services.llm import LLMCallFailed
 
@@ -325,6 +331,151 @@ async def upload_business_card(
     return _ndjson(
         _stream_with_progress(_do, session=session, label="business_card ingest"),
     )
+
+
+# ---------- Unified /auto pipeline -----------------------------------------
+#
+# The newer entry point that replaces the per-document-type endpoints above.
+# Same NDJSON shape, but a single request handles file uploads, camera
+# captures, and pasted text — the planner inside ``auto_ingest`` decides
+# which extractors to fan out to. The legacy ``/contract``,
+# ``/business_card``, ``/wechat_screenshot`` endpoints are kept until the
+# frontend (Agent H) cuts over.
+
+
+@router.post("/auto")
+async def upload_auto(
+    file: UploadFile | None = File(default=None),
+    text: str | None = Form(default=None),
+    source_hint: Literal["file", "camera", "pasted_text"] = Form(default="file"),
+    uploader: str | None = Form(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    """Unified entrypoint: file or text → ``UnifiedDraft`` + match candidates.
+
+    Streamed NDJSON. Final ``done`` line carries::
+
+        {
+          "status": "done",
+          "document_id": "...",
+          "plan": {targets, extractors, reason, review_required},
+          "draft": {customer, contacts, order, contract, events, ...,
+                    needs_review_fields, warnings},
+          "candidates": {customer: [...], contacts: [[...], ...]},
+          "needs_review_fields": [...]
+        }
+
+    The frontend reviews the draft and POSTs back to
+    ``/api/ingest/auto/{document_id}/confirm`` (or ``/cancel`` to drop it).
+    """
+    file_bytes: bytes | None = None
+    filename: str | None = None
+    ct: str | None = None
+    if file is not None:
+        file_bytes = await file.read()
+        filename = file.filename
+        ct = file.content_type
+    if not file_bytes and not (text and text.strip()):
+        raise HTTPException(400, "缺少 file 或 text")
+
+    async def _do(progress: ProgressCallback) -> dict:
+        await progress("received", "服务器已收到上传内容")
+        result = await auto_ingest(
+            session=session,
+            file_bytes=file_bytes,
+            original_filename=filename,
+            content_type=ct,
+            text_content=text,
+            source_hint=source_hint,
+            uploader=uploader,
+            progress=progress,
+        )
+        return {
+            "document_id": str(result.document_id),
+            "plan": result.plan.model_dump(mode="json"),
+            "draft": result.draft.model_dump(mode="json"),
+            "candidates": {
+                "customer": [
+                    _candidate_dict(c) for c in result.candidates.customer_candidates
+                ],
+                "contacts": [
+                    [_candidate_dict(c) for c in slot]
+                    for slot in result.candidates.contact_candidates
+                ],
+            },
+            "needs_review_fields": list(result.draft.needs_review_fields),
+        }
+
+    return _ndjson(_stream_with_progress(_do, session=session, label="auto ingest"))
+
+
+@router.post("/auto/{document_id}/confirm")
+async def upload_auto_confirm(
+    document_id: UUID,
+    payload: AutoConfirmRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Phase 2 of the /auto pipeline: persist the user-reviewed draft.
+
+    Customer + each contact carry a per-entity decision (``mode`` = ``new`` |
+    ``merge``); order + contract are always new (mirrors the legacy
+    ``/contract`` confirm shape). Ops rows (events / commitments / tasks /
+    risk_signals / memory_items) are append-only and bound to the resolved
+    customer.
+    """
+    try:
+        result: AutoConfirmResult = await commit_auto_extraction(
+            session=session,
+            document_id=document_id,
+            request=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("auto confirm failed")
+        raise HTTPException(422, f"confirm failed: {exc!s}") from exc
+
+    await session.commit()
+
+    return {
+        "document_id": str(result.document_id),
+        "created_entities": {
+            "customer_id": (
+                str(result.customer_id) if result.customer_id else None
+            ),
+            "contact_ids": [str(x) for x in result.contact_ids],
+            "order_id": str(result.order_id) if result.order_id else None,
+            "contract_id": str(result.contract_id) if result.contract_id else None,
+            "event_ids": [str(x) for x in result.event_ids],
+            "commitment_ids": [str(x) for x in result.commitment_ids],
+            "task_ids": [str(x) for x in result.task_ids],
+            "risk_signal_ids": [str(x) for x in result.risk_signal_ids],
+            "memory_item_ids": [str(x) for x in result.memory_item_ids],
+        },
+        "confidence_overall": result.confidence_overall,
+        "warnings": result.warnings,
+        "needs_review_fields": result.needs_review_fields,
+    }
+
+
+@router.post("/auto/{document_id}/cancel")
+async def upload_auto_cancel(
+    document_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """User dropped the auto draft. Same semantics as ``/contract/.../cancel``:
+    the Document row + raw_llm_response are preserved for audit, only
+    ``review_status`` flips to ``ignored``."""
+    doc = (
+        await session.execute(select(Document).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(404, f"document {document_id} not found")
+    if doc.review_status == DocumentReviewStatus.confirmed:
+        raise HTTPException(409, "document already confirmed")
+    doc.review_status = DocumentReviewStatus.ignored
+    await session.commit()
+    return {"document_id": str(document_id), "status": "ignored"}
 
 
 @router.post("/wechat_screenshot")
