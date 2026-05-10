@@ -30,6 +30,10 @@ from yinhu_brain.services.ingest.customer_memory_schema import (
     customer_memory_tool,
 )
 from yinhu_brain.services.llm import call_claude, extract_tool_use_input
+from yinhu_brain.services.mistral_ocr_client import (
+    MistralOCRUnavailable,
+    parse_image_to_markdown,
+)
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -128,10 +132,30 @@ async def extract_customer_memory(
 
     profile_text = await _format_customer_profile(session, customer)
 
+    input_content = text_content or "(see attached image)"
+    ocr_warnings: list[str] = []
+    if image_bytes:
+        try:
+            ocr_text = await parse_image_to_markdown(
+                image_bytes,
+                image_filename or "image.jpg",
+                image_content_type,
+            )
+        except MistralOCRUnavailable as exc:
+            ocr_text = ""
+            ocr_warnings.append(f"Mistral OCR unavailable: {exc!s}")
+            logger.warning("customer memory OCR failed for %s: %s", image_filename, exc)
+        if ocr_text:
+            input_content = (
+                "图片已附在本次请求中。\n\n"
+                "Mistral OCR 识别文本（markdown）：\n"
+                f"{ocr_text}"
+            )
+
     prompt = _PROMPT_PATH.read_text(encoding="utf-8").format(
         customer_profile=profile_text,
         input_modality=modality,
-        input_content=(text_content or "(see attached image)")[:30000],
+        input_content=input_content[:30000],
     )
 
     if image_bytes:
@@ -170,4 +194,7 @@ async def extract_customer_memory(
         document_id=document_id,
     )
     tool_input = extract_tool_use_input(response, CUSTOMER_MEMORY_TOOL_NAME)
-    return CustomerMemoryExtractionResult.model_validate(tool_input)
+    result = CustomerMemoryExtractionResult.model_validate(tool_input)
+    if ocr_warnings:
+        result.parse_warnings = ocr_warnings + list(result.parse_warnings)
+    return result
