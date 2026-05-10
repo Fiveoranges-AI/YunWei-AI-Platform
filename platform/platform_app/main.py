@@ -88,7 +88,11 @@ app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 # constant) so tests can monkeypatch _APP_DIST and have the change picked up
 # on the next request without touching a derived constant.
 _APP_DIST = Path(__file__).parent.parent.parent / "app" / "dist"
-_WIN_DIST = Path(__file__).parent.parent.parent / "app-win" / "dist"
+# app-win/ lives INSIDE platform/ (one level up from platform_app), so:
+#  - container:  /app/platform_app/main.py → /app → /app/app-win/dist
+#  - local dev:  <repo>/platform/platform_app/main.py → <repo>/platform/ →
+#                <repo>/platform/app-win/dist
+_WIN_DIST = Path(__file__).resolve().parent.parent / "app-win" / "dist"
 # Subpaths under /<client>/<agent>/ that the platform serves from app/dist
 # instead of forwarding to the agent. Anything else proxies through.
 _APP_STATIC_PREFIXES: tuple[str, ...] = ("/assets/", "/base-href.js", "/favicon.ico")
