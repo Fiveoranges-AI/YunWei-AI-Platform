@@ -1184,6 +1184,8 @@
     const ICON_AGENT = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2" ry="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>';
     const ICON_ARROW = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>';
     const ICON_DOTS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
+    /* 智通客户 (Super Customer Profile) — sparkle icon to differentiate from agent gear. */
+    const ICON_WIN = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6L12 3z"/><path d="M19 16l.9 2.4L22 19l-2.1.6L19 22l-.9-2.4L16 19l2.1-.6L19 16z" opacity="0.6"/></svg>';
 
     function escHtml(s) {
       return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -1223,6 +1225,42 @@
           </div>
           <div class="card-foot">
             <span style="font-size:11px;color:var(--brand);font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">已开通</span>
+            <span class="card-cta">
+              进入<span class="en">Enter</span>
+              ${ICON_ARROW}
+            </span>
+          </div>
+        </a>
+      `;
+    }
+
+    /* Special static card for 智通客户. Cross-enterprise shared module —
+       not enterprise-scoped like real agents, so we hand-render it instead
+       of relying on /api/agents. */
+    function buildWinCard() {
+      return `
+        <a class="card card-featured" href="/win/" data-real="*shared*/win">
+          <div class="card-head">
+            <div class="card-icon" style="background:linear-gradient(135deg,#eaeefc,#d6deff);color:#4a60c4;">${ICON_WIN}</div>
+            <span class="status-pill" style="background:#eaeefc;color:#2c3a78;border-color:#dfe5fb;">
+              <span class="dot" style="background:#4a60c4;"></span>
+              公测<span class="en">· Beta</span>
+            </span>
+          </div>
+          <div class="card-title">智通客户</div>
+          <div class="card-role">Super Customer Profile · 客户档案智能整理</div>
+          <div class="meta-grid">
+            <div class="meta-cell">
+              <div class="lbl">能力 · CAPABILITY</div>
+              <div class="v muted" style="font-size:13px;">合同 · 名片 · 微信记录</div>
+            </div>
+            <div class="meta-cell">
+              <div class="lbl">访问 · ACCESS</div>
+              <div class="v muted" style="font-size:13px;">所有用户可见</div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span style="font-size:11px;color:#4a60c4;font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">通用模块</span>
             <span class="card-cta">
               进入<span class="en">Enter</span>
               ${ICON_ARROW}
@@ -1312,6 +1350,8 @@
       if (agents.length) {
         grid.insertAdjacentHTML('afterbegin', agents.map(buildRealCard).join(''));
       }
+      // 智通客户 — always visible; sits after enterprise agents.
+      grid.insertAdjacentHTML('afterbegin', buildWinCard());
 
       const cards = document.querySelectorAll('.card');
       cards.forEach((c, i) => setTimeout(() => c.classList.add('in'), 120 + i * 80));

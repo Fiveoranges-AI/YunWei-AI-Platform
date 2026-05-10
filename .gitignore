@@ -14,16 +14,19 @@ __pycache__/
 /app/node_modules/
 /app/dist/
 
-# app-win/ (智通客户 — served at /win/) build artifacts.
-/app-win/node_modules/
-/app-win/dist/
+# platform/app-win/ (智通客户 — served at /win/) build artifacts.
+# (Lives inside platform/ so Railway's Root Directory=platform/ Buildkit
+# context can see it for stage 1 of platform/Dockerfile.)
+/platform/app-win/node_modules/
+/platform/app-win/dist/
 # Reference copies of design prototype files; not for git.
-/app-win/src/_design-reference/
+/platform/app-win/src/_design-reference/
 # Override the global `data/` rule above so app-win's frontend types/mock are tracked.
-!/app-win/src/data/
-!/app-win/src/data/**
+!/platform/app-win/src/data/
+!/platform/app-win/src/data/**
 
 # playwright MCP test artifacts
 .playwright-mcp/
 win-desktop.png
 win-mobile.png
+.claude/
