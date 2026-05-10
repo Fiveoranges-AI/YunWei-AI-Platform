@@ -2,7 +2,7 @@
 //
 // Routes per detected kind:
 //   合同 (.pdf) → /contract           (returns draft + match candidates)
-//   名片 (image) → /business_card     (creates Contact)
+//   名片 (image) → /business_card     (creates/links Customer + Contact)
 //   截图 (image) → /wechat_screenshot (ingests chat screenshot)
 //
 // Excel / 语音 / other types currently have no entity-first endpoint and
@@ -219,6 +219,9 @@ type WeChatEnvelope = {
 
 type BusinessCardEnvelope = {
   contact_id?: string;
+  contact_name?: string | null;
+  customer_id?: string | null;
+  customer_name?: string | null;
   needs_review?: boolean;
   warnings?: string[];
 };
@@ -518,6 +521,9 @@ export async function archiveBatch(batch: Batch): Promise<ArchiveResult> {
     if (!entry.result.ok) continue;
     if (entry.kind !== "合同") {
       result.passthroughDocuments += 1;
+      const raw = entry.result.raw as { customer_id?: string | null; warnings?: string[] } | undefined;
+      if (raw?.customer_id) result.customerIds.push(raw.customer_id);
+      result.warnings.push(...(raw?.warnings ?? []));
       continue;
     }
     const confirmed = await confirmContractDocument(entry.result.documentId, entry.result.raw);
@@ -527,6 +533,7 @@ export async function archiveBatch(batch: Batch): Promise<ArchiveResult> {
     }
     result.warnings.push(...(confirmed.warnings ?? []));
   }
+  result.customerIds = Array.from(new Set(result.customerIds));
   return result;
 }
 
@@ -549,13 +556,18 @@ export function batchToReview(batch: Batch): Review | null {
   const contractEntry = successes.find((e) => e.kind === "合同");
   const contractRaw = contractEntry?.result.raw as ContractEnvelope | undefined;
   const draft = contractRaw?.draft;
+  const businessCardEntry = successes.find((e) => e.kind === "名片");
+  const businessCardRaw = businessCardEntry?.result.raw as BusinessCardEnvelope | undefined;
   const needsReview = contractRaw?.needs_review_fields ?? [];
   const contractWarnings = contractRaw?.warnings ?? [];
   const isLow = (path: string): Confidence =>
     needsReview.includes(path) ? "med" : "high";
 
   // ── Customer ───────────────────────────────────────────────
-  const customerName = draft?.customer?.full_name?.trim() || "未识别客户";
+  const customerName =
+    draft?.customer?.full_name?.trim() ||
+    businessCardRaw?.customer_name?.trim() ||
+    "未识别客户";
   const candidateCount = contractRaw?.candidates?.customer?.length ?? 0;
   const isExisting = candidateCount > 0;
   const overall =
@@ -580,6 +592,12 @@ export function batchToReview(batch: Batch): Review | null {
         role: firstContact.role ? ROLE_CN[firstContact.role] ?? firstContact.role : "联系人",
         initial: firstContact.name.slice(0, 1),
       }
+    : businessCardRaw?.contact_name
+      ? {
+          name: businessCardRaw.contact_name,
+          role: "联系人",
+          initial: businessCardRaw.contact_name.slice(0, 1),
+        }
     : { name: "—", role: "未识别", initial: "?" };
 
   // ── Fields from contract draft ────────────────────────────
@@ -602,6 +620,14 @@ export function batchToReview(batch: Batch): Review | null {
     }
     if (o?.delivery_promised_date)
       fields.push({ key: "承诺交期", value: o.delivery_promised_date, conf: isLow("order.delivery_promised_date") });
+  }
+  if (!draft && businessCardRaw) {
+    if (businessCardRaw.customer_name) {
+      fields.push({ key: "客户名称", value: businessCardRaw.customer_name, conf: businessCardRaw.needs_review ? "med" : "high" });
+    }
+    if (businessCardRaw.contact_name) {
+      fields.push({ key: "联系人", value: businessCardRaw.contact_name, conf: businessCardRaw.needs_review ? "med" : "high" });
+    }
   }
   if (!fields.length) {
     successes.forEach((e, i) =>
@@ -651,10 +677,11 @@ export function batchToReview(batch: Batch): Review | null {
     .forEach((e) => {
       const raw = e.result.raw as BusinessCardEnvelope;
       const id = raw?.contact_id ? raw.contact_id.slice(0, 8) : "";
+      const name = raw?.contact_name ? `：${raw.contact_name}` : "";
       extractions.push({
         kind: "contact",
         title: "联系人（名片）",
-        text: `已新增联系人${id ? ` · ${id}` : ""}`,
+        text: `已新增联系人${name}${id ? ` · ${id}` : ""}`,
         source: { type: "名片", label: e.filename },
         conf: raw?.needs_review ? "med" : "high",
       });

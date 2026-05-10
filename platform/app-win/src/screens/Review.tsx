@@ -16,6 +16,7 @@ import { Section } from "../components/Section";
 import type { Review, ReviewExtraction } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
+import { markCustomersChanged } from "../lib/customerRefresh";
 
 const EXTRACTION_STYLE: Record<
   ReviewExtraction["kind"],
@@ -36,6 +37,7 @@ export function ReviewScreen({ go }: { go: GoFn }) {
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [archiveResult, setArchiveResult] = useState<ArchiveResult | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     // Prefer a real ingest batch when the user just came from Upload.
@@ -48,7 +50,9 @@ export function ReviewScreen({ go }: { go: GoFn }) {
       setReview(fromBatch);
       return;
     }
-    getReview("last").then(setReview);
+    getReview("last")
+      .then(setReview)
+      .catch((e) => setReviewError(e instanceof Error ? e.message : "没有可复核的上传批次"));
   }, []);
 
   async function handleArchive() {
@@ -63,6 +67,7 @@ export function ReviewScreen({ go }: { go: GoFn }) {
       const result = await archiveBatch(batch);
       clearLastBatch();
       setArchiveResult(result);
+      markCustomersChanged();
       setDone(true);
     } catch (e) {
       setArchiveError(e instanceof Error ? e.message : "归档失败");
@@ -86,6 +91,26 @@ export function ReviewScreen({ go }: { go: GoFn }) {
     } finally {
       setArchiving(false);
     }
+  }
+
+  if (reviewError && !review) {
+    return (
+      <div
+        className="screen"
+        style={{ background: "var(--bg)", alignItems: "center", justifyContent: "center", display: "flex" }}
+      >
+        <div style={{ textAlign: "center", padding: 24 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ink-900)", marginBottom: 8 }}>
+            暂无待确认资料
+          </div>
+          <div style={{ color: "var(--ink-500)", fontSize: 13, marginBottom: 16 }}>{reviewError}</div>
+          <button className="btn btn-primary" onClick={() => go("upload")}>
+            {I.cloud(16, "#fff")}
+            <span>上传资料</span>
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!review) {

@@ -3,6 +3,7 @@ import type { GoFn } from "../App";
 import { setLastBatch, uploadStagedFile } from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
+import { markCustomersChanged } from "../lib/customerRefresh";
 
 type StagedStatus = "idle" | "uploading" | "done" | "error" | "unsupported";
 
@@ -50,6 +51,9 @@ export function UploadScreen({ go }: { go: GoFn }) {
       return f.filter((x) => x.id !== id);
     });
   }
+  function setFileKind(id: string, kind: string) {
+    setFiles((f) => f.map((x) => (x.id === id ? { ...x, kind } : x)));
+  }
 
   // Free any unrevoked object URLs when the screen unmounts (tab switch, etc.).
   useEffect(() => {
@@ -62,10 +66,12 @@ export function UploadScreen({ go }: { go: GoFn }) {
   }, []);
 
   function detectKind(name: string): string {
+    const lower = name.toLowerCase();
     const ext = name.split(".").pop()?.toLowerCase() ?? "";
     if (["pdf", "doc", "docx"].includes(ext)) return "合同";
     if (["xls", "xlsx", "csv"].includes(ext)) return "Excel";
     if (["mp3", "wav", "m4a", "ogg", "amr"].includes(ext)) return "语音";
+    if (/(名片|business[-_ ]?card|name[-_ ]?card|vcard|contact)/i.test(lower)) return "名片";
     return "截图";
   }
 
@@ -143,6 +149,9 @@ export function UploadScreen({ go }: { go: GoFn }) {
 
     const anySucceeded = results.some((r) => r.result.ok);
     if (anySucceeded) {
+      if (results.some((r) => r.result.ok && Boolean((r.result.raw as { customer_id?: string | null }).customer_id))) {
+        markCustomersChanged();
+      }
       // Hand the real backend payload off to the Review screen so it can
       // render the actual customer / contacts / fields instead of MOCK_REVIEW.
       setLastBatch({
@@ -430,6 +439,9 @@ export function UploadScreen({ go }: { go: GoFn }) {
                         {f.error}
                       </div>
                     )}
+                    {isImageFile(f) && f.status !== "uploading" && (
+                      <KindSegment value={f.kind} onChange={(kind) => setFileKind(f.id, kind)} />
+                    )}
                   </div>
                   <button
                     onClick={() => removeFile(f.id)}
@@ -571,6 +583,49 @@ export function UploadScreen({ go }: { go: GoFn }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function isImageFile(file: StagedFile): boolean {
+  return file.blob.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+}
+
+function KindSegment({ value, onChange }: { value: string; onChange: (kind: string) => void }) {
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        marginTop: 8,
+        padding: 2,
+        borderRadius: 9,
+        background: "var(--surface-3)",
+        border: "1px solid var(--ink-100)",
+      }}
+    >
+      {["名片", "截图"].map((kind) => {
+        const active = value === kind;
+        return (
+          <button
+            key={kind}
+            type="button"
+            onClick={() => onChange(kind)}
+            style={{
+              border: "none",
+              borderRadius: 7,
+              padding: "4px 10px",
+              fontSize: 11,
+              fontWeight: 600,
+              color: active ? "var(--brand-700)" : "var(--ink-500)",
+              background: active ? "var(--surface)" : "transparent",
+              cursor: "pointer",
+              boxShadow: active ? "var(--shadow-card-soft)" : "none",
+            }}
+          >
+            {kind}
+          </button>
+        );
+      })}
     </div>
   );
 }

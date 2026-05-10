@@ -5,6 +5,7 @@ import { EvidenceChip } from "../components/EvidenceChip";
 import type { AskAIBlock, AskMessage, CustomerDetail } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
+import { onCustomersChanged } from "../lib/customerRefresh";
 import { fmtCNYRaw } from "../lib/format";
 
 const ALL = "all" as const;
@@ -23,6 +24,7 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
   const [pickerOpen, setPickerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const isAll = activeId === ALL;
   const customer = customers.find((c) => c.id === activeId) ?? customers[0];
@@ -30,9 +32,33 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
   useEffect(() => {
     // Picker only needs id+name+tag; skip the per-customer summary/metrics
     // enrichment to avoid the 1+2N round-trip pattern. ~10x faster mount.
-    listCustomersBasic()
-      .then((all) => setCustomers(all))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    let requestId = 0;
+
+    function load(showLoading: boolean) {
+      const id = ++requestId;
+      if (showLoading) setLoading(true);
+      listCustomersBasic()
+        .then((all) => {
+          if (cancelled || id !== requestId) return;
+          setCustomers(all);
+          setLoadError(null);
+        })
+        .catch((e) => {
+          if (cancelled || id !== requestId) return;
+          setLoadError(e instanceof Error ? e.message : "客户列表加载失败");
+        })
+        .finally(() => {
+          if (!cancelled && id === requestId) setLoading(false);
+        });
+    }
+
+    load(true);
+    const stopListening = onCustomersChanged(() => load(false));
+    return () => {
+      cancelled = true;
+      stopListening();
+    };
   }, []);
 
   useEffect(() => {
@@ -83,6 +109,44 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
         style={{ background: "var(--bg)", alignItems: "center", justifyContent: "center", display: "flex" }}
       >
         <div style={{ color: "var(--ink-400)", fontSize: 14 }}>加载中…</div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="screen" style={{ background: "var(--bg)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px 8px" }}>
+          <button
+            onClick={() => go("list")}
+            style={{
+              width: 36, height: 36, borderRadius: 18,
+              background: "transparent", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--ink-700)", cursor: "pointer",
+            }}
+          >
+            {I.back(20)}
+          </button>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-900)" }}>问 AI</div>
+        </div>
+        <div
+          style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            padding: "0 24px", textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ink-900)", marginBottom: 8 }}>
+            客户列表加载失败
+          </div>
+          <div style={{ fontSize: 14, color: "var(--ink-500)", lineHeight: 1.6, maxWidth: 320, marginBottom: 24 }}>
+            {loadError}
+          </div>
+          <button className="btn btn-secondary" onClick={() => go("list")}>
+            返回客户列表
+          </button>
+        </div>
       </div>
     );
   }
