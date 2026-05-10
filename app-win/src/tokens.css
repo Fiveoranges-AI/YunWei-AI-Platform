@@ -1,0 +1,164 @@
+/* ============================================================================
+   Five Oranges 运帷 AI — Design Tokens v1.0
+   Single source of truth for all surfaces (官网 / Demo / Product / API Docs).
+   ============================================================================ */
+
+:root {
+  /* ---------- Color: Primary Navy ---------- */
+  --color-primary-50:  #F2F5FA;
+  --color-primary-100: #DCE3EE;
+  --color-primary-200: #B5C2D8;
+  --color-primary-300: #8595B5;
+  --color-primary-400: #5A6F95;
+  --color-primary-500: #324A75;
+  --color-primary-600: #1F3558;
+  --color-primary-700: #16294A;
+  --color-primary-800: #0F2340; /* brand-navy */
+  --color-primary-900: #0A1A33;
+
+  /* ---------- Color: Accent Steel Blue ---------- */
+  --color-accent-50:  #EEF4FB; /* brand-blue-pale */
+  --color-accent-100: #D6E5F4;
+  --color-accent-200: #A8C6E5;
+  --color-accent-300: #7AA7D6;
+  --color-accent-400: #4A8BC4; /* brand-blue-light */
+  --color-accent-500: #2D6EA8; /* brand-blue (DEFAULT) */
+  --color-accent-600: #245A8C;
+  --color-accent-700: #1B4670;
+  --color-accent-800: #143352;
+  --color-accent-900: #0E2438;
+
+  /* ---------- Color: Semantic ---------- */
+  --color-success-100: #D1FAE5;
+  --color-success-500: #10B981;
+  --color-success-700: #047857;
+  --color-warning-100: #FEF3C7;
+  --color-warning-500: #F59E0B;
+  --color-warning-700: #B45309;
+  --color-error-100:   #FEE2E2;
+  --color-error-500:   #EF4444;
+  --color-error-700:   #B91C1C;
+  --color-info-100:    #DBEAFE;
+  --color-info-500:    #3B82F6;
+  --color-info-700:    #1D4ED8;
+
+  /* ---------- Color: Neutral + Bone ---------- */
+  --color-neutral-0:   #FFFFFF;
+  --color-neutral-50:  #F8FAFC;
+  --color-neutral-100: #F1F5F9;
+  --color-neutral-200: #E2E8F0;
+  --color-neutral-300: #CBD5E1;
+  --color-neutral-400: #94A3B8;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1E293B;
+  --color-neutral-900: #0F172A;
+  --color-bone-50:     #FCFBF8;
+  --color-bone-100:    #F8F7F4;
+  --color-bone-200:    #EFEDE6;
+
+  /* ---------- Typography ---------- */
+  --font-display: 'Sora', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-body:    'Manrope', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-display-2xl: clamp(2.5rem, 5.5vw, 4.5rem);
+  --fs-display-xl:  clamp(2rem, 4vw, 3rem);
+  --fs-h1: 2.25rem;
+  --fs-h2: 1.875rem;
+  --fs-h3: 1.5rem;
+  --fs-h4: 1.25rem;
+  --fs-h5: 1.125rem;
+  --fs-h6: 1rem;
+  --fs-body-lg: 1.125rem;
+  --fs-body-md: 1rem;
+  --fs-body-sm: 0.9375rem;
+  --fs-body-xs: 0.875rem;
+  --fs-caption: 0.8125rem;
+  --fs-overline: 0.7rem;
+
+  --lh-tight:    1.1;
+  --lh-snug:     1.3;
+  --lh-normal:   1.5;
+  --lh-relaxed:  1.65;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  --tracking-tight:   -0.02em;
+  --tracking-snug:    -0.01em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.05em;
+  --tracking-wider:   0.12em;
+  --tracking-widest:  0.18em;
+
+  /* ---------- Spacing ---------- */
+  --space-0: 0;
+  --space-0_5: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* ---------- Layout ---------- */
+  --container-max: 1320px;
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  --bp-2xl: 1536px;
+
+  /* ---------- Radius ---------- */
+  --radius-none: 0;
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  24px;
+  --radius-pill: 999px;
+
+  /* ---------- Shadow ---------- */
+  --shadow-xs: 0 1px 2px rgba(15,35,64,0.04);
+  --shadow-sm: 0 1px 3px rgba(15,35,64,0.05), 0 1px 2px rgba(15,35,64,0.03);
+  --shadow-md: 0 4px 12px rgba(15,35,64,0.08);
+  --shadow-lg: 0 12px 30px rgba(15,35,64,0.12);
+  --shadow-xl: 0 24px 48px rgba(15,35,64,0.16);
+  --shadow-card: 0 1px 2px rgba(15,35,64,0.04), 0 8px 24px rgba(15,35,64,0.06);
+  --shadow-card-hover: 0 16px 40px rgba(15,35,64,0.10);
+  --shadow-popover: 0 8px 24px rgba(15,35,64,0.12), 0 2px 6px rgba(15,35,64,0.06);
+  --shadow-modal: 0 24px 64px rgba(15,35,64,0.20), 0 4px 16px rgba(15,35,64,0.10);
+  --shadow-cta: 0 8px 24px rgba(45,110,168,0.25);
+  --shadow-focus: 0 0 0 3px rgba(45,110,168,0.25);
+
+  /* ---------- Border ---------- */
+  --border-1: 1px;
+  --border-2: 2px;
+  --border-3: 3px;
+  --border-color-subtle:  rgba(15,35,64,0.04);
+  --border-color-default: #E2E8F0;
+  --border-color-strong:  rgba(15,35,64,0.18);
+  --border-color-accent:  #2D6EA8;
+
+  /* ---------- Motion ---------- */
+  --duration-instant:    100ms;
+  --duration-micro:      150ms;
+  --duration-standard:   250ms;
+  --duration-emphasized: 400ms;
+  --duration-slow:       650ms;
+  --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:     cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-emphasized: cubic-bezier(0.32, 0.72, 0.24, 1.0);
+  --ease-spring:     cubic-bezier(0.5, 1.6, 0.4, 1);
+}

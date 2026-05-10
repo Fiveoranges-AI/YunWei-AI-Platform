@@ -1,0 +1,260 @@
+/* Super Customer Profile — design tokens (Apple/Stripe-style iOS) */
+
+:root {
+  /* surfaces */
+  --bg: #f5f7fa;
+  --bg-2: #eef2f6;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #f1f4f8;
+
+  /* ink */
+  --ink-900: #0b1220;
+  --ink-800: #181c1f;
+  --ink-700: #2d3338;
+  --ink-600: #4a5560;
+  --ink-500: #6b7682;
+  --ink-400: #97a1ad;
+  --ink-300: #c1c8d1;
+  --ink-200: #dde2e8;
+  --ink-100: #eef1f5;
+  --ink-50: #f6f8fb;
+
+  /* brand — muted teal/blue */
+  --brand-700: #00475f;
+  --brand-600: #00567a;
+  --brand-500: #006689;
+  --brand-400: #1f88a8;
+  --brand-300: #6cb6ce;
+  --brand-200: #b8dde8;
+  --brand-100: #e3f1f6;
+  --brand-50:  #f0f7fa;
+
+  /* AI accent — slightly cooler indigo for AI surfaces */
+  --ai-700: #2c3a78;
+  --ai-500: #4a60c4;
+  --ai-100: #eaeefc;
+  --ai-50:  #f4f6fd;
+
+  /* status — soft */
+  --ok-700: #06633b;
+  --ok-500: #0f8a4c;
+  --ok-100: #e1f3e8;
+  --warn-700: #8a4f00;
+  --warn-500: #b06d10;
+  --warn-100: #fdefdc;
+  --risk-700: #8a2a2a;
+  --risk-500: #c2393a;
+  --risk-100: #fbe4e3;
+
+  /* radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-2xl: 24px;
+  --r-pill: 999px;
+
+  /* shadows */
+  --shadow-card: 0 1px 2px rgba(15,23,42,0.04), 0 4px 14px rgba(15,23,42,0.05);
+  --shadow-card-soft: 0 1px 2px rgba(15,23,42,0.03), 0 6px 18px rgba(15,23,42,0.04);
+  --shadow-flat: 0 0 0 1px rgba(15,23,42,0.06);
+  --shadow-pop: 0 8px 28px rgba(15,23,42,0.10), 0 0 0 1px rgba(15,23,42,0.05);
+
+  /* type */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  --font-cn: "PingFang SC", "Microsoft YaHei", -apple-system, system-ui, sans-serif;
+
+  /* tweakable knobs (overridden via JS at root) */
+  --tw-card-radius: 16px;
+  --tw-card-shadow: var(--shadow-card);
+  --tw-card-border: 1px solid rgba(15,23,42,0.05);
+  --tw-ai-bg: linear-gradient(180deg, #f4f6fd 0%, #eaeefc 100%);
+  --tw-ai-border: 1px solid #dfe5fb;
+  --tw-ai-accent: #4a60c4;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg-2);
+  font-family: var(--font);
+  color: var(--ink-800);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* Stage — letterboxed fixed canvas */
+.stage {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(1200px 600px at 30% 20%, #e8eef6 0%, transparent 60%),
+    radial-gradient(900px 500px at 80% 80%, #e3eef3 0%, transparent 60%),
+    #eaeef3;
+  overflow: hidden;
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border-radius: var(--tw-card-radius);
+  box-shadow: var(--tw-card-shadow);
+  border: var(--tw-card-border);
+}
+
+.card-flat {
+  background: var(--surface);
+  border-radius: var(--tw-card-radius);
+  border: 1px solid var(--ink-100);
+}
+
+/* Pills / badges */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: var(--r-pill);
+  font-size: 12px; font-weight: 600; line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.pill-brand { background: var(--brand-100); color: var(--brand-600); }
+.pill-ok { background: var(--ok-100); color: var(--ok-700); }
+.pill-warn { background: var(--warn-100); color: var(--warn-700); }
+.pill-risk { background: var(--risk-100); color: var(--risk-700); }
+.pill-ink { background: var(--ink-100); color: var(--ink-700); }
+.pill-ai { background: var(--ai-100); color: var(--ai-700); }
+
+.pill-dot::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; display: inline-block;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 14px 18px; border-radius: 14px;
+  font-family: var(--font); font-size: 16px; font-weight: 600;
+  border: none; cursor: pointer; user-select: none;
+  transition: transform 80ms ease, background 120ms ease;
+}
+.btn:active { transform: scale(0.985); }
+
+.btn-primary { background: var(--brand-500); color: #fff; }
+.btn-primary:hover { background: var(--brand-600); }
+.btn-secondary { background: var(--surface); color: var(--ink-800); border: 1px solid var(--ink-200); }
+.btn-ghost { background: transparent; color: var(--brand-500); }
+.btn-danger-soft { background: var(--risk-100); color: var(--risk-700); }
+
+/* Section header */
+.sec-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 0 8px 0;
+}
+.sec-h h3 {
+  margin: 0; font-size: 13px; font-weight: 600;
+  color: var(--ink-500); letter-spacing: 0.04em; text-transform: uppercase;
+}
+.sec-h .more { color: var(--brand-500); font-size: 13px; font-weight: 500; }
+
+/* Scroll area */
+.scroll {
+  overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.scroll::-webkit-scrollbar { width: 0; }
+
+/* AI surface */
+.ai-surface {
+  background: var(--tw-ai-bg);
+  border: var(--tw-ai-border);
+  border-radius: var(--tw-card-radius);
+  position: relative; overflow: hidden;
+}
+.ai-surface .sparkle {
+  position: absolute; opacity: 0.5; pointer-events: none;
+}
+
+/* Avatars / monogram */
+.mono {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-weight: 700; color: #fff;
+  border-radius: 12px;
+}
+
+/* Subtle separator */
+.sep {
+  height: 1px; background: var(--ink-100); margin: 0;
+}
+
+/* Bottom tab bar safe area */
+.tabbar {
+  height: 84px; padding: 8px 8px 24px;
+  background: rgba(255,255,255,0.86);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid rgba(15,23,42,0.06);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+}
+
+.tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 4px 0; cursor: pointer;
+  color: var(--ink-500); font-size: 11px; font-weight: 500;
+  background: none; border: none;
+}
+.tab.active { color: var(--brand-500); }
+
+/* Slide-in screen transition */
+.screen-stack { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+.screen.enter { transform: translateX(100%); }
+.screen.enter-active { transform: translateX(0); transition: transform 240ms cubic-bezier(.32,.72,.32,1); }
+.screen.exit { transform: translateX(0); }
+.screen.exit-active { transform: translateX(-30%); opacity: 0.7; transition: transform 240ms ease, opacity 200ms ease; }
+
+/* Sheet (bottom modal) */
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.35); z-index: 30; }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: var(--bg); border-radius: 20px 20px 0 0;
+  display: flex; flex-direction: column; max-height: 92%;
+  box-shadow: 0 -10px 30px rgba(0,0,0,0.18);
+}
+.sheet-grabber {
+  width: 36px; height: 5px; border-radius: 99px;
+  background: var(--ink-300); margin: 8px auto 0;
+}
+
+/* Code/IDs in evidence badges */
+.mono-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; color: var(--ink-600);
+}
+
+/* Chip group, horizontal scroll */
+.chips {
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 0 16px 4px; margin: 0 -16px;
+}
+.chips::-webkit-scrollbar { display: none; }
+
+/* AI sparkle marker */
+.spark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+}
+
+/* Skeleton */
+.skel { background: linear-gradient(90deg, #eef2f7 25%, #e6ecf2 37%, #eef2f7 63%); background-size: 400% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
+@keyframes shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
+
+/* Number formatting */
+.num { font-variant-numeric: tabular-nums; }
+
+/* Reduce font size of standard 17px iOS text in scrolling content for density */
+.body { font-size: 15px; line-height: 1.5; }
+
+/* Focus dim for active screens transitions etc */
+.dim-on-modal { filter: blur(0); }

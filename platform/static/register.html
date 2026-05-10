@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>注册 · 智通客户 — Five Oranges AI</title>
+  <meta name="description" content="使用邀请码注册并体验智通客户(Super Customer Profile)。" />
+  <link rel="icon" href="/static/assets/logo.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --brand-blue: #2D6EA8;
+      --brand-blue-pale: #EEF4FB;
+      --brand-navy: #0F2340;
+      --danger: #DC2626;
+      --danger-bg: #FEF2F2;
+      --ok: #047857;
+      --ok-bg: #D1FAE5;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      color: var(--brand-navy);
+      background:
+        radial-gradient(1200px 600px at 20% 10%, #e8eef6 0%, transparent 60%),
+        radial-gradient(900px 500px at 80% 90%, #e3eef3 0%, transparent 60%),
+        #F8F7F4;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: #fff;
+      border-radius: 20px;
+      padding: 2rem 2rem 1.5rem;
+      box-shadow: 0 1px 2px rgba(15,35,64,.04), 0 24px 60px rgba(15,35,64,.10);
+      border: 1px solid rgba(15,35,64,.05);
+    }
+    @media (min-width: 480px) {
+      .card { padding: 2.5rem 2.5rem 1.75rem; }
+    }
+
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 28px;
+    }
+    .brand-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--brand-blue), #4a60c4);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 16px;
+    }
+    .brand-name {
+      font-family: 'Sora', sans-serif;
+      font-size: 16px; font-weight: 700;
+      color: var(--brand-navy);
+      letter-spacing: -.01em;
+    }
+    .brand-sub {
+      font-size: 11px; color: #64748B;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    h1 {
+      font-family: 'Sora', sans-serif;
+      font-size: 1.625rem; font-weight: 700;
+      letter-spacing: -.015em;
+      margin: 0 0 6px;
+    }
+    .sub {
+      font-size: 14px; color: #64748B;
+      margin: 0 0 24px;
+      line-height: 1.55;
+    }
+
+    label {
+      display: block;
+      font-size: 11px; font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+    label:first-child { margin-top: 0; }
+
+    .input {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid rgba(15,35,64,.14);
+      border-radius: 10px;
+      background: #F8FAFC;
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--brand-navy);
+      transition: border-color .15s, background .15s;
+    }
+    .input::placeholder { color: #94A3B8; }
+    .input:hover { border-color: rgba(15,35,64,.28); }
+    .input:focus {
+      outline: none;
+      border-color: var(--brand-blue);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(45,110,168,.16);
+    }
+    .input.error {
+      border-color: var(--danger);
+      background: var(--danger-bg);
+    }
+    .input.ok {
+      border-color: var(--ok);
+    }
+
+    .hint {
+      font-size: 12px; color: #64748B;
+      margin-top: 4px;
+    }
+    .hint.error { color: var(--danger); }
+    .hint.ok { color: var(--ok); }
+
+    .invite-status {
+      font-size: 12px; font-weight: 600;
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      display: none;
+    }
+    .invite-status.ok {
+      background: var(--ok-bg);
+      color: var(--ok);
+      display: block;
+    }
+    .invite-status.bad {
+      background: var(--danger-bg);
+      color: var(--danger);
+      display: block;
+    }
+
+    button.primary {
+      width: 100%;
+      margin-top: 22px;
+      padding: 14px 18px;
+      border: none;
+      border-radius: 12px;
+      background: var(--brand-blue);
+      color: #fff;
+      font-size: 15px; font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    button.primary:hover:not(:disabled) { background: #245A8C; }
+    button.primary:active:not(:disabled) { transform: scale(.985); }
+    button.primary:disabled {
+      background: #CBD5E1;
+      cursor: not-allowed;
+    }
+
+    .global-error {
+      margin-top: 14px;
+      padding: 10px 12px;
+      background: var(--danger-bg);
+      color: var(--danger);
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .footer {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #E2E8F0;
+      font-size: 13px;
+      color: #64748B;
+      text-align: center;
+    }
+    .footer a { color: var(--brand-blue); font-weight: 500; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="brand-icon">智</div>
+      <div>
+        <div class="brand-name">智通客户</div>
+        <div class="brand-sub">Super Customer Profile</div>
+      </div>
+    </div>
+
+    <h1>使用邀请码注册</h1>
+    <p class="sub">仅限受邀用户。注册后可立即体验客户档案智能整理、问答与上传功能。</p>
+
+    <form id="form" novalidate>
+      <label for="code">邀请码</label>
+      <input id="code" name="code" type="text" class="input"
+             placeholder="WIN-XXXX-XXXX"
+             autocomplete="off" autocapitalize="characters" spellcheck="false"
+             required maxlength="13" />
+      <div id="invite-status" class="invite-status"></div>
+
+      <label for="username">用户名</label>
+      <input id="username" name="username" type="text" class="input"
+             placeholder="3-32 字符,字母/数字/_/-"
+             autocomplete="username" required minlength="3" maxlength="32" />
+      <div id="username-hint" class="hint">登录用,以后不能改</div>
+
+      <label for="display_name">显示名</label>
+      <input id="display_name" name="display_name" type="text" class="input"
+             placeholder="例如:李欣"
+             autocomplete="name" required maxlength="64" />
+
+      <label for="email">邮箱(可选)</label>
+      <input id="email" name="email" type="email" class="input"
+             placeholder="you@company.com"
+             autocomplete="email" maxlength="200" />
+
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" class="input"
+             placeholder="至少 8 位"
+             autocomplete="new-password" required minlength="8" maxlength="128" />
+
+      <button id="submit" type="submit" class="primary" disabled>
+        创建账号并进入智通客户
+      </button>
+
+      <div id="global-error" class="global-error"></div>
+    </form>
+
+    <div class="footer">
+      已有账号?<a href="/">直接登录</a>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const form = $("form");
+    const codeInput = $("code");
+    const submitBtn = $("submit");
+    const inviteStatus = $("invite-status");
+    const globalError = $("global-error");
+
+    // Prefill from URL ?code=XXX
+    const params = new URLSearchParams(window.location.search);
+    const presetCode = (params.get("code") || "").toUpperCase().trim();
+    if (presetCode) codeInput.value = presetCode;
+
+    // Auto uppercase + dash insertion
+    codeInput.addEventListener("input", () => {
+      let v = codeInput.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+      // Auto-insert dashes: WIN-XXXX-XXXX
+      const raw = v.replace(/-/g, "");
+      if (raw.length > 3) v = raw.slice(0, 3) + "-" + raw.slice(3);
+      if (raw.length > 7) v = raw.slice(0, 3) + "-" + raw.slice(3, 7) + "-" + raw.slice(7);
+      codeInput.value = v.slice(0, 13);
+      validateCode();
+    });
+
+    let lastCheckedCode = "";
+    let codeOk = false;
+
+    async function validateCode() {
+      const code = codeInput.value.toUpperCase();
+      if (!/^WIN-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+        inviteStatus.className = "invite-status";
+        inviteStatus.textContent = "";
+        codeInput.className = "input";
+        codeOk = false;
+        updateSubmit();
+        return;
+      }
+      if (code === lastCheckedCode) return;
+      lastCheckedCode = code;
+      try {
+        const res = await fetch(`/api/invite/${encodeURIComponent(code)}`);
+        const data = await res.json();
+        if (data.valid) {
+          codeOk = true;
+          inviteStatus.className = "invite-status ok";
+          inviteStatus.textContent = "✓ 邀请码有效";
+          codeInput.className = "input ok";
+        } else {
+          codeOk = false;
+          inviteStatus.className = "invite-status bad";
+          inviteStatus.textContent = ({
+            invalid_format: "邀请码格式不对",
+            invalid_code: "邀请码不存在",
+            code_redeemed: "邀请码已被使用",
+            code_revoked: "邀请码已撤销",
+            code_expired: "邀请码已过期",
+          })[data.reason] || "邀请码无法使用";
+          codeInput.className = "input error";
+        }
+      } catch {
+        // Silent network error — let submit reveal it
+      }
+      updateSubmit();
+    }
+
+    function updateSubmit() {
+      const u = $("username").value.trim();
+      const d = $("display_name").value.trim();
+      const p = $("password").value;
+      submitBtn.disabled = !(codeOk && u.length >= 3 && d.length >= 1 && p.length >= 8);
+    }
+
+    ["username", "display_name", "password"].forEach((id) => {
+      $(id).addEventListener("input", updateSubmit);
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      globalError.style.display = "none";
+
+      const body = {
+        code: codeInput.value.toUpperCase(),
+        username: $("username").value.trim().toLowerCase(),
+        display_name: $("display_name").value.trim(),
+        email: $("email").value.trim() || null,
+        password: $("password").value,
+      };
+      try {
+        const res = await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          globalError.textContent = data?.message || data?.detail?.message || `注册失败 (${res.status})`;
+          globalError.style.display = "block";
+          submitBtn.disabled = false;
+          return;
+        }
+        // Cookie set by server; redirect to /win/
+        window.location.href = data.redirect || "/win/";
+      } catch (err) {
+        globalError.textContent = "网络错误,请重试";
+        globalError.style.display = "block";
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Run initial validation if code came from URL
+    if (presetCode) validateCode();
+  </script>
+</body>
+</html>
