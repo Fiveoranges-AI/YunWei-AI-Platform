@@ -1,18 +1,14 @@
-// POST /win/api/ingest/* — entity-first file intake.
+// POST /win/api/ingest/auto — unified planner-driven file/text intake.
 //
-// Routes per detected kind:
-//   合同 (.pdf) → /contract           (returns draft + match candidates)
-//   名片 (image) → /business_card     (creates/links Customer + Contact)
-//   截图 (image) → /wechat_screenshot (ingests chat screenshot)
-//
-// Excel / 语音 / other types currently have no entity-first endpoint and
-// return { ok: false, unsupported: true } so the UI can flag them without
-// blocking the rest of the batch.
+// The legacy per-kind endpoints (/contract, /business_card, /wechat_screenshot)
+// have been replaced by a single `/auto` route. The backend planner inspects
+// the document and decides which extractors to fan out to (identity /
+// commercial / ops). The frontend no longer guesses the document kind from
+// filename — every file (and every block of pasted text) goes to /auto, and
+// the unified draft drives the Review screen.
 //
 // After a batch settles, Upload.tsx calls setLastBatch(...) so the Review
-// screen can render real backend data via batchToReview() instead of the
-// hardcoded MOCK_REVIEW (which was the source of the "always 万华化学"
-// problem).
+// screen renders the actual backend payload via batchToReview().
 
 import type {
   Confidence,
@@ -24,10 +20,228 @@ import type {
 
 const API_BASE = "/win/api/ingest";
 
-export type IngestSuccess = {
+// ───────────── Backend payload shapes (mirror unified_schemas.py) ─────────────
+
+export type ExtractorName = "identity" | "commercial" | "ops";
+
+export type ExtractorSelection = {
+  name: ExtractorName;
+  confidence: number;
+};
+
+export type IngestPlan = {
+  targets: Partial<Record<ExtractorName, number>>;
+  extractors: ExtractorSelection[];
+  reason: string;
+  review_required: boolean;
+};
+
+// CustomerExtraction
+export type IdentityCustomer = {
+  full_name: string | null;
+  short_name: string | null;
+  address: string | null;
+  tax_id: string | null;
+};
+
+// ContactExtraction
+export type IdentityContact = {
+  name: string | null;
+  title: string | null;
+  phone: string | null;
+  mobile: string | null;
+  email: string | null;
+  role: ContactRole;
+  address: string | null;
+};
+
+export type ContactRole =
+  | "seller"
+  | "buyer"
+  | "delivery"
+  | "acceptance"
+  | "invoice"
+  | "other";
+
+// OrderExtraction
+export type CommercialOrder = {
+  amount_total: number | null;
+  amount_currency: string;
+  delivery_promised_date: string | null;
+  delivery_address: string | null;
+  description: string | null;
+};
+
+export type TriggerEvent =
+  | "contract_signed"
+  | "before_shipment"
+  | "on_delivery"
+  | "on_acceptance"
+  | "invoice_issued"
+  | "warranty_end"
+  | "on_demand"
+  | "other";
+
+export type PaymentMilestone = {
+  name: string | null;
+  ratio: number;
+  trigger_event: TriggerEvent;
+  trigger_offset_days: number | null;
+  raw_text: string | null;
+};
+
+// ContractExtraction
+export type CommercialContract = {
+  contract_no_external: string | null;
+  payment_milestones: PaymentMilestone[];
+  delivery_terms: string | null;
+  penalty_terms: string | null;
+  signing_date: string | null;
+  effective_date: string | null;
+  expiry_date: string | null;
+};
+
+export type FieldProvenanceEntry = {
+  path: string;
+  source_page: number | null;
+  source_excerpt: string | null;
+};
+
+// ExtractedEvent / Commitment / Task / Risk / Memory — kept loose (fields land
+// in the inbox payload as-is). Only the bits we actually render are typed.
+export type ExtractedEvent = {
+  title: string | null;
+  event_type: string;
+  occurred_at: string | null;
+  description: string | null;
+  raw_excerpt: string | null;
+  confidence: number | null;
+};
+
+export type ExtractedCommitment = {
+  summary: string | null;
+  description: string | null;
+  direction: "we_to_customer" | "customer_to_us" | "mutual";
+  due_date: string | null;
+  raw_excerpt: string | null;
+  confidence: number | null;
+};
+
+export type ExtractedTask = {
+  title: string | null;
+  description: string | null;
+  assignee: string | null;
+  due_date: string | null;
+  priority: "urgent" | "high" | "normal" | "low";
+  raw_excerpt: string | null;
+};
+
+export type ExtractedRiskSignal = {
+  summary: string | null;
+  description: string | null;
+  severity: "low" | "medium" | "high";
+  kind: "payment" | "quality" | "churn" | "legal" | "supply" | "relationship" | "other";
+  raw_excerpt: string | null;
+  confidence: number | null;
+};
+
+export type ExtractedMemoryItem = {
+  content: string | null;
+  kind: "preference" | "persona" | "context" | "history" | "decision_maker" | "other";
+  raw_excerpt: string | null;
+  confidence: number | null;
+};
+
+// UnifiedDraft — merged output of all activated extractors
+export type UnifiedDraft = {
+  customer: IdentityCustomer | null;
+  contacts: IdentityContact[];
+  order: CommercialOrder | null;
+  contract: CommercialContract | null;
+  events: ExtractedEvent[];
+  commitments: ExtractedCommitment[];
+  tasks: ExtractedTask[];
+  risk_signals: ExtractedRiskSignal[];
+  memory_items: ExtractedMemoryItem[];
+  summary: string;
+  field_provenance: FieldProvenanceEntry[];
+  confidence_overall: number;
+  needs_review_fields: string[];
+  warnings: string[];
+};
+
+export type MatchCandidate<T> = {
+  id: string;
+  score?: number;
+  reason?: string;
+  fields?: Partial<T>;
+};
+
+export type AutoCandidates = {
+  customer: MatchCandidate<IdentityCustomer>[];
+  contacts: MatchCandidate<IdentityContact>[][];
+};
+
+// ───────────── Confirm payload ─────────────
+
+export type CustomerDecision = {
+  mode: "new" | "merge";
+  existing_id?: string;
+  final: IdentityCustomer;
+};
+
+export type ContactDecision = {
+  mode: "new" | "merge";
+  existing_id?: string;
+  final: IdentityContact;
+};
+
+export type AutoConfirmRequest = {
+  customer: CustomerDecision | null;
+  contacts: ContactDecision[];
+  order: CommercialOrder | null;
+  contract: CommercialContract | null;
+  events: ExtractedEvent[];
+  commitments: ExtractedCommitment[];
+  tasks: ExtractedTask[];
+  risk_signals: ExtractedRiskSignal[];
+  memory_items: ExtractedMemoryItem[];
+  field_provenance: FieldProvenanceEntry[];
+  confidence_overall: number;
+  parse_warnings: string[];
+};
+
+export type AutoConfirmResponse = {
+  document_id: string;
+  created_entities?: {
+    customer_id?: string | null;
+    contact_ids?: string[];
+    order_id?: string | null;
+    contract_id?: string | null;
+    event_ids?: string[];
+    commitment_ids?: string[];
+    task_ids?: string[];
+    risk_signal_ids?: string[];
+    memory_item_ids?: string[];
+  };
+  confidence_overall?: number;
+  warnings?: string[];
+  needs_review_fields?: string[];
+};
+
+// ───────────── Upload result types ─────────────
+
+export type AutoIngestRaw = {
+  plan: IngestPlan;
+  draft: UnifiedDraft;
+  candidates: AutoCandidates;
+  needs_review_fields: string[];
+};
+
+export type AutoIngestSuccess = {
   ok: true;
   documentId: string;
-  raw: unknown;
+  raw: AutoIngestRaw;
 };
 
 export type IngestFailure = {
@@ -36,7 +250,7 @@ export type IngestFailure = {
   unsupported?: boolean;
 };
 
-export type IngestResult = IngestSuccess | IngestFailure;
+export type IngestResult = AutoIngestSuccess | IngestFailure;
 
 export type IngestProgress = {
   stage: string;
@@ -46,27 +260,36 @@ export type IngestProgress = {
 
 export type IngestProgressCallback = (event: IngestProgress) => void;
 
-function endpointFor(kind: string): string | null {
-  if (kind === "合同") return "/contract";
-  if (kind === "名片") return "/business_card";
-  if (kind === "截图") return "/wechat_screenshot";
-  return null;
-}
+// ───────────── Upload entry points ─────────────
 
 export async function uploadStagedFile(
   file: File,
-  kind: string,
+  sourceHint: "file" | "camera",
   onProgress?: IngestProgressCallback,
 ): Promise<IngestResult> {
-  const endpoint = endpointFor(kind);
-  if (!endpoint) {
-    return { ok: false, error: "暂不支持该文件类型", unsupported: true };
-  }
   const fd = new FormData();
   fd.append("file", file);
+  fd.append("source_hint", sourceHint);
+  return postAuto(fd, onProgress);
+}
+
+export async function uploadPastedText(
+  text: string,
+  onProgress?: IngestProgressCallback,
+): Promise<IngestResult> {
+  const fd = new FormData();
+  fd.append("text", text);
+  fd.append("source_hint", "pasted_text");
+  return postAuto(fd, onProgress);
+}
+
+async function postAuto(
+  fd: FormData,
+  onProgress?: IngestProgressCallback,
+): Promise<IngestResult> {
   try {
-    onProgress?.({ status: "uploading", stage: "upload", message: "正在上传文件" });
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    onProgress?.({ status: "uploading", stage: "upload", message: "正在上传内容" });
+    const res = await fetch(`${API_BASE}/auto`, {
       method: "POST",
       body: fd,
       credentials: "include",
@@ -86,19 +309,19 @@ export async function uploadStagedFile(
     if (ct.includes("application/x-ndjson")) {
       return await readNdjsonResult(res, onProgress);
     }
-    // Backwards compat with non-streaming responses.
-    const body = (await res.json()) as { document_id?: string };
-    return { ok: true, documentId: body.document_id ?? "", raw: body };
+    // Backwards compat with non-streaming responses (shouldn't happen in
+    // production, but keep the path so dev mocks don't break).
+    const body = (await res.json()) as Partial<AutoIngestRaw> & { document_id?: string };
+    return finalizeAutoResult(body);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "网络错误" };
   }
 }
 
-// The ingest endpoints stream NDJSON: zero or more
-// {"status":"progress","stage":"ocr","message":"..."} events update the UI
-// pipeline, {"status":"processing"} heartbeats keep Cloudflare's 100s edge
-// timeout from firing during a long LLM call, and the final non-empty
-// done/error line is the result.
+// The /auto endpoint streams NDJSON: zero or more progress / processing
+// events drive the UI pipeline; the final non-empty done/error line is the
+// result payload. processing heartbeats keep Cloudflare's 100s edge timeout
+// from firing during a long LLM call.
 async function readNdjsonResult(
   res: Response,
   onProgress?: IngestProgressCallback,
@@ -115,6 +338,10 @@ async function readNdjsonResult(
     message?: string;
     error?: string;
     document_id?: string;
+    plan?: IngestPlan;
+    draft?: UnifiedDraft;
+    candidates?: AutoCandidates;
+    needs_review_fields?: string[];
   };
   let last: StreamMessage | null = null;
   const handleLine = (line: string): StreamMessage | null => {
@@ -155,20 +382,57 @@ async function readNdjsonResult(
     last = handleLine(tail) ?? last;
   }
   if (!last) return { ok: false, error: "服务器未返回结果" };
-  if (last.status === "done") {
-    return { ok: true, documentId: last.document_id ?? "", raw: last };
-  }
-  if (last.status === "error") {
-    return { ok: false, error: last.error ?? "服务器错误" };
-  }
+  if (last.status === "done") return finalizeAutoResult(last);
+  if (last.status === "error") return { ok: false, error: last.error ?? "服务器错误" };
   return { ok: false, error: "未知响应状态" };
+}
+
+function finalizeAutoResult(
+  body:
+    | (Partial<AutoIngestRaw> & {
+        document_id?: string;
+      })
+    | null
+    | undefined,
+): IngestResult {
+  if (!body || !body.document_id) {
+    return { ok: false, error: "服务器响应缺少 document_id" };
+  }
+  return {
+    ok: true,
+    documentId: body.document_id,
+    raw: {
+      plan: body.plan ?? { targets: {}, extractors: [], reason: "", review_required: false },
+      draft: body.draft ?? emptyDraft(),
+      candidates: body.candidates ?? { customer: [], contacts: [] },
+      needs_review_fields: body.needs_review_fields ?? body.draft?.needs_review_fields ?? [],
+    },
+  };
+}
+
+function emptyDraft(): UnifiedDraft {
+  return {
+    customer: null,
+    contacts: [],
+    order: null,
+    contract: null,
+    events: [],
+    commitments: [],
+    tasks: [],
+    risk_signals: [],
+    memory_items: [],
+    summary: "",
+    field_provenance: [],
+    confidence_overall: 0.5,
+    needs_review_fields: [],
+    warnings: [],
+  };
 }
 
 // ───────────── Batch state shared with Review screen ─────────────
 
 export type BatchEntry = {
   filename: string;
-  kind: string;
   result: IngestResult;
 };
 
@@ -186,185 +450,18 @@ export function clearLastBatch(): void {
   _last = null;
 }
 
-// ───────────── Translator: backend response → Review shape ─────────────
-
-type ContractDraft = {
-  customer?: {
-    full_name?: string | null;
-    short_name?: string | null;
-    address?: string | null;
-    tax_id?: string | null;
-  };
-  contacts?: Array<{
-    name?: string | null;
-    title?: string | null;
-    phone?: string | null;
-    mobile?: string | null;
-    email?: string | null;
-    role?: string | null;
-  }>;
-  order?: {
-    amount_total?: number | null;
-    amount_currency?: string | null;
-    delivery_promised_date?: string | null;
-  };
-  contract?: {
-    contract_no_external?: string | null;
-    signing_date?: string | null;
-    effective_date?: string | null;
-    expiry_date?: string | null;
-    delivery_terms?: string | null;
-    penalty_terms?: string | null;
-    payment_milestones?: Array<{
-      name?: string | null;
-      ratio: number;
-      trigger_event: string;
-      trigger_offset_days?: number | null;
-      raw_text?: string | null;
-    }>;
-  };
-  field_provenance?: Array<{
-    path: string;
-    source_page: number | null;
-    source_excerpt: string | null;
-  }>;
-  confidence_overall?: number;
-  field_confidence?: Record<string, number>;
-  parse_warnings?: string[];
-};
-
-type ContractEnvelope = {
-  draft?: ContractDraft;
-  candidates?: {
-    customer?: MatchCandidate<CustomerFinal>[];
-    contacts?: Array<MatchCandidate<ContactFinal>[]>;
-  };
-  needs_review_fields?: string[];
-  warnings?: string[];
-};
-
-type WeChatEnvelope = {
-  summary?: string;
-  message_count?: number;
-  extracted_entity_count?: number;
-  confidence_overall?: number;
-  warnings?: string[];
-};
-
-type BusinessCardEnvelope = {
-  contact_id?: string;
-  contact_name?: string | null;
-  customer_id?: string | null;
-  customer_name?: string | null;
-  needs_review?: boolean;
-  warnings?: string[];
-};
-
-type MatchCandidate<T> = {
-  id: string;
-  score?: number;
-  reason?: string;
-  fields?: Partial<T>;
-};
-
-type CustomerFinal = {
-  full_name: string | null;
-  short_name: string | null;
-  address: string | null;
-  tax_id: string | null;
-};
-
-type ContactFinal = {
-  name: string | null;
-  title: string | null;
-  phone: string | null;
-  mobile: string | null;
-  email: string | null;
-  role: "seller" | "buyer" | "delivery" | "acceptance" | "invoice" | "other";
-  address: string | null;
-};
-
-type OrderFinal = {
-  amount_total: number | null;
-  amount_currency: string;
-  delivery_promised_date: string | null;
-  delivery_address: string | null;
-  description: string | null;
-};
-
-type MilestoneFinal = {
-  name: string | null;
-  ratio: number;
-  trigger_event:
-    | "contract_signed"
-    | "before_shipment"
-    | "on_delivery"
-    | "on_acceptance"
-    | "invoice_issued"
-    | "warranty_end"
-    | "on_demand"
-    | "other";
-  trigger_offset_days: number | null;
-  raw_text: string | null;
-};
-
-type ContractFinal = {
-  contract_no_external: string | null;
-  payment_milestones: MilestoneFinal[];
-  delivery_terms: string | null;
-  penalty_terms: string | null;
-  signing_date: string | null;
-  effective_date: string | null;
-  expiry_date: string | null;
-};
-
-type ContractConfirmRequest = {
-  customer: {
-    mode: "new" | "merge";
-    existing_id?: string;
-    final: CustomerFinal;
-  };
-  contacts: Array<{
-    mode: "new" | "merge";
-    existing_id?: string;
-    final: ContactFinal;
-  }>;
-  order: OrderFinal;
-  contract: ContractFinal;
-  field_provenance: NonNullable<ContractDraft["field_provenance"]>;
-  confidence_overall: number;
-  field_confidence: Record<string, number>;
-  parse_warnings: string[];
-};
-
-type ContractConfirmResponse = {
-  document_id: string;
-  created_entities?: {
-    customer_id?: string;
-    contact_ids?: string[];
-    order_id?: string;
-    contract_id?: string;
-  };
-  warnings?: string[];
-};
+// ───────────── Confirm / cancel API ─────────────
 
 export type ArchiveResult = {
-  confirmedContracts: number;
-  passthroughDocuments: number;
+  confirmedDocuments: number;
   customerIds: string[];
   warnings: string[];
 };
 
-const ROLE_CN: Record<string, string> = {
-  seller: "销售方",
-  buyer: "采购方",
-  delivery: "收货",
-  acceptance: "验收",
-  invoice: "开票",
-  other: "其他",
-};
+const CUSTOMER_MERGE_THRESHOLD = 0.95;
+const CONTACT_MERGE_THRESHOLD = 0.99;
 
-const VALID_ROLES = new Set<ContactFinal["role"]>([
+const VALID_ROLES = new Set<ContactRole>([
   "seller",
   "buyer",
   "delivery",
@@ -373,7 +470,7 @@ const VALID_ROLES = new Set<ContactFinal["role"]>([
   "other",
 ]);
 
-const VALID_TRIGGERS = new Set<MilestoneFinal["trigger_event"]>([
+const VALID_TRIGGERS = new Set<TriggerEvent>([
   "contract_signed",
   "before_shipment",
   "on_delivery",
@@ -384,8 +481,14 @@ const VALID_TRIGGERS = new Set<MilestoneFinal["trigger_event"]>([
   "other",
 ]);
 
-const CUSTOMER_MERGE_THRESHOLD = 0.95;
-const CONTACT_MERGE_THRESHOLD = 0.99;
+const ROLE_CN: Record<string, string> = {
+  seller: "销售方",
+  buyer: "采购方",
+  delivery: "收货",
+  acceptance: "验收",
+  invoice: "开票",
+  other: "其他",
+};
 
 async function readError(res: Response): Promise<string> {
   try {
@@ -410,21 +513,28 @@ async function postJSON<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-function asContractEnvelope(raw: unknown): ContractEnvelope {
-  return (raw ?? {}) as ContractEnvelope;
+function asRole(role: string | null | undefined): ContactRole {
+  return VALID_ROLES.has(role as ContactRole) ? (role as ContactRole) : "other";
 }
 
-function asRole(role: string | null | undefined): ContactFinal["role"] {
-  return VALID_ROLES.has(role as ContactFinal["role"]) ? (role as ContactFinal["role"]) : "other";
+function asTrigger(trigger: string | null | undefined): TriggerEvent {
+  return VALID_TRIGGERS.has(trigger as TriggerEvent) ? (trigger as TriggerEvent) : "other";
 }
 
-function asTrigger(trigger: string | null | undefined): MilestoneFinal["trigger_event"] {
-  return VALID_TRIGGERS.has(trigger as MilestoneFinal["trigger_event"])
-    ? (trigger as MilestoneFinal["trigger_event"])
-    : "other";
+function fallbackText(current: string | null, previous: string | null | undefined): string | null {
+  return current && current.trim() ? current : previous ?? current;
 }
 
-function normalizeCustomer(raw: ContractDraft["customer"] | undefined): CustomerFinal {
+function bestCandidate<T>(
+  candidates: MatchCandidate<T>[] | undefined,
+  threshold: number,
+): MatchCandidate<T> | null {
+  const sorted = [...(candidates ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const best = sorted[0];
+  return best && (best.score ?? 0) >= threshold ? best : null;
+}
+
+function normalizeCustomer(raw: IdentityCustomer | null | undefined): IdentityCustomer {
   return {
     full_name: raw?.full_name ?? null,
     short_name: raw?.short_name ?? null,
@@ -433,7 +543,7 @@ function normalizeCustomer(raw: ContractDraft["customer"] | undefined): Customer
   };
 }
 
-function normalizeContact(raw: NonNullable<ContractDraft["contacts"]>[number] | undefined): ContactFinal {
+function normalizeContact(raw: IdentityContact | undefined): IdentityContact {
   return {
     name: raw?.name ?? null,
     title: raw?.title ?? null,
@@ -441,43 +551,46 @@ function normalizeContact(raw: NonNullable<ContractDraft["contacts"]>[number] | 
     mobile: raw?.mobile ?? null,
     email: raw?.email ?? null,
     role: asRole(raw?.role),
-    address: null,
+    address: raw?.address ?? null,
   };
 }
 
-function normalizeOrder(raw: ContractDraft["order"] | undefined): OrderFinal {
+function normalizeOrder(raw: CommercialOrder | null | undefined): CommercialOrder | null {
+  if (!raw) return null;
   return {
-    amount_total: raw?.amount_total ?? null,
-    amount_currency: raw?.amount_currency ?? "CNY",
-    delivery_promised_date: raw?.delivery_promised_date ?? null,
-    delivery_address: null,
-    description: null,
+    amount_total: raw.amount_total ?? null,
+    amount_currency: raw.amount_currency ?? "CNY",
+    delivery_promised_date: raw.delivery_promised_date ?? null,
+    delivery_address: raw.delivery_address ?? null,
+    description: raw.description ?? null,
   };
 }
 
-function normalizeContract(raw: ContractDraft["contract"] | undefined): ContractFinal {
+function normalizeContract(
+  raw: CommercialContract | null | undefined,
+): CommercialContract | null {
+  if (!raw) return null;
   return {
-    contract_no_external: raw?.contract_no_external ?? null,
-    payment_milestones: (raw?.payment_milestones ?? []).map((m) => ({
+    contract_no_external: raw.contract_no_external ?? null,
+    payment_milestones: (raw.payment_milestones ?? []).map((m) => ({
       name: m.name ?? null,
       ratio: typeof m.ratio === "number" ? m.ratio : 0,
       trigger_event: asTrigger(m.trigger_event),
       trigger_offset_days: m.trigger_offset_days ?? null,
       raw_text: m.raw_text ?? null,
     })),
-    delivery_terms: raw?.delivery_terms ?? null,
-    penalty_terms: raw?.penalty_terms ?? null,
-    signing_date: raw?.signing_date ?? null,
-    effective_date: raw?.effective_date ?? null,
-    expiry_date: raw?.expiry_date ?? null,
+    delivery_terms: raw.delivery_terms ?? null,
+    penalty_terms: raw.penalty_terms ?? null,
+    signing_date: raw.signing_date ?? null,
+    effective_date: raw.effective_date ?? null,
+    expiry_date: raw.expiry_date ?? null,
   };
 }
 
-function fallbackText(current: string | null, previous: string | null | undefined): string | null {
-  return current && current.trim() ? current : previous ?? current;
-}
-
-function customerWithCandidate(final: CustomerFinal, candidate: MatchCandidate<CustomerFinal> | null): CustomerFinal {
+function customerWithCandidate(
+  final: IdentityCustomer,
+  candidate: MatchCandidate<IdentityCustomer> | null,
+): IdentityCustomer {
   if (!candidate?.fields) return final;
   return {
     full_name: fallbackText(final.full_name, candidate.fields.full_name),
@@ -487,7 +600,10 @@ function customerWithCandidate(final: CustomerFinal, candidate: MatchCandidate<C
   };
 }
 
-function contactWithCandidate(final: ContactFinal, candidate: MatchCandidate<ContactFinal> | null): ContactFinal {
+function contactWithCandidate(
+  final: IdentityContact,
+  candidate: MatchCandidate<IdentityContact> | null,
+): IdentityContact {
   if (!candidate?.fields) return final;
   return {
     name: fallbackText(final.name, candidate.fields.name),
@@ -500,71 +616,76 @@ function contactWithCandidate(final: ContactFinal, candidate: MatchCandidate<Con
   };
 }
 
-function bestCandidate<T>(candidates: MatchCandidate<T>[] | undefined, threshold: number): MatchCandidate<T> | null {
-  const sorted = [...(candidates ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  const best = sorted[0];
-  return best && (best.score ?? 0) >= threshold ? best : null;
-}
+export function buildAutoConfirmRequest(raw: AutoIngestRaw): AutoConfirmRequest {
+  const draft = raw.draft;
+  const customerCandidate = bestCandidate(raw.candidates?.customer, CUSTOMER_MERGE_THRESHOLD);
 
-function buildConfirmRequest(envelope: ContractEnvelope): ContractConfirmRequest {
-  const draft = envelope.draft;
-  const customerCandidate = bestCandidate(envelope.candidates?.customer, CUSTOMER_MERGE_THRESHOLD);
+  // Customer is required by the backend's confirm even on identity-less
+  // documents — sending null tells the backend "no customer dimension".
+  const hasCustomer = Boolean(
+    draft.customer && (draft.customer.full_name || draft.customer.short_name),
+  );
+  const customer: CustomerDecision | null = hasCustomer
+    ? {
+        mode: customerCandidate ? "merge" : "new",
+        existing_id: customerCandidate?.id,
+        final: customerWithCandidate(normalizeCustomer(draft.customer), customerCandidate),
+      }
+    : null;
+
+  const contacts: ContactDecision[] = (draft.contacts ?? []).map((c, i) => {
+    const candidate = bestCandidate(raw.candidates?.contacts?.[i], CONTACT_MERGE_THRESHOLD);
+    return {
+      mode: candidate ? "merge" : "new",
+      existing_id: candidate?.id,
+      final: contactWithCandidate(normalizeContact(c), candidate),
+    };
+  });
+
   return {
-    customer: {
-      mode: customerCandidate ? "merge" : "new",
-      existing_id: customerCandidate?.id,
-      final: customerWithCandidate(normalizeCustomer(draft?.customer), customerCandidate),
-    },
-    contacts: (draft?.contacts ?? []).map((c, i) => {
-      const candidate = bestCandidate(envelope.candidates?.contacts?.[i], CONTACT_MERGE_THRESHOLD);
-      return {
-        mode: candidate ? "merge" : "new",
-        existing_id: candidate?.id,
-        final: contactWithCandidate(normalizeContact(c), candidate),
-      };
-    }),
-    order: normalizeOrder(draft?.order),
-    contract: normalizeContract(draft?.contract),
-    field_provenance: draft?.field_provenance ?? [],
-    confidence_overall: draft?.confidence_overall ?? 0.5,
-    field_confidence: draft?.field_confidence ?? {},
-    parse_warnings: draft?.parse_warnings ?? [],
+    customer,
+    contacts,
+    order: normalizeOrder(draft.order),
+    contract: normalizeContract(draft.contract),
+    events: draft.events ?? [],
+    commitments: draft.commitments ?? [],
+    tasks: draft.tasks ?? [],
+    risk_signals: draft.risk_signals ?? [],
+    memory_items: draft.memory_items ?? [],
+    field_provenance: draft.field_provenance ?? [],
+    confidence_overall: typeof draft.confidence_overall === "number" ? draft.confidence_overall : 0.5,
+    parse_warnings: draft.warnings ?? [],
   };
 }
 
-export async function confirmContractDocument(documentId: string, raw: unknown): Promise<ContractConfirmResponse> {
-  if (!documentId) throw new Error("缺少合同文档 ID，无法归档");
-  const envelope = asContractEnvelope(raw);
-  if (!envelope.draft) throw new Error("缺少合同抽取草稿，无法归档");
-  return postJSON<ContractConfirmResponse>(`/contract/${documentId}/confirm`, buildConfirmRequest(envelope));
+export async function confirmAutoDocument(
+  documentId: string,
+  raw: AutoIngestRaw,
+): Promise<AutoConfirmResponse> {
+  if (!documentId) throw new Error("缺少文档 ID，无法归档");
+  return postJSON<AutoConfirmResponse>(
+    `/auto/${documentId}/confirm`,
+    buildAutoConfirmRequest(raw),
+  );
 }
 
-export async function cancelContractDocument(documentId: string): Promise<void> {
+export async function cancelAutoDocument(documentId: string): Promise<void> {
   if (!documentId) return;
-  await postJSON(`/contract/${documentId}/cancel`);
+  await postJSON(`/auto/${documentId}/cancel`);
 }
 
 export async function archiveBatch(batch: Batch): Promise<ArchiveResult> {
   const result: ArchiveResult = {
-    confirmedContracts: 0,
-    passthroughDocuments: 0,
+    confirmedDocuments: 0,
     customerIds: [],
     warnings: [],
   };
   for (const entry of batch.entries) {
     if (!entry.result.ok) continue;
-    if (entry.kind !== "合同") {
-      result.passthroughDocuments += 1;
-      const raw = entry.result.raw as { customer_id?: string | null; warnings?: string[] } | undefined;
-      if (raw?.customer_id) result.customerIds.push(raw.customer_id);
-      result.warnings.push(...(raw?.warnings ?? []));
-      continue;
-    }
-    const confirmed = await confirmContractDocument(entry.result.documentId, entry.result.raw);
-    result.confirmedContracts += 1;
-    if (confirmed.created_entities?.customer_id) {
-      result.customerIds.push(confirmed.created_entities.customer_id);
-    }
+    const confirmed = await confirmAutoDocument(entry.result.documentId, entry.result.raw);
+    result.confirmedDocuments += 1;
+    const cid = confirmed.created_entities?.customer_id;
+    if (cid) result.customerIds.push(cid);
     result.warnings.push(...(confirmed.warnings ?? []));
   }
   result.customerIds = Array.from(new Set(result.customerIds));
@@ -574,185 +695,206 @@ export async function archiveBatch(batch: Batch): Promise<ArchiveResult> {
 export async function ignoreBatch(batch: Batch): Promise<void> {
   await Promise.all(
     batch.entries.map((entry) =>
-      entry.result.ok && entry.kind === "合同"
-        ? cancelContractDocument(entry.result.documentId)
-        : Promise.resolve(),
+      entry.result.ok ? cancelAutoDocument(entry.result.documentId) : Promise.resolve(),
     ),
   );
 }
 
+// ───────────── Translator: backend response → Review shape ─────────────
+
+const PATH_LABEL: Record<string, string> = {
+  "customer.full_name": "客户名称",
+  "customer.short_name": "简称",
+  "customer.address": "地址",
+  "customer.tax_id": "税号",
+  "contract.contract_no_external": "合同号",
+  "contract.signing_date": "签订日期",
+  "contract.effective_date": "生效日期",
+  "contract.expiry_date": "到期日期",
+  "order.amount_total": "合同金额",
+  "order.amount_currency": "币种",
+  "order.delivery_promised_date": "承诺交期",
+  "order.delivery_address": "交货地址",
+};
+
+function planChannel(plan: IngestPlan): { channel: string; docType: string } {
+  const names = new Set(plan.extractors.map((e) => e.name));
+  // identity/commercial/ops are the unified planner's vocabulary; map them to
+  // human-friendly Chinese for the Review banner.
+  const parts: string[] = [];
+  if (names.has("identity")) parts.push("客户档案");
+  if (names.has("commercial")) parts.push("合同/订单");
+  if (names.has("ops")) parts.push("客户记忆");
+  const docType = parts.length ? parts.join(" + ") : "上传";
+  // Channel tag — show the most contract-like dimension first so the banner
+  // reads "合同 PDF" when contract data is present, "名片拍照" for identity-only,
+  // etc.
+  const channel = names.has("commercial")
+    ? "合同 / 订单"
+    : names.has("identity")
+      ? "客户 / 名片"
+      : names.has("ops")
+        ? "聊天 / 备注"
+        : "上传";
+  return { channel, docType };
+}
+
 export function batchToReview(batch: Batch): Review | null {
   const successes = batch.entries.filter(
-    (e): e is BatchEntry & { result: IngestSuccess } => e.result.ok,
+    (e): e is BatchEntry & { result: AutoIngestSuccess } => e.result.ok,
   );
   if (!successes.length) return null;
 
-  const contractEntry = successes.find((e) => e.kind === "合同");
-  const contractRaw = contractEntry?.result.raw as ContractEnvelope | undefined;
-  const draft = contractRaw?.draft;
-  const businessCardEntry = successes.find((e) => e.kind === "名片");
-  const businessCardRaw = businessCardEntry?.result.raw as BusinessCardEnvelope | undefined;
-  const needsReview = contractRaw?.needs_review_fields ?? [];
-  const contractWarnings = contractRaw?.warnings ?? [];
-  const isLow = (path: string): Confidence =>
-    needsReview.includes(path) ? "med" : "high";
+  // Aggregate across all entries — when the user uploads a contract PDF + a
+  // chat screenshot in one batch we want the Review screen to show everything.
+  const primary = successes[0]!;
+  const draft = primary.result.raw.draft;
+  const plan = primary.result.raw.plan;
+  const candidates = primary.result.raw.candidates;
+  const needsReview = primary.result.raw.needs_review_fields ?? draft.needs_review_fields ?? [];
 
-  // ── Customer ───────────────────────────────────────────────
-  const customerName =
-    draft?.customer?.full_name?.trim() ||
-    businessCardRaw?.customer_name?.trim() ||
-    "未识别客户";
-  const candidateCount = contractRaw?.candidates?.customer?.length ?? 0;
+  const isLow = (path: string): Confidence => (needsReview.includes(path) ? "med" : "high");
+
+  // ── Customer ──────────────────────────────────────────────
+  const customerName = draft.customer?.full_name?.trim() || "未识别客户";
+  const candidateCount = candidates?.customer?.length ?? 0;
   const isExisting = candidateCount > 0;
   const overall =
-    typeof draft?.confidence_overall === "number" ? draft.confidence_overall : 0.7;
+    typeof draft.confidence_overall === "number" ? draft.confidence_overall : 0.7;
 
   // ── Channel / docType ─────────────────────────────────────
-  const kinds = new Set(successes.map((e) => e.kind));
-  const channel = kinds.has("合同")
-    ? "合同 PDF"
-    : kinds.has("截图")
-      ? "微信截图"
-      : kinds.has("名片")
-        ? "名片拍照"
-        : "上传";
-  const docType = Array.from(kinds).join(" + ");
+  const { channel, docType } = planChannel(plan);
 
   // ── Contact (first identified contact, if any) ────────────
-  const firstContact = draft?.contacts?.[0];
+  const firstContact = draft.contacts?.[0];
   const contact = firstContact?.name
     ? {
         name: firstContact.name,
         role: firstContact.role ? ROLE_CN[firstContact.role] ?? firstContact.role : "联系人",
         initial: firstContact.name.slice(0, 1),
       }
-    : businessCardRaw?.contact_name
-      ? {
-          name: businessCardRaw.contact_name,
-          role: "联系人",
-          initial: businessCardRaw.contact_name.slice(0, 1),
-        }
     : { name: "—", role: "未识别", initial: "?" };
 
-  // ── Fields from contract draft ────────────────────────────
+  // ── Fields from unified draft ─────────────────────────────
   const fields: ReviewField[] = [];
-  if (draft) {
-    const c = draft.customer;
-    if (c?.full_name) fields.push({ key: "客户名称", value: c.full_name, conf: isLow("customer.full_name") });
-    if (c?.short_name) fields.push({ key: "简称", value: c.short_name, conf: isLow("customer.short_name") });
-    if (c?.address) fields.push({ key: "地址", value: c.address, conf: isLow("customer.address") });
-    if (c?.tax_id) fields.push({ key: "税号", value: c.tax_id, conf: isLow("customer.tax_id") });
-    const co = draft.contract;
-    if (co?.contract_no_external)
-      fields.push({ key: "合同号", value: co.contract_no_external, conf: isLow("contract.contract_no_external") });
-    if (co?.signing_date)
-      fields.push({ key: "签订日期", value: co.signing_date, conf: isLow("contract.signing_date") });
-    const o = draft.order;
-    if (o?.amount_total != null) {
-      const v = `${o.amount_total} ${o.amount_currency ?? ""}`.trim();
-      fields.push({ key: "合同金额", value: v, conf: isLow("order.amount_total") });
-    }
-    if (o?.delivery_promised_date)
-      fields.push({ key: "承诺交期", value: o.delivery_promised_date, conf: isLow("order.delivery_promised_date") });
+  const c = draft.customer;
+  if (c?.full_name) fields.push({ key: "客户名称", value: c.full_name, conf: isLow("customer.full_name") });
+  if (c?.short_name) fields.push({ key: "简称", value: c.short_name, conf: isLow("customer.short_name") });
+  if (c?.address) fields.push({ key: "地址", value: c.address, conf: isLow("customer.address") });
+  if (c?.tax_id) fields.push({ key: "税号", value: c.tax_id, conf: isLow("customer.tax_id") });
+  const co = draft.contract;
+  if (co?.contract_no_external)
+    fields.push({ key: "合同号", value: co.contract_no_external, conf: isLow("contract.contract_no_external") });
+  if (co?.signing_date)
+    fields.push({ key: "签订日期", value: co.signing_date, conf: isLow("contract.signing_date") });
+  const o = draft.order;
+  if (o?.amount_total != null) {
+    const v = `${o.amount_total} ${o.amount_currency ?? ""}`.trim();
+    fields.push({ key: "合同金额", value: v, conf: isLow("order.amount_total") });
   }
-  if (!draft && businessCardRaw) {
-    if (businessCardRaw.customer_name) {
-      fields.push({ key: "客户名称", value: businessCardRaw.customer_name, conf: businessCardRaw.needs_review ? "med" : "high" });
-    }
-    if (businessCardRaw.contact_name) {
-      fields.push({ key: "联系人", value: businessCardRaw.contact_name, conf: businessCardRaw.needs_review ? "med" : "high" });
-    }
-  }
+  if (o?.delivery_promised_date)
+    fields.push({ key: "承诺交期", value: o.delivery_promised_date, conf: isLow("order.delivery_promised_date") });
+
   if (!fields.length) {
     successes.forEach((e, i) =>
-      fields.push({ key: `文件 ${i + 1}`, value: `${e.filename} · ${e.kind}`, conf: "high" }),
+      fields.push({ key: `文件 ${i + 1}`, value: e.filename, conf: "high" }),
     );
   }
 
-  // ── Extractions ────────────────────────────────────────────
+  // ── Extractions ───────────────────────────────────────────
   const extractions: ReviewExtraction[] = [];
-  draft?.contacts?.forEach((c, i) => {
-    if (!c.name) return;
-    const phone = c.mobile || c.phone || c.email || "";
+  draft.contacts?.forEach((cc, i) => {
+    if (!cc.name) return;
+    const phone = cc.mobile || cc.phone || cc.email || "";
     const tail = phone ? ` · ${phone}` : "";
     extractions.push({
       kind: "contact",
       title: "联系人",
-      text: `${c.name}${c.title ? ` · ${c.title}` : ""}${tail}`,
-      source: { type: "合同", label: contractEntry?.filename ?? "合同 PDF" },
+      text: `${cc.name}${cc.title ? ` · ${cc.title}` : ""}${tail}`,
+      source: { type: "客户档案", label: primary.filename },
       conf: isLow(`contacts[${i}].name`),
     });
   });
-  draft?.contract?.payment_milestones?.forEach((m, i) => {
+  draft.contract?.payment_milestones?.forEach((m, i) => {
     extractions.push({
       kind: "commitment",
       title: "付款节点",
       text: `${m.name || `阶段 ${i + 1}`} · ${(m.ratio * 100).toFixed(0)}% · ${m.trigger_event}`,
-      source: { type: "合同", label: contractEntry?.filename ?? "合同 PDF" },
+      source: { type: "合同", label: primary.filename },
       conf: isLow(`contract.payment_milestones[${i}]`),
     });
   });
-  successes
-    .filter((e) => e.kind === "截图")
-    .forEach((e) => {
-      const raw = e.result.raw as WeChatEnvelope;
-      if (raw?.summary) {
-        extractions.push({
-          kind: "task",
-          title: "微信摘要",
-          text: raw.summary,
-          source: { type: "微信截图", label: e.filename },
-          conf: (raw.confidence_overall ?? 0.7) >= 0.85 ? "high" : "med",
-        });
-      }
+  draft.commitments?.forEach((cm) => {
+    if (!cm.summary) return;
+    extractions.push({
+      kind: "commitment",
+      title: "承诺事项",
+      text: cm.summary,
+      source: { type: "客户记忆", label: primary.filename },
+      conf: (cm.confidence ?? 0.7) >= 0.85 ? "high" : "med",
     });
-  successes
-    .filter((e) => e.kind === "名片")
-    .forEach((e) => {
-      const raw = e.result.raw as BusinessCardEnvelope;
-      const id = raw?.contact_id ? raw.contact_id.slice(0, 8) : "";
-      const name = raw?.contact_name ? `：${raw.contact_name}` : "";
-      extractions.push({
-        kind: "contact",
-        title: "联系人（名片）",
-        text: `已新增联系人${name}${id ? ` · ${id}` : ""}`,
-        source: { type: "名片", label: e.filename },
-        conf: raw?.needs_review ? "med" : "high",
-      });
+  });
+  draft.tasks?.forEach((t) => {
+    if (!t.title) return;
+    const due = t.due_date ? ` · ${t.due_date}` : "";
+    extractions.push({
+      kind: "task",
+      title: "待办任务",
+      text: `${t.title}${due}`,
+      source: { type: "客户记忆", label: primary.filename },
+      conf: "high",
     });
+  });
+  draft.risk_signals?.forEach((r) => {
+    if (!r.summary) return;
+    extractions.push({
+      kind: "risk",
+      title: "风险线索",
+      text: r.summary,
+      source: { type: "客户记忆", label: primary.filename },
+      conf: (r.confidence ?? 0.7) >= 0.85 ? "high" : "med",
+    });
+  });
+  draft.memory_items?.forEach((m) => {
+    if (!m.content) return;
+    extractions.push({
+      kind: "task",
+      title: "客户记忆",
+      text: m.content,
+      source: { type: "客户记忆", label: primary.filename },
+      conf: (m.confidence ?? 0.7) >= 0.85 ? "high" : "med",
+    });
+  });
+  draft.events?.forEach((e) => {
+    if (!e.title) return;
+    extractions.push({
+      kind: "task",
+      title: "事件",
+      text: `${e.title}${e.occurred_at ? ` · ${e.occurred_at}` : ""}`,
+      source: { type: "客户记忆", label: primary.filename },
+      conf: (e.confidence ?? 0.7) >= 0.85 ? "high" : "med",
+    });
+  });
 
-  // ── Missing — paths the LLM flagged low-confidence but we didn't field ──
+  // ── Missing — paths the backend flagged low-confidence we didn't field ──
   const fieldKeys = new Set(fields.map((f) => f.key));
-  const PATH_LABEL: Record<string, string> = {
-    "customer.full_name": "客户名称",
-    "customer.short_name": "简称",
-    "customer.address": "地址",
-    "customer.tax_id": "税号",
-    "contract.contract_no_external": "合同号",
-    "contract.signing_date": "签订日期",
-    "contract.effective_date": "生效日期",
-    "contract.expiry_date": "到期日期",
-    "order.amount_total": "合同金额",
-    "order.amount_currency": "币种",
-    "order.delivery_promised_date": "承诺交期",
-    "order.delivery_address": "交货地址",
-  };
   const missing = needsReview
     .map((p) => PATH_LABEL[p] ?? p)
     .filter((label) => !fieldKeys.has(label))
     .slice(0, 8);
 
-  // ── Evidence — original filenames + warning previews ──────
+  // ── Evidence — original filenames + warning previews ─────
+  const warnings = draft.warnings ?? [];
   const evidence: ReviewEvidence[] = successes.map((e, i) => {
+    const entryDraft = e.result.raw.draft;
+    const entryWarnings = entryDraft?.warnings ?? [];
     let preview = "已上传";
-    const raw = e.result.raw as { warnings?: string[]; summary?: string } | undefined;
-    if (raw?.warnings?.length) preview = raw.warnings.join(" · ").slice(0, 80);
-    else if (raw?.summary) preview = raw.summary.slice(0, 80);
-    else if (contractWarnings.length && e.kind === "合同")
-      preview = contractWarnings.join(" · ").slice(0, 80);
+    if (entryWarnings.length) preview = entryWarnings.join(" · ").slice(0, 80);
+    else if (entryDraft?.summary) preview = entryDraft.summary.slice(0, 80);
+    else if (warnings.length && i === 0) preview = warnings.join(" · ").slice(0, 80);
     return {
       id: `ev${i}`,
-      type: e.kind,
+      type: docType.split(" + ")[0] ?? "上传",
       label: e.filename,
       preview,
     };

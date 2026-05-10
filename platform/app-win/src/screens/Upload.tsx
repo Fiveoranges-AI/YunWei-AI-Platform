@@ -1,16 +1,24 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
-import { setLastBatch, uploadStagedFile, type IngestProgress } from "../api/ingest";
+import {
+  setLastBatch,
+  uploadPastedText,
+  uploadStagedFile,
+  type IngestProgress,
+  type IngestResult,
+} from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { markCustomersChanged } from "../lib/customerRefresh";
 
 type StagedStatus = "idle" | "uploading" | "done" | "error" | "unsupported";
 
+type StagedSourceHint = "file" | "camera";
+
 type StagedFile = {
   id: string;
   name: string;
-  kind: string;
+  sourceHint: StagedSourceHint;
   blob: File;
   status: StagedStatus;
   error?: string;
@@ -20,9 +28,14 @@ type StagedFile = {
   previewUrl?: string; // object URL for image previews; revoked on remove/unmount
 };
 
+type PastedStatus = "idle" | "uploading" | "done" | "error";
+
 export function UploadScreen({ go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
   const [pasted, setPasted] = useState("");
+  const [pastedStatus, setPastedStatus] = useState<PastedStatus>("idle");
+  const [pastedProgress, setPastedProgress] = useState<{ stage?: string; message?: string }>({});
+  const [pastedError, setPastedError] = useState<string | null>(null);
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -30,7 +43,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  function addFile(blob: File, kind: string) {
+  function addFile(blob: File, sourceHint: StagedSourceHint) {
     const previewUrl = blob.type.startsWith("image/")
       ? URL.createObjectURL(blob)
       : undefined;
@@ -39,7 +52,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
       {
         id: Math.random().toString(36).slice(2),
         name: blob.name,
-        kind,
+        sourceHint,
         blob,
         status: "idle",
         previewUrl,
@@ -52,9 +65,6 @@ export function UploadScreen({ go }: { go: GoFn }) {
       if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
       return f.filter((x) => x.id !== id);
     });
-  }
-  function setFileKind(id: string, kind: string) {
-    setFiles((f) => f.map((x) => (x.id === id ? { ...x, kind } : x)));
   }
   function applyProgress(id: string, event: IngestProgress) {
     setFiles((prev) =>
@@ -82,21 +92,11 @@ export function UploadScreen({ go }: { go: GoFn }) {
     };
   }, []);
 
-  function detectKind(name: string): string {
-    const lower = name.toLowerCase();
-    const ext = name.split(".").pop()?.toLowerCase() ?? "";
-    if (["pdf", "doc", "docx"].includes(ext)) return "合同";
-    if (["xls", "xlsx", "csv"].includes(ext)) return "Excel";
-    if (["mp3", "wav", "m4a", "ogg", "amr"].includes(ext)) return "语音";
-    if (/(名片|business[-_ ]?card|name[-_ ]?card|vcard|contact)/i.test(lower)) return "名片";
-    return "截图";
-  }
-
-  function handlePicked(e: ChangeEvent<HTMLInputElement>, fixedKind?: string) {
+  function handlePicked(e: ChangeEvent<HTMLInputElement>, sourceHint: StagedSourceHint) {
     const list = e.target.files;
     if (list) {
       for (const f of Array.from(list)) {
-        addFile(f, fixedKind ?? detectKind(f.name));
+        addFile(f, sourceHint);
       }
     }
     // Reset so picking the same file twice in a row still fires onChange.
@@ -122,41 +122,66 @@ export function UploadScreen({ go }: { go: GoFn }) {
     setDragActive(false);
     const dropped = Array.from(e.dataTransfer.files ?? []);
     for (const f of dropped) {
-      addFile(f, detectKind(f.name));
+      addFile(f, "file");
     }
   }
 
   async function handleSubmit() {
     if (submitting) return;
-    const idle = files.filter((f) => f.status === "idle" || f.status === "error");
-    if (!idle.length) {
-      // Nothing to upload (only pasted text, or everything already done).
-      // Pasted text has no entity-first endpoint yet — navigate so the user
-      // can still see the review step end-to-end.
-      if (pasted.trim() || files.some((f) => f.status === "done")) {
+    const idleFiles = files.filter((f) => f.status === "idle" || f.status === "error");
+    const trimmedText = pasted.trim();
+    const hasPending = idleFiles.length > 0 || (trimmedText.length > 0 && pastedStatus !== "done");
+
+    if (!hasPending) {
+      // Nothing left to upload — if anything's already done, just navigate.
+      if (files.some((f) => f.status === "done") || pastedStatus === "done") {
         go("review");
       }
       return;
     }
-    setSubmitting(true);
-    setFiles((prev) =>
-      prev.map((f) =>
-        idle.find((x) => x.id === f.id)
-          ? { ...f, status: "uploading", progressStage: "upload", progressMessage: "等待上传", error: undefined }
-          : f,
-      ),
-    );
 
-    const results = await Promise.all(
-      idle.map(async (f) => ({
-        id: f.id,
-        result: await uploadStagedFile(f.blob, f.kind, (event) => applyProgress(f.id, event)),
-      })),
-    );
+    setSubmitting(true);
+    if (idleFiles.length) {
+      setFiles((prev) =>
+        prev.map((f) =>
+          idleFiles.find((x) => x.id === f.id)
+            ? { ...f, status: "uploading", progressStage: "upload", progressMessage: "等待上传", error: undefined }
+            : f,
+        ),
+      );
+    }
+    if (trimmedText && pastedStatus !== "done") {
+      setPastedStatus("uploading");
+      setPastedProgress({ stage: "upload", message: "等待上传" });
+      setPastedError(null);
+    }
+
+    type Outcome = { kind: "file"; id: string; result: IngestResult } | { kind: "text"; result: IngestResult };
+
+    const fileTasks: Promise<Outcome>[] = idleFiles.map(async (f) => ({
+      kind: "file" as const,
+      id: f.id,
+      result: await uploadStagedFile(f.blob, f.sourceHint, (event) => applyProgress(f.id, event)),
+    }));
+
+    const textTask: Promise<Outcome>[] = trimmedText && pastedStatus !== "done"
+      ? [
+          (async () => ({
+            kind: "text" as const,
+            result: await uploadPastedText(trimmedText, (event) => {
+              setPastedProgress({ stage: event.stage, message: event.message });
+            }),
+          }))(),
+        ]
+      : [];
+
+    const outcomes = await Promise.all([...fileTasks, ...textTask]);
 
     setFiles((prev) =>
       prev.map((f) => {
-        const r = results.find((x) => x.id === f.id);
+        const r = outcomes.find((o): o is Extract<Outcome, { kind: "file" }> =>
+          o.kind === "file" && o.id === f.id,
+        );
         if (!r) return f;
         if (r.result.ok) {
           return {
@@ -164,7 +189,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
             status: "done",
             documentId: r.result.documentId,
             progressStage: "done",
-            progressMessage: f.kind === "合同" ? "草稿已生成，等待复核" : "已完成并写入档案",
+            progressMessage: "草稿已生成，等待复核",
             error: undefined,
           };
         }
@@ -178,25 +203,40 @@ export function UploadScreen({ go }: { go: GoFn }) {
       }),
     );
 
+    const textOutcome = outcomes.find((o): o is Extract<Outcome, { kind: "text" }> => o.kind === "text");
+    if (textOutcome) {
+      if (textOutcome.result.ok) {
+        setPastedStatus("done");
+        setPastedProgress({ stage: "done", message: "草稿已生成，等待复核" });
+        setPastedError(null);
+      } else {
+        setPastedStatus("error");
+        setPastedError(textOutcome.result.error);
+      }
+    }
+
     setSubmitting(false);
 
-    const anySucceeded = results.some((r) => r.result.ok);
+    const anySucceeded = outcomes.some((o) => o.result.ok);
     if (anySucceeded) {
-      if (results.some((r) => r.result.ok && Boolean((r.result.raw as { customer_id?: string | null }).customer_id))) {
-        markCustomersChanged();
+      // Track customer cache invalidation. For the unified pipeline, the
+      // customer is only persisted on /confirm — but nudging the cache here
+      // means the customer list refreshes after the user finishes the Review
+      // archive flow without an extra round-trip.
+      markCustomersChanged();
+
+      // Hand the real backend payloads off to the Review screen so it can
+      // render the actual unified draft instead of MOCK_REVIEW.
+      const entries: { filename: string; result: IngestResult }[] = [];
+      for (const o of outcomes) {
+        if (o.kind === "file") {
+          const src = idleFiles.find((x) => x.id === o.id);
+          entries.push({ filename: src?.name ?? "", result: o.result });
+        } else {
+          entries.push({ filename: "粘贴文本", result: o.result });
+        }
       }
-      // Hand the real backend payload off to the Review screen so it can
-      // render the actual customer / contacts / fields instead of MOCK_REVIEW.
-      setLastBatch({
-        entries: results.map((r) => {
-          const src = idle.find((x) => x.id === r.id);
-          return {
-            filename: src?.name ?? "",
-            kind: src?.kind ?? "",
-            result: r.result,
-          };
-        }),
-      });
+      setLastBatch({ entries });
       // Brief pause so the success state is visible before transition.
       window.setTimeout(() => go("review"), 600);
     }
@@ -218,7 +258,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
         type="file"
         multiple
         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*"
-        onChange={(e) => handlePicked(e)}
+        onChange={(e) => handlePicked(e, "file")}
         style={{ display: "none" }}
       />
       <input
@@ -226,7 +266,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(e) => handlePicked(e, "名片")}
+        onChange={(e) => handlePicked(e, "camera")}
         style={{ display: "none" }}
       />
       {/* Top bar */}
@@ -386,7 +426,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
               <h3>已上传 {total} 项</h3>
             </div>
             {files.map((f) => {
-              const icon = f.kind === "语音" ? I.voice(16) : f.kind === "名片" ? I.camera(16) : I.doc(16);
+              const icon = iconForFile(f);
               return (
                 <div
                   key={f.id}
@@ -455,7 +495,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
                         gap: 6,
                       }}
                     >
-                      <span>{f.kind}</span>
+                      <span>{describeSourceHint(f.sourceHint, f.blob)}</span>
                       <StatusPill file={f} />
                     </div>
                     {(f.status === "error" || f.status === "unsupported") && f.error && (
@@ -472,9 +512,6 @@ export function UploadScreen({ go }: { go: GoFn }) {
                       </div>
                     )}
                     {f.progressStage && f.status !== "unsupported" && <ProgressNodes file={f} />}
-                    {isImageFile(f) && f.status !== "uploading" && (
-                      <KindSegment value={f.kind} onChange={(kind) => setFileKind(f.id, kind)} />
-                    )}
                   </div>
                   <button
                     onClick={() => removeFile(f.id)}
@@ -493,7 +530,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
               );
             })}
             {pasted.trim() && (
-              <div className="card" style={{ padding: 12, display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="card" style={{ padding: 12, display: "flex", alignItems: "flex-start", gap: 12 }}>
                 <div
                   style={{
                     width: 32,
@@ -504,6 +541,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    flexShrink: 0,
                   }}
                 >
                   {I.chat(16)}
@@ -512,17 +550,50 @@ export function UploadScreen({ go }: { go: GoFn }) {
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>
                     粘贴文本 · {pasted.length} 字
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 2 }}>
-                    {pasted.slice(0, 24)}…
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--ink-500)",
+                      marginTop: 2,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span>{pasted.slice(0, 24)}…</span>
+                    <PastedStatusPill status={pastedStatus} error={pastedError} />
                   </div>
+                  {pastedStatus === "error" && pastedError && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--risk-700)",
+                        marginTop: 4,
+                        lineHeight: 1.4,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {pastedError}
+                    </div>
+                  )}
+                  {pastedStatus !== "idle" && (
+                    <PastedProgressNodes status={pastedStatus} progress={pastedProgress} />
+                  )}
                 </div>
                 <button
-                  onClick={() => setPasted("")}
+                  onClick={() => {
+                    setPasted("");
+                    setPastedStatus("idle");
+                    setPastedProgress({});
+                    setPastedError(null);
+                  }}
+                  disabled={pastedStatus === "uploading"}
                   style={{
                     background: "transparent",
                     border: "none",
-                    cursor: "pointer",
+                    cursor: pastedStatus === "uploading" ? "not-allowed" : "pointer",
                     color: "var(--ink-400)",
+                    opacity: pastedStatus === "uploading" ? 0.4 : 1,
                   }}
                 >
                   {I.close(16)}
@@ -623,47 +694,19 @@ export function UploadScreen({ go }: { go: GoFn }) {
   );
 }
 
-function isImageFile(file: StagedFile): boolean {
-  return file.blob.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+function iconForFile(f: StagedFile) {
+  const t = f.blob.type || "";
+  const name = f.name.toLowerCase();
+  if (t.startsWith("image/")) return I.camera(16);
+  if (t.startsWith("audio/") || /\.(mp3|wav|m4a|ogg|amr)$/i.test(name)) return I.voice(16);
+  return I.doc(16);
 }
 
-function KindSegment({ value, onChange }: { value: string; onChange: (kind: string) => void }) {
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        marginTop: 8,
-        padding: 2,
-        borderRadius: 9,
-        background: "var(--surface-3)",
-        border: "1px solid var(--ink-100)",
-      }}
-    >
-      {["名片", "截图"].map((kind) => {
-        const active = value === kind;
-        return (
-          <button
-            key={kind}
-            type="button"
-            onClick={() => onChange(kind)}
-            style={{
-              border: "none",
-              borderRadius: 7,
-              padding: "4px 10px",
-              fontSize: 11,
-              fontWeight: 600,
-              color: active ? "var(--brand-700)" : "var(--ink-500)",
-              background: active ? "var(--surface)" : "transparent",
-              cursor: "pointer",
-              boxShadow: active ? "var(--shadow-card-soft)" : "none",
-            }}
-          >
-            {kind}
-          </button>
-        );
-      })}
-    </div>
-  );
+function describeSourceHint(hint: StagedSourceHint, blob: File): string {
+  if (hint === "camera") return "拍照";
+  if (blob.type.startsWith("image/")) return "图片";
+  if (blob.type.startsWith("audio/")) return "语音";
+  return "文件";
 }
 
 type ProgressNode = {
@@ -671,94 +714,59 @@ type ProgressNode = {
   label: string;
 };
 
-const BASE_PROGRESS_NODES: ProgressNode[] = [
+// Unified pipeline stages — same nodes regardless of document kind.
+// Key matches the backend's emit_progress() stage strings; ``extract`` is a
+// virtual aggregator across identity/commercial/ops_extract.
+const PIPELINE_NODES: ProgressNode[] = [
   { key: "upload", label: "上传" },
-  { key: "received", label: "接收" },
   { key: "stored", label: "保存" },
-  { key: "ocr", label: "OCR" },
+  { key: "ocr", label: "OCR/文本化" },
+  { key: "plan", label: "规划" },
   { key: "extract", label: "抽取" },
+  { key: "merge", label: "合并" },
+  { key: "done", label: "草稿" },
 ];
 
-function progressNodesFor(kind: string): ProgressNode[] {
-  if (kind === "合同") {
-    return [...BASE_PROGRESS_NODES, { key: "match", label: "匹配" }, { key: "done", label: "草稿" }];
-  }
-  if (kind === "名片") {
-    return [
-      ...BASE_PROGRESS_NODES,
-      { key: "match", label: "匹配" },
-      { key: "persist", label: "入库" },
-      { key: "done", label: "完成" },
-    ];
-  }
-  return [...BASE_PROGRESS_NODES, { key: "persist", label: "保存" }, { key: "done", label: "完成" }];
+const STAGE_TO_NODE: Record<string, string> = {
+  upload: "upload",
+  uploading: "upload",
+  received: "stored",
+  evidence: "stored",
+  stored: "stored",
+  ocr: "ocr",
+  plan: "plan",
+  plan_done: "plan",
+  identity_extract: "extract",
+  identity_done: "extract",
+  commercial_extract: "extract",
+  commercial_done: "extract",
+  ops_extract: "extract",
+  ops_done: "extract",
+  merge: "merge",
+  auto: "stored",
+  auto_done: "done",
+  done: "done",
+};
+
+function nodeIndexForStage(stage: string | undefined): number {
+  if (!stage) return 0;
+  const node = STAGE_TO_NODE[stage] ?? stage;
+  const idx = PIPELINE_NODES.findIndex((n) => n.key === node);
+  return idx >= 0 ? idx : 0;
 }
 
 function ProgressNodes({ file }: { file: StagedFile }) {
-  const nodes = progressNodesFor(file.kind);
-  const rawIndex = nodes.findIndex((node) => node.key === file.progressStage);
+  const nodes = PIPELINE_NODES;
+  const rawIndex = nodeIndexForStage(file.progressStage);
   const activeIndex = file.status === "done" ? nodes.length - 1 : Math.max(rawIndex, 0);
 
   return (
     <div style={{ marginTop: 9 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {nodes.map((node, index) => {
-          const isDone = file.status === "done" || index < activeIndex;
-          const isActive = file.status === "uploading" && index === activeIndex;
-          const isError = file.status === "error" && index === activeIndex;
-          const color = isError
-            ? "var(--risk-700)"
-            : isDone
-              ? "var(--ok-700)"
-              : isActive
-                ? "var(--ai-500)"
-                : "var(--ink-400)";
-          const background = isError
-            ? "var(--risk-100)"
-            : isDone
-              ? "var(--ok-100)"
-              : isActive
-                ? "var(--ai-100)"
-                : "var(--surface-3)";
-          return (
-            <span
-              key={node.key}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                minHeight: 22,
-                padding: "2px 7px 2px 5px",
-                borderRadius: 7,
-                background,
-                color,
-                fontSize: 10,
-                fontWeight: 700,
-                lineHeight: 1,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <span
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: 6,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: isDone || isError ? color : "transparent",
-                  color: isDone || isError ? "#fff" : color,
-                  border: isDone || isError ? "none" : `1px solid ${color}`,
-                  flex: "0 0 auto",
-                }}
-              >
-                {isError ? I.warn(9, "#fff") : isDone ? I.check(9, "#fff") : null}
-              </span>
-              {node.label}
-            </span>
-          );
-        })}
-      </div>
+      <ProgressStrip
+        nodes={nodes}
+        activeIndex={activeIndex}
+        status={file.status === "done" ? "done" : file.status === "error" ? "error" : "uploading"}
+      />
       {file.progressMessage && (
         <div
           style={{
@@ -772,6 +780,112 @@ function ProgressNodes({ file }: { file: StagedFile }) {
           {file.progressMessage}
         </div>
       )}
+    </div>
+  );
+}
+
+function PastedProgressNodes({
+  status,
+  progress,
+}: {
+  status: PastedStatus;
+  progress: { stage?: string; message?: string };
+}) {
+  const nodes = PIPELINE_NODES;
+  const rawIndex = nodeIndexForStage(progress.stage);
+  const activeIndex = status === "done" ? nodes.length - 1 : Math.max(rawIndex, 0);
+  const stripStatus: ProgressStripStatus =
+    status === "done" ? "done" : status === "error" ? "error" : status === "uploading" ? "uploading" : "uploading";
+
+  return (
+    <div style={{ marginTop: 9 }}>
+      <ProgressStrip nodes={nodes} activeIndex={activeIndex} status={stripStatus} />
+      {progress.message && status !== "idle" && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: status === "error" ? "var(--risk-700)" : "var(--ink-500)",
+            lineHeight: 1.4,
+            wordBreak: "break-word",
+          }}
+        >
+          {progress.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type ProgressStripStatus = "uploading" | "done" | "error";
+
+function ProgressStrip({
+  nodes,
+  activeIndex,
+  status,
+}: {
+  nodes: ProgressNode[];
+  activeIndex: number;
+  status: ProgressStripStatus;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {nodes.map((node, index) => {
+        const isDone = status === "done" || index < activeIndex;
+        const isActive = status === "uploading" && index === activeIndex;
+        const isError = status === "error" && index === activeIndex;
+        const color = isError
+          ? "var(--risk-700)"
+          : isDone
+            ? "var(--ok-700)"
+            : isActive
+              ? "var(--ai-500)"
+              : "var(--ink-400)";
+        const background = isError
+          ? "var(--risk-100)"
+          : isDone
+            ? "var(--ok-100)"
+            : isActive
+              ? "var(--ai-100)"
+              : "var(--surface-3)";
+        return (
+          <span
+            key={node.key}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              minHeight: 22,
+              padding: "2px 7px 2px 5px",
+              borderRadius: 7,
+              background,
+              color,
+              fontSize: 10,
+              fontWeight: 700,
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: isDone || isError ? color : "transparent",
+                color: isDone || isError ? "#fff" : color,
+                border: isDone || isError ? "none" : `1px solid ${color}`,
+                flex: "0 0 auto",
+              }}
+            >
+              {isError ? I.warn(9, "#fff") : isDone ? I.check(9, "#fff") : null}
+            </span>
+            {node.label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -800,16 +914,9 @@ function StatusPill({ file }: { file: StagedFile }) {
     );
   }
   if (file.status === "done") {
-    // Contract is a two-phase flow on the backend (draft → confirm); the other
-    // kinds commit entities in a single call. Surface the difference so users
-    // know contract still needs review/confirm.
-    const label = file.kind === "合同" ? "✓ 草稿已生成" : "✓ 已录入";
     return (
-      <span
-        className="pill pill-ok"
-        style={{ fontSize: 10, padding: "1px 6px" }}
-      >
-        {label}
+      <span className="pill pill-ok" style={{ fontSize: 10, padding: "1px 6px" }}>
+        ✓ 草稿已生成
       </span>
     );
   }
@@ -829,6 +936,47 @@ function StatusPill({ file }: { file: StagedFile }) {
       className="pill pill-risk"
       style={{ fontSize: 10, padding: "1px 6px" }}
       title={file.error}
+    >
+      上传失败
+    </span>
+  );
+}
+
+function PastedStatusPill({ status, error }: { status: PastedStatus; error: string | null }) {
+  if (status === "idle") {
+    return (
+      <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
+        {I.spark(9)} 待 AI 整理
+      </span>
+    );
+  }
+  if (status === "uploading") {
+    return (
+      <span
+        className="pill"
+        style={{
+          fontSize: 10,
+          padding: "1px 6px",
+          background: "var(--ai-100)",
+          color: "var(--ai-500)",
+        }}
+      >
+        上传中…
+      </span>
+    );
+  }
+  if (status === "done") {
+    return (
+      <span className="pill pill-ok" style={{ fontSize: 10, padding: "1px 6px" }}>
+        ✓ 草稿已生成
+      </span>
+    );
+  }
+  return (
+    <span
+      className="pill pill-risk"
+      style={{ fontSize: 10, padding: "1px 6px" }}
+      title={error ?? undefined}
     >
       上传失败
     </span>
