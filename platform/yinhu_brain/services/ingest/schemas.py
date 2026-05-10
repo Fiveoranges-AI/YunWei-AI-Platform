@@ -292,18 +292,30 @@ class ContractConfirmRequest(BaseModel):
 class BusinessCardExtraction(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    name: str | None = Field(default=None, description="Person name on the business card.")
-    title: str | None = Field(default=None, description="Job title or role.")
+    name: str | None = Field(
+        default=None,
+        description="Person name as printed on the card. Leave null if unreadable.",
+    )
+    title: str | None = Field(
+        default=None,
+        description="Job title as printed on the card. Leave null if unreadable.",
+    )
     company_full_name: str | None = Field(
         default=None,
         description=(
-            "Company/customer/organization name printed on the card. If only a logo, brand, "
-            "English name, or abbreviation is visible, still fill this field with that visible text."
+            "Company/organization name as printed on the card, copied verbatim. "
+            "Leave null if the company text on the card is unreadable or absent. "
+            "Do NOT infer from email domains, address park names, watermarks, "
+            "case-study logos, or partner brands."
         ),
     )
     company_short_name: str | None = Field(
         default=None,
-        description="Short name, logo text, brand name, or abbreviation printed on the card.",
+        description=(
+            "Short name, logo text, or English abbreviation printed on the card "
+            "as a separate string from the full name. Leave null if the card only "
+            "carries one company name."
+        ),
     )
     phone: str | None = Field(default=None, description="Landline phone number.")
     mobile: str | None = Field(default=None, description="Mobile phone number.")

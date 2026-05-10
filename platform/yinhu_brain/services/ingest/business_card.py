@@ -13,7 +13,6 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,22 +50,6 @@ _PROMPT_PATH = (
 
 _MOBILE_RE = re.compile(r"^1[3-9]\d{9}$")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_GENERIC_EMAIL_DOMAINS = {
-    "126.com",
-    "139.com",
-    "163.com",
-    "foxmail.com",
-    "gmail.com",
-    "hotmail.com",
-    "icloud.com",
-    "live.com",
-    "msn.com",
-    "outlook.com",
-    "qq.com",
-    "sina.com",
-    "sohu.com",
-    "yahoo.com",
-}
 _FIELD_ALIASES = {
     "company": "company_full_name",
     "company_name": "company_full_name",
@@ -199,30 +182,6 @@ def _normalize_tool_input(raw: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _extract_domain(value: str | None) -> str | None:
-    value = _clean(value)
-    if not value:
-        return None
-    if "@" in value and not value.startswith("http"):
-        domain = value.rsplit("@", 1)[-1]
-    else:
-        parsed = urlsplit(value if "://" in value else f"https://{value}")
-        domain = parsed.netloc or parsed.path.split("/", 1)[0]
-    domain = domain.lower().strip().removeprefix("www.")
-    return domain or None
-
-
-def _fill_company_from_domain(result: BusinessCardExtraction) -> str | None:
-    if _clean(result.company_full_name) or _clean(result.company_short_name):
-        return None
-    domain = _extract_domain(result.website) or _extract_domain(result.email)
-    if not domain or domain in _GENERIC_EMAIL_DOMAINS:
-        return None
-    result.company_full_name = domain
-    result.company_short_name = domain.split(".", 1)[0]
-    return domain
-
-
 async def _resolve_customer(
     session: AsyncSession,
     result: BusinessCardExtraction,
@@ -336,6 +295,7 @@ async def ingest_business_card(
         tools=[business_card_tool()],
         tool_choice={"type": "tool", "name": BUSINESS_CARD_TOOL_NAME},
         max_tokens=2000,
+        temperature=0,
         document_id=doc.id,
     )
     tool_input = extract_tool_use_input(response, BUSINESS_CARD_TOOL_NAME)
@@ -355,10 +315,6 @@ async def ingest_business_card(
         needs_review = True
     if not result.name:
         warnings.append("no name extracted; needs review")
-        needs_review = True
-    domain_fallback = _fill_company_from_domain(result)
-    if domain_fallback:
-        warnings.append(f"company inferred from domain {domain_fallback!r}; needs review")
         needs_review = True
 
     await emit_progress(progress, "match", "字段抽取完成，正在匹配客户")
