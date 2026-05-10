@@ -26,6 +26,10 @@ RUN pip install --no-cache-dir .
 
 COPY platform/migrations /app/migrations/
 COPY platform/static /app/static/
+# yinhu_brain reads its LLM prompts via Path(__file__).parents[N] / "prompts"
+# which resolves to /app/prompts in the container. Without this the
+# /win/api/ingest/* endpoints raise 422 "draft failed: [Errno 2] No such file…".
+COPY platform/prompts /app/prompts/
 
 # Built app-win UI from stage 1 → /app/app-win/dist.
 # main.py: _WIN_DIST = Path(__file__).resolve().parent.parent / "app-win" / "dist"
