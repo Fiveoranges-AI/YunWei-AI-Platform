@@ -30,6 +30,7 @@ export function AppShell({ activeTab, onTabChange, children }: Props) {
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",
+            position: "relative",
           }}
         >
           {children}
@@ -54,6 +55,7 @@ export function AppShell({ activeTab, onTabChange, children }: Props) {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
+          position: "relative",
         }}
       >
         {children}

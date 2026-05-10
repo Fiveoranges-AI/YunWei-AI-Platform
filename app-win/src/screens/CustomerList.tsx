@@ -22,7 +22,7 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
   const rest = filtered.slice(1);
 
   return (
-    <div className="screen" style={{ background: "var(--bg)", position: "relative" }}>
+    <div className="screen" style={{ background: "var(--bg)" }}>
       {/* Header — greeting + search */}
       <div
         style={{
