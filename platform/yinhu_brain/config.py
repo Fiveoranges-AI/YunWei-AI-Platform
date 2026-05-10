@@ -19,18 +19,14 @@ class Settings(BaseSettings):
     model_qa: str = "claude-opus-4-7"
     model_vision: str = "claude-sonnet-4-6"
 
-    # ---- MinerU OCR ------------------------------------------------------
-    # Two routes:
-    #   1. Cloud (preferred): set MINERU_API_TOKEN from
-    #      https://mineru.net/apiManage/token.
-    #   2. Local sidecar: set MINERU_BASE_URL (e.g. http://mineru:8765 when
-    #      running `docker compose --profile local-mineru up`).
-    # Leave both blank to disable MinerU (pipeline falls back to pypdf +
-    # vision-only and warns loudly on scanned PDFs).
-    mineru_api_token: str = ""
-    mineru_cloud_base_url: str = "https://mineru.net"
-    mineru_base_url: str = ""
-    mineru_request_timeout_seconds: int = 900
+    # ---- Mistral Document AI OCR ----------------------------------------
+    # Used for scanned PDFs and image/photo OCR. Leave MISTRAL_API_KEY blank
+    # to disable OCR; scanned PDFs will fail with an actionable config error
+    # while image flows degrade to the existing vision model.
+    mistral_api_key: str = ""
+    mistral_base_url: str = "https://api.mistral.ai"
+    mistral_ocr_model: str = "mistral-ocr-latest"
+    mistral_ocr_timeout_seconds: int = 120
 
     # ---- CORS ------------------------------------------------------------
     # Comma-separated. localhost:3000 covers the bundled frontend dev server.

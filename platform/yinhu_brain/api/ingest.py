@@ -7,7 +7,7 @@ and writes to the inbox for human confirmation. Both surfaces persist a
 Document and an llm_calls audit row.
 
 Routes:
-- /api/ingest/contract          PDF → Customer + Contacts + Order + Contract
+- /api/ingest/contract          PDF/DOC/DOCX/PPT/PPTX → draft, then confirm writes entities
 - /api/ingest/business_card     image → Customer + Contact + provenance
 - /api/ingest/wechat_screenshot image → chat_log Document + extracted hints
 
@@ -55,6 +55,14 @@ router = APIRouter(prefix="/api/ingest")
 # comfortably under Cloudflare's 100s edge timeout to keep the connection
 # alive while the LLM runs.
 _HEARTBEAT_SECONDS = 20.0
+_CONTRACT_FILE_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx"}
+_CONTRACT_CONTENT_TYPES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
 
 
 async def _stream_with_heartbeats(
@@ -134,8 +142,11 @@ async def upload_contract_preview(
     pdf_bytes = await file.read()
     if not pdf_bytes:
         raise HTTPException(400, "empty file")
-    if not (file.filename or "").lower().endswith(".pdf") and (file.content_type or "") != "application/pdf":
-        raise HTTPException(400, "expected a PDF")
+    name = file.filename or ""
+    ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    ct = (file.content_type or "").lower()
+    if ext not in _CONTRACT_FILE_EXTS and ct not in _CONTRACT_CONTENT_TYPES:
+        raise HTTPException(400, "expected a PDF, DOC, DOCX, PPT, or PPTX contract file")
 
     fname = file.filename or "contract.pdf"
 
@@ -144,6 +155,7 @@ async def upload_contract_preview(
             session=session,
             pdf_bytes=pdf_bytes,
             original_filename=fname,
+            content_type=file.content_type,
             uploader=uploader,
         )
         needs_review = [

@@ -35,6 +35,10 @@ from yinhu_brain.services.ingest.provenance import upsert_field_provenance
 from yinhu_brain.config import settings
 from yinhu_brain.services.llm import call_claude, extract_tool_use_input
 from yinhu_brain.services.match import find_customer_candidates
+from yinhu_brain.services.mistral_ocr_client import (
+    MistralOCRUnavailable,
+    parse_image_to_markdown,
+)
 from yinhu_brain.services.storage import store_upload
 
 logger = logging.getLogger(__name__)
@@ -281,6 +285,27 @@ async def ingest_business_card(
     media_type = _media_type(original_filename, content_type)
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
     prompt = _PROMPT_PATH.read_text(encoding="utf-8")
+    ocr_text = ""
+    ocr_warnings: list[str] = []
+    try:
+        ocr_text = await parse_image_to_markdown(
+            image_bytes,
+            original_filename,
+            content_type,
+        )
+    except MistralOCRUnavailable as exc:
+        ocr_warnings.append(f"Mistral OCR unavailable: {exc!s}")
+        logger.warning("business card OCR failed for %s: %s", original_filename, exc)
+    if ocr_text:
+        doc.ocr_text = ocr_text
+        prompt = (
+            prompt
+            + "\n\n## Mistral OCR 识别文本\n"
+            + "下面是 OCR 从名片图片中识别出的 markdown 文本。请结合图片和 OCR，优先使用图片核对，"
+              "但不要忽略 OCR 中出现的公司名、邮箱、电话、地址。\n\n"
+            + ocr_text[:12000]
+        )
+    await session.flush()
 
     messages = [
         {
@@ -315,7 +340,7 @@ async def ingest_business_card(
     result = BusinessCardExtraction.model_validate(_normalize_tool_input(tool_input))
 
     # Post-validate phone/email; halve confidence on bad ones, flag needs_review
-    warnings: list[str] = list(result.parse_warnings)
+    warnings: list[str] = ocr_warnings + list(result.parse_warnings)
     needs_review = False
     if result.mobile and not _MOBILE_RE.match(result.mobile.strip()):
         warnings.append(f"mobile {result.mobile!r} does not match Chinese mobile pattern")

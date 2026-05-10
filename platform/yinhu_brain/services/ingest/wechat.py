@@ -24,6 +24,10 @@ from yinhu_brain.services.ingest.schemas import (
 )
 from yinhu_brain.config import settings
 from yinhu_brain.services.llm import call_claude, extract_tool_use_input
+from yinhu_brain.services.mistral_ocr_client import (
+    MistralOCRUnavailable,
+    parse_image_to_markdown,
+)
 from yinhu_brain.services.storage import store_upload
 
 logger = logging.getLogger(__name__)
@@ -83,6 +87,27 @@ async def ingest_wechat_screenshot(
     media_type = _media_type(original_filename, content_type)
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
     prompt = _PROMPT_PATH.read_text(encoding="utf-8")
+    ocr_text = ""
+    ocr_warnings: list[str] = []
+    try:
+        ocr_text = await parse_image_to_markdown(
+            image_bytes,
+            original_filename,
+            content_type,
+        )
+    except MistralOCRUnavailable as exc:
+        ocr_warnings.append(f"Mistral OCR unavailable: {exc!s}")
+        logger.warning("wechat screenshot OCR failed for %s: %s", original_filename, exc)
+    if ocr_text:
+        doc.ocr_text = ocr_text
+        prompt = (
+            prompt
+            + "\n\n## Mistral OCR 识别文本\n"
+            + "下面是 OCR 从截图中识别出的 markdown 文本。请结合图片和 OCR，优先用图片判断消息方向和顺序，"
+              "用 OCR 辅助核对每条消息原文。\n\n"
+            + ocr_text[:12000]
+        )
+    await session.flush()
 
     messages = [
         {
@@ -115,7 +140,7 @@ async def ingest_wechat_screenshot(
     await session.flush()
 
     result = WeChatExtraction.model_validate(tool_input)
-    doc.parse_warnings = list(result.parse_warnings)
+    doc.parse_warnings = ocr_warnings + list(result.parse_warnings)
     await session.flush()
 
     return WeChatIngestResult(
@@ -124,5 +149,5 @@ async def ingest_wechat_screenshot(
         extracted_entity_count=len(result.extracted_entities),
         summary=result.summary,
         confidence_overall=result.confidence_overall,
-        warnings=list(result.parse_warnings),
+        warnings=ocr_warnings + list(result.parse_warnings),
     )

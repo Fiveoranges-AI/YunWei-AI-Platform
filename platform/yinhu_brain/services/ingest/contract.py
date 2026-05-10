@@ -1,13 +1,13 @@
 """Contract ingest pipeline.
 
-PDF in → DB rows out. Text-only path: pypdf for born-digital PDFs, MinerU
-OCR for scanned ones, then a single text-only LLM call for extraction. We
-do not send the original PDF bytes to the LLM — DeepSeek's
-Anthropic-compat doesn't OCR `document` blocks, and MinerU already gives
+Document in → DB rows out. Text-only path: pypdf for born-digital PDFs,
+Mistral OCR for scanned PDFs and Office files, then a single text-only LLM
+call for extraction. We do not send the original file bytes to the LLM — DeepSeek's
+Anthropic-compat doesn't OCR `document` blocks, and Mistral OCR gives
 us a clean markdown view.
 
 1. Store original bytes (kept forever).
-2. pypdf per-page text; MinerU OCR fallback for scanned PDFs.
+2. pypdf per-page text; Mistral OCR fallback for scanned PDFs.
 3. Insert Document early so subsequent llm_calls reference it.
 4. Single `submit_contract_extraction` tool call (text-only) → Pydantic.
 5. Insert Customer / Contacts / Order / Contract rows.
@@ -42,7 +42,11 @@ from yinhu_brain.services.match import (
     find_contact_candidates,
     find_customer_candidates,
 )
-from yinhu_brain.services.mineru_client import MineruUnavailable, parse_pdf_to_markdown
+from yinhu_brain.services.mistral_ocr_client import (
+    MistralOCRUnavailable,
+    parse_document_to_markdown,
+    parse_pdf_to_markdown,
+)
 from yinhu_brain.services.ingest.provenance import write_provenance
 from yinhu_brain.services.storage import store_upload
 from yinhu_brain.services.ingest.schemas import (
@@ -104,53 +108,74 @@ async def extract_contract_draft(
     session: AsyncSession,
     pdf_bytes: bytes,
     original_filename: str,
+    content_type: str | None = None,
     uploader: str | None = None,
 ) -> ContractDraft:
     """Phase 1: store the PDF, OCR it, run the LLM, save the draft on the
     Document row. Marks Document.review_status=pending_review. Does NOT
     create Customer/Order/Contract — that happens on confirm."""
     file_path, sha, size = store_upload(pdf_bytes, original_filename)
+    ext = Path(original_filename).suffix.lower()
+    is_pdf = ext == ".pdf" or (content_type or "").lower() == "application/pdf"
 
-    pages = pdf_utils.extract_text_with_pages(file_path)
-    pypdf_text = pdf_utils.joined_text(pages)
+    pages = pdf_utils.extract_text_with_pages(file_path) if is_pdf else []
+    pypdf_text = pdf_utils.joined_text(pages) if is_pdf else ""
 
-    mineru_warning: str | None = None
-    used_mineru = False
-    if pdf_utils.is_scanned(pages):
+    ocr_warning: str | None = None
+    mistral_ocr_note: str | None = None
+    if not is_pdf:
+        logger.info(
+            "document %r is not a PDF; using Mistral OCR directly",
+            original_filename,
+        )
+        try:
+            md = await parse_document_to_markdown(
+                pdf_bytes,
+                original_filename,
+                content_type,
+            )
+            if md.strip():
+                pypdf_text = md
+                mistral_ocr_note = "OCR via Mistral (document parsed via OCR)"
+                logger.info("Mistral OCR returned %d chars", len(md))
+        except MistralOCRUnavailable as exc:
+            ocr_warning = f"Mistral OCR unavailable: {exc!s}"
+            logger.warning(ocr_warning)
+    elif pdf_utils.is_scanned(pages):
         logger.info(
             "pdf %r appears scanned (pypdf got %d chars across %d pages); "
-            "trying MinerU",
+            "trying Mistral OCR",
             original_filename, len(pypdf_text), len(pages),
         )
         try:
             md = await parse_pdf_to_markdown(pdf_bytes, original_filename)
             if md.strip():
                 pypdf_text = md
-                used_mineru = True
-                logger.info("MinerU returned %d chars", len(md))
-        except MineruUnavailable as exc:
-            mineru_warning = f"MinerU unavailable: {exc!s}"
-            logger.warning(mineru_warning)
+                mistral_ocr_note = "OCR via Mistral (PDF had no text layer)"
+                logger.info("Mistral OCR returned %d chars", len(md))
+        except MistralOCRUnavailable as exc:
+            ocr_warning = f"Mistral OCR unavailable: {exc!s}"
+            logger.warning(ocr_warning)
 
     # If we still have effectively no text, fail fast with a clear, actionable
     # error instead of feeding "(no text extracted)" to the LLM and surfacing
     # whatever Pydantic happens to complain about.
     if len(pypdf_text.strip()) < 40:
         msg = (
-            f"未能从 PDF 提取出可读文本 (pypdf {len(pypdf_text.strip())} 字"
-            f", {len(pages)} 页)。"
+            f"未能从文件提取出可读文本 (pypdf {len(pypdf_text.strip())} 字"
+            f", {len(pages)} 页, 文件类型 {ext or content_type or 'unknown'})。"
         )
-        if mineru_warning:
-            msg += "扫描件需要 OCR，但 " + mineru_warning
+        if ocr_warning:
+            msg += "扫描件需要 OCR，但 " + ocr_warning
         else:
-            msg += "如果是扫描件请配置 MinerU (MINERU_API_TOKEN 或 MINERU_BASE_URL)。"
+            msg += "如果是扫描件请配置 Mistral OCR (MISTRAL_API_KEY)。"
         raise ValueError(msg)
 
     doc = Document(
         type=DocumentType.contract,
         file_url=file_path,
         original_filename=original_filename,
-        content_type="application/pdf",
+        content_type=content_type or ("application/pdf" if is_pdf else None),
         file_sha256=sha,
         file_size_bytes=size,
         ocr_text=pypdf_text,
@@ -213,10 +238,10 @@ async def extract_contract_draft(
 
     doc.processing_status = DocumentProcessingStatus.parsed
     warnings: list[str] = list(result.parse_warnings)
-    if mineru_warning:
-        warnings.insert(0, mineru_warning)
-    if used_mineru:
-        warnings.insert(0, "OCR via MinerU (PDF had no text layer)")
+    if ocr_warning:
+        warnings.insert(0, ocr_warning)
+    if mistral_ocr_note:
+        warnings.insert(0, mistral_ocr_note)
     doc.parse_warnings = warnings
     await session.flush()
 
@@ -486,5 +511,3 @@ async def ingest_contract(
         document_id=draft.document_id,
         request=request,
     )
-
-
