@@ -189,6 +189,17 @@ async def auto_ingest(
     # NOTE: ``session.bind`` returns the ``AsyncEngine``; ``session.get_bind()``
     # would unwrap to the underlying sync ``Engine`` and break ``AsyncSession``
     # construction below.
+    #
+    # **Commit before fan-out**: the Document row inserted by collect_evidence
+    # and the planner's llm_calls audit row live in the main session's open
+    # transaction. The per-extractor sub-sessions are independent connections
+    # with their own transactions — Postgres' default READ COMMITTED isolation
+    # means they cannot see uncommitted rows from the main session, so when
+    # call_claude inserts ``llm_calls(document_id=...)`` the FK to documents
+    # fails with IntegrityError. Committing here makes the Document visible
+    # to the fan-out. Step 5 (raw_llm_response persistence) runs in a new
+    # implicit transaction on the main session afterwards.
+    await session.commit()
     engine = session.bind
     selected_names: list[ExtractorName] = [s.name for s in plan.extractors]
 
