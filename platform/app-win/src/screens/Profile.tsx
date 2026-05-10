@@ -7,6 +7,17 @@ import { useIsDesktop } from "../lib/breakpoints";
 export function ProfileScreen({ go: _go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
 
+  async function handleLogout() {
+    try {
+      await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
+    } catch {
+      /* ignore — clear the cookie locally regardless and let the platform
+         re-prompt at "/" */
+    }
+    // Platform "/" serves login.html when there's no app_session cookie.
+    window.location.href = "/";
+  }
+
   return (
     <div className="screen" style={{ background: "var(--bg)" }}>
       {/* Top */}
@@ -100,6 +111,7 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
 
         <button
           className="btn btn-secondary"
+          onClick={handleLogout}
           style={{
             width: "100%",
             marginTop: 12,

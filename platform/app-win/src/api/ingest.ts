@@ -59,6 +59,7 @@ export async function uploadStagedFile(file: File, kind: string): Promise<Ingest
       credentials: "include",
     });
     if (!res.ok) {
+      // Pre-stream HTTP errors (validation, auth) — body is small JSON.
       let detail = `HTTP ${res.status}`;
       try {
         const body = (await res.json()) as { detail?: string };
@@ -68,11 +69,65 @@ export async function uploadStagedFile(file: File, kind: string): Promise<Ingest
       }
       return { ok: false, error: detail };
     }
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/x-ndjson")) {
+      return await readNdjsonResult(res);
+    }
+    // Backwards compat with non-streaming responses.
     const body = (await res.json()) as { document_id?: string };
     return { ok: true, documentId: body.document_id ?? "", raw: body };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "网络错误" };
   }
+}
+
+// The ingest endpoints stream NDJSON: zero or more {"status":"processing"}
+// heartbeats keep Cloudflare's 100s edge timeout from firing during a long
+// LLM call; the final non-empty line is either {"status":"done", ...result}
+// or {"status":"error", "error": "..."}.
+async function readNdjsonResult(res: Response): Promise<IngestResult> {
+  if (!res.body) {
+    return { ok: false, error: "无响应数据" };
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let last: { status?: string; error?: string; document_id?: string } | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl = buf.indexOf("\n");
+    while (nl !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) {
+        try {
+          last = JSON.parse(line);
+        } catch {
+          /* ignore partial / malformed lines */
+        }
+      }
+      nl = buf.indexOf("\n");
+    }
+  }
+  // Drain any trailing line that lacked a terminator.
+  const tail = buf.trim();
+  if (tail) {
+    try {
+      last = JSON.parse(tail);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!last) return { ok: false, error: "服务器未返回结果" };
+  if (last.status === "done") {
+    return { ok: true, documentId: last.document_id ?? "", raw: last };
+  }
+  if (last.status === "error") {
+    return { ok: false, error: last.error ?? "服务器错误" };
+  }
+  return { ok: false, error: "未知响应状态" };
 }
 
 // ───────────── Batch state shared with Review screen ─────────────
