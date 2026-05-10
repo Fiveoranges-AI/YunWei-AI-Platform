@@ -16,6 +16,7 @@
 
 import { MOCK_ASK_SEED, MOCK_CUSTOMERS, MOCK_REVIEW } from "../data/mock";
 import type {
+  AskAIBlock,
   AskSeed,
   Commitment,
   Contact,
@@ -69,6 +70,29 @@ type RawSummary = {
 async function fetchJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
   if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+  return (await res.json()) as T;
+}
+
+async function readError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: unknown; error?: unknown; message?: unknown };
+    const detail = body.detail ?? body.error ?? body.message;
+    if (typeof detail === "string") return detail;
+    if (detail) return JSON.stringify(detail);
+  } catch {
+    /* response wasn't JSON */
+  }
+  return `HTTP ${res.status}`;
+}
+
+async function postJSON<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as T;
 }
 
@@ -271,9 +295,71 @@ export async function getReview(_uploadId: string): Promise<Review> {
 }
 
 export async function getAskSeed(customerId: string): Promise<AskSeed> {
-  // No backend endpoint for "seed" — frontend just uses an empty conversation
-  // and the suggestions list. v1 returns mock; replace with real seed logic
-  // when the Ask UI is wired to /win/api/customers/{id}/ask end-to-end.
+  // No backend endpoint for "seed" — the real answer path is askAI(); this
+  // only seeds first-paint suggestions.
   await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-  return { ...MOCK_ASK_SEED, customerId };
+  return { customerId, messages: [], suggestions: MOCK_ASK_SEED.suggestions };
+}
+
+type RawAskCitation = {
+  target_type: string;
+  target_id: string;
+  snippet?: string | null;
+};
+
+type RawAskResponse = {
+  answer: string;
+  citations?: RawAskCitation[];
+  confidence?: number;
+  no_relevant_info?: boolean;
+};
+
+const CITATION_LABEL: Record<string, string> = {
+  customer: "客户",
+  contact: "联系人",
+  contract: "合同",
+  order: "订单",
+  document: "文档",
+  event: "动态",
+  commitment: "承诺",
+  task: "待办",
+  risk: "风险",
+  memory: "记忆",
+};
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+function citationLabel(c: RawAskCitation): string {
+  const kind = CITATION_LABEL[c.target_type] ?? c.target_type;
+  const shortId = c.target_id ? c.target_id.slice(0, 8) : "";
+  return c.snippet ? truncate(c.snippet, 48) : `${kind}${shortId ? ` · ${shortId}` : ""}`;
+}
+
+function askResponseToBlock(raw: RawAskResponse): AskAIBlock {
+  const citations = raw.citations ?? [];
+  const evidence = citations.slice(0, 8).map((c, i) => ({
+    id: `${c.target_type}-${c.target_id || i}`,
+    type: CITATION_LABEL[c.target_type] ?? c.target_type,
+    label: citationLabel(c),
+  }));
+  const related = citations.slice(0, 6).map((c) => ({
+    kind: CITATION_LABEL[c.target_type] ?? c.target_type,
+    label: c.target_id ? `${c.target_id.slice(0, 8)}…` : citationLabel(c),
+  }));
+  return {
+    verdict: raw.answer,
+    evidence,
+    next: raw.no_relevant_info
+      ? ["这条问题在当前客户档案里没有足够依据，先补充相关合同、聊天记录或备注。"]
+      : [],
+    related,
+  };
+}
+
+export async function askAI(customerId: string, question: string): Promise<AskAIBlock> {
+  const path = customerId === "all" ? "/ask" : `/customers/${customerId}/ask`;
+  const raw = await postJSON<RawAskResponse>(path, { question });
+  return askResponseToBlock(raw);
 }

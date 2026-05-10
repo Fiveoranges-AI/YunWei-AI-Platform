@@ -179,18 +179,32 @@ type ContractDraft = {
     signing_date?: string | null;
     effective_date?: string | null;
     expiry_date?: string | null;
+    delivery_terms?: string | null;
+    penalty_terms?: string | null;
     payment_milestones?: Array<{
       name?: string | null;
       ratio: number;
       trigger_event: string;
+      trigger_offset_days?: number | null;
+      raw_text?: string | null;
     }>;
   };
+  field_provenance?: Array<{
+    path: string;
+    source_page: number | null;
+    source_excerpt: string | null;
+  }>;
   confidence_overall?: number;
+  field_confidence?: Record<string, number>;
+  parse_warnings?: string[];
 };
 
 type ContractEnvelope = {
   draft?: ContractDraft;
-  candidates?: { customer?: unknown[]; contacts?: unknown[][] };
+  candidates?: {
+    customer?: MatchCandidate<CustomerFinal>[];
+    contacts?: Array<MatchCandidate<ContactFinal>[]>;
+  };
   needs_review_fields?: string[];
   warnings?: string[];
 };
@@ -209,6 +223,101 @@ type BusinessCardEnvelope = {
   warnings?: string[];
 };
 
+type MatchCandidate<T> = {
+  id: string;
+  score?: number;
+  reason?: string;
+  fields?: Partial<T>;
+};
+
+type CustomerFinal = {
+  full_name: string | null;
+  short_name: string | null;
+  address: string | null;
+  tax_id: string | null;
+};
+
+type ContactFinal = {
+  name: string | null;
+  title: string | null;
+  phone: string | null;
+  mobile: string | null;
+  email: string | null;
+  role: "seller" | "buyer" | "delivery" | "acceptance" | "invoice" | "other";
+  address: string | null;
+};
+
+type OrderFinal = {
+  amount_total: number | null;
+  amount_currency: string;
+  delivery_promised_date: string | null;
+  delivery_address: string | null;
+  description: string | null;
+};
+
+type MilestoneFinal = {
+  name: string | null;
+  ratio: number;
+  trigger_event:
+    | "contract_signed"
+    | "before_shipment"
+    | "on_delivery"
+    | "on_acceptance"
+    | "invoice_issued"
+    | "warranty_end"
+    | "on_demand"
+    | "other";
+  trigger_offset_days: number | null;
+  raw_text: string | null;
+};
+
+type ContractFinal = {
+  contract_no_external: string | null;
+  payment_milestones: MilestoneFinal[];
+  delivery_terms: string | null;
+  penalty_terms: string | null;
+  signing_date: string | null;
+  effective_date: string | null;
+  expiry_date: string | null;
+};
+
+type ContractConfirmRequest = {
+  customer: {
+    mode: "new" | "merge";
+    existing_id?: string;
+    final: CustomerFinal;
+  };
+  contacts: Array<{
+    mode: "new" | "merge";
+    existing_id?: string;
+    final: ContactFinal;
+  }>;
+  order: OrderFinal;
+  contract: ContractFinal;
+  field_provenance: NonNullable<ContractDraft["field_provenance"]>;
+  confidence_overall: number;
+  field_confidence: Record<string, number>;
+  parse_warnings: string[];
+};
+
+type ContractConfirmResponse = {
+  document_id: string;
+  created_entities?: {
+    customer_id?: string;
+    contact_ids?: string[];
+    order_id?: string;
+    contract_id?: string;
+  };
+  warnings?: string[];
+};
+
+export type ArchiveResult = {
+  confirmedContracts: number;
+  passthroughDocuments: number;
+  customerIds: string[];
+  warnings: string[];
+};
+
 const ROLE_CN: Record<string, string> = {
   seller: "销售方",
   buyer: "采购方",
@@ -217,6 +326,219 @@ const ROLE_CN: Record<string, string> = {
   invoice: "开票",
   other: "其他",
 };
+
+const VALID_ROLES = new Set<ContactFinal["role"]>([
+  "seller",
+  "buyer",
+  "delivery",
+  "acceptance",
+  "invoice",
+  "other",
+]);
+
+const VALID_TRIGGERS = new Set<MilestoneFinal["trigger_event"]>([
+  "contract_signed",
+  "before_shipment",
+  "on_delivery",
+  "on_acceptance",
+  "invoice_issued",
+  "warranty_end",
+  "on_demand",
+  "other",
+]);
+
+const CUSTOMER_MERGE_THRESHOLD = 0.95;
+const CONTACT_MERGE_THRESHOLD = 0.99;
+
+async function readError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: unknown; error?: unknown; message?: unknown };
+    const detail = body.detail ?? body.error ?? body.message;
+    if (typeof detail === "string") return detail;
+    if (detail) return JSON.stringify(detail);
+  } catch {
+    /* response wasn't JSON */
+  }
+  return `HTTP ${res.status}`;
+}
+
+async function postJSON<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as T;
+}
+
+function asContractEnvelope(raw: unknown): ContractEnvelope {
+  return (raw ?? {}) as ContractEnvelope;
+}
+
+function asRole(role: string | null | undefined): ContactFinal["role"] {
+  return VALID_ROLES.has(role as ContactFinal["role"]) ? (role as ContactFinal["role"]) : "other";
+}
+
+function asTrigger(trigger: string | null | undefined): MilestoneFinal["trigger_event"] {
+  return VALID_TRIGGERS.has(trigger as MilestoneFinal["trigger_event"])
+    ? (trigger as MilestoneFinal["trigger_event"])
+    : "other";
+}
+
+function normalizeCustomer(raw: ContractDraft["customer"] | undefined): CustomerFinal {
+  return {
+    full_name: raw?.full_name ?? null,
+    short_name: raw?.short_name ?? null,
+    address: raw?.address ?? null,
+    tax_id: raw?.tax_id ?? null,
+  };
+}
+
+function normalizeContact(raw: NonNullable<ContractDraft["contacts"]>[number] | undefined): ContactFinal {
+  return {
+    name: raw?.name ?? null,
+    title: raw?.title ?? null,
+    phone: raw?.phone ?? null,
+    mobile: raw?.mobile ?? null,
+    email: raw?.email ?? null,
+    role: asRole(raw?.role),
+    address: null,
+  };
+}
+
+function normalizeOrder(raw: ContractDraft["order"] | undefined): OrderFinal {
+  return {
+    amount_total: raw?.amount_total ?? null,
+    amount_currency: raw?.amount_currency ?? "CNY",
+    delivery_promised_date: raw?.delivery_promised_date ?? null,
+    delivery_address: null,
+    description: null,
+  };
+}
+
+function normalizeContract(raw: ContractDraft["contract"] | undefined): ContractFinal {
+  return {
+    contract_no_external: raw?.contract_no_external ?? null,
+    payment_milestones: (raw?.payment_milestones ?? []).map((m) => ({
+      name: m.name ?? null,
+      ratio: typeof m.ratio === "number" ? m.ratio : 0,
+      trigger_event: asTrigger(m.trigger_event),
+      trigger_offset_days: m.trigger_offset_days ?? null,
+      raw_text: m.raw_text ?? null,
+    })),
+    delivery_terms: raw?.delivery_terms ?? null,
+    penalty_terms: raw?.penalty_terms ?? null,
+    signing_date: raw?.signing_date ?? null,
+    effective_date: raw?.effective_date ?? null,
+    expiry_date: raw?.expiry_date ?? null,
+  };
+}
+
+function fallbackText(current: string | null, previous: string | null | undefined): string | null {
+  return current && current.trim() ? current : previous ?? current;
+}
+
+function customerWithCandidate(final: CustomerFinal, candidate: MatchCandidate<CustomerFinal> | null): CustomerFinal {
+  if (!candidate?.fields) return final;
+  return {
+    full_name: fallbackText(final.full_name, candidate.fields.full_name),
+    short_name: fallbackText(final.short_name, candidate.fields.short_name),
+    address: fallbackText(final.address, candidate.fields.address),
+    tax_id: fallbackText(final.tax_id, candidate.fields.tax_id),
+  };
+}
+
+function contactWithCandidate(final: ContactFinal, candidate: MatchCandidate<ContactFinal> | null): ContactFinal {
+  if (!candidate?.fields) return final;
+  return {
+    name: fallbackText(final.name, candidate.fields.name),
+    title: fallbackText(final.title, candidate.fields.title),
+    phone: fallbackText(final.phone, candidate.fields.phone),
+    mobile: fallbackText(final.mobile, candidate.fields.mobile),
+    email: fallbackText(final.email, candidate.fields.email),
+    role: final.role === "other" ? asRole(candidate.fields.role) : final.role,
+    address: fallbackText(final.address, candidate.fields.address),
+  };
+}
+
+function bestCandidate<T>(candidates: MatchCandidate<T>[] | undefined, threshold: number): MatchCandidate<T> | null {
+  const sorted = [...(candidates ?? [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const best = sorted[0];
+  return best && (best.score ?? 0) >= threshold ? best : null;
+}
+
+function buildConfirmRequest(envelope: ContractEnvelope): ContractConfirmRequest {
+  const draft = envelope.draft;
+  const customerCandidate = bestCandidate(envelope.candidates?.customer, CUSTOMER_MERGE_THRESHOLD);
+  return {
+    customer: {
+      mode: customerCandidate ? "merge" : "new",
+      existing_id: customerCandidate?.id,
+      final: customerWithCandidate(normalizeCustomer(draft?.customer), customerCandidate),
+    },
+    contacts: (draft?.contacts ?? []).map((c, i) => {
+      const candidate = bestCandidate(envelope.candidates?.contacts?.[i], CONTACT_MERGE_THRESHOLD);
+      return {
+        mode: candidate ? "merge" : "new",
+        existing_id: candidate?.id,
+        final: contactWithCandidate(normalizeContact(c), candidate),
+      };
+    }),
+    order: normalizeOrder(draft?.order),
+    contract: normalizeContract(draft?.contract),
+    field_provenance: draft?.field_provenance ?? [],
+    confidence_overall: draft?.confidence_overall ?? 0.5,
+    field_confidence: draft?.field_confidence ?? {},
+    parse_warnings: draft?.parse_warnings ?? [],
+  };
+}
+
+export async function confirmContractDocument(documentId: string, raw: unknown): Promise<ContractConfirmResponse> {
+  if (!documentId) throw new Error("缺少合同文档 ID，无法归档");
+  const envelope = asContractEnvelope(raw);
+  if (!envelope.draft) throw new Error("缺少合同抽取草稿，无法归档");
+  return postJSON<ContractConfirmResponse>(`/contract/${documentId}/confirm`, buildConfirmRequest(envelope));
+}
+
+export async function cancelContractDocument(documentId: string): Promise<void> {
+  if (!documentId) return;
+  await postJSON(`/contract/${documentId}/cancel`);
+}
+
+export async function archiveBatch(batch: Batch): Promise<ArchiveResult> {
+  const result: ArchiveResult = {
+    confirmedContracts: 0,
+    passthroughDocuments: 0,
+    customerIds: [],
+    warnings: [],
+  };
+  for (const entry of batch.entries) {
+    if (!entry.result.ok) continue;
+    if (entry.kind !== "合同") {
+      result.passthroughDocuments += 1;
+      continue;
+    }
+    const confirmed = await confirmContractDocument(entry.result.documentId, entry.result.raw);
+    result.confirmedContracts += 1;
+    if (confirmed.created_entities?.customer_id) {
+      result.customerIds.push(confirmed.created_entities.customer_id);
+    }
+    result.warnings.push(...(confirmed.warnings ?? []));
+  }
+  return result;
+}
+
+export async function ignoreBatch(batch: Batch): Promise<void> {
+  await Promise.all(
+    batch.entries.map((entry) =>
+      entry.result.ok && entry.kind === "合同"
+        ? cancelContractDocument(entry.result.documentId)
+        : Promise.resolve(),
+    ),
+  );
+}
 
 export function batchToReview(batch: Batch): Review | null {
   const successes = batch.entries.filter(

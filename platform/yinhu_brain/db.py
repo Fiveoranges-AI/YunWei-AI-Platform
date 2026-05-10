@@ -86,42 +86,49 @@ async def _ensure_database(enterprise_id: str) -> None:
     """Create the per-tenant database if it does not exist, then create_all."""
     if enterprise_id in _provisioned:
         return
-    db_name = _tenant_db_name(enterprise_id)
-    if not settings.database_url.startswith("sqlite"):
-        admin_engine = create_async_engine(_admin_url(), isolation_level="AUTOCOMMIT")
-        try:
-            async with admin_engine.connect() as conn:
-                exists = await conn.scalar(
-                    text("SELECT 1 FROM pg_database WHERE datname = :n").bindparams(n=db_name)
-                )
-                if not exists:
-                    await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-        finally:
-            await admin_engine.dispose()
-    # Now run create_all on the tenant DB. Importing models registers them
-    # against Base.metadata so create_all sees every table.
-    import yinhu_brain.models  # noqa: F401  — register mappers
+    async with _engine_lock:
+        if enterprise_id in _provisioned:
+            return
+        db_name = _tenant_db_name(enterprise_id)
+        if not settings.database_url.startswith("sqlite"):
+            admin_engine = create_async_engine(_admin_url(), isolation_level="AUTOCOMMIT")
+            try:
+                async with admin_engine.connect() as conn:
+                    exists = await conn.scalar(
+                        text("SELECT 1 FROM pg_database WHERE datname = :n").bindparams(n=db_name)
+                    )
+                    if not exists:
+                        await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+            finally:
+                await admin_engine.dispose()
+        # Now run create_all on the tenant DB. Importing models registers them
+        # against Base.metadata so create_all sees every table.
+        import yinhu_brain.models  # noqa: F401  — register mappers
 
-    engine = await _get_engine(enterprise_id)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    _provisioned.add(enterprise_id)
+        engine = _get_engine_unlocked(enterprise_id)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        _provisioned.add(enterprise_id)
+
+
+def _get_engine_unlocked(enterprise_id: str) -> AsyncEngine:
+    if enterprise_id in _engines:
+        return _engines[enterprise_id]
+    engine = create_async_engine(
+        _build_tenant_url(enterprise_id),
+        echo=False,
+        future=True,
+        pool_pre_ping=True,
+    )
+    _engines[enterprise_id] = engine
+    return engine
 
 
 async def _get_engine(enterprise_id: str) -> AsyncEngine:
     if enterprise_id in _engines:
         return _engines[enterprise_id]
     async with _engine_lock:
-        if enterprise_id in _engines:
-            return _engines[enterprise_id]
-        engine = create_async_engine(
-            _build_tenant_url(enterprise_id),
-            echo=False,
-            future=True,
-            pool_pre_ping=True,
-        )
-        _engines[enterprise_id] = engine
-        return engine
+        return _get_engine_unlocked(enterprise_id)
 
 
 async def get_engine_for(enterprise_id: str) -> AsyncEngine:

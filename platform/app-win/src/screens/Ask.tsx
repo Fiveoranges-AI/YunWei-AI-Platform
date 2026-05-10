@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { GoFn } from "../App";
-import { getAskSeed, listCustomersBasic } from "../api/client";
+import { askAI, getAskSeed, listCustomersBasic } from "../api/client";
 import { EvidenceChip } from "../components/EvidenceChip";
 import type { AskAIBlock, AskMessage, CustomerDetail } from "../data/types";
 import { I } from "../icons";
@@ -49,18 +49,31 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
     }
   }, [msgs.length, pending]);
 
-  function ask(text: string) {
+  async function ask(text: string) {
     if (!text.trim()) return;
     setMsgs((m) => [...m, { role: "user", text, when: "现在" }]);
     setDraft("");
     setPending(true);
-    setTimeout(() => {
-      setPending(false);
+    try {
+      const blocks = await askAI(isAll ? ALL : activeId, text);
+      setMsgs((m) => [...m, { role: "ai", blocks }]);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "请求失败";
       setMsgs((m) => [
         ...m,
-        { role: "ai", blocks: makeMockReply(text, isAll ? null : customer ?? null) },
+        {
+          role: "ai",
+          blocks: {
+            verdict: `问答失败：${message}`,
+            evidence: [],
+            next: ["稍后重试；如果刚上传资料，请先确认归档完成。"],
+            related: [],
+          },
+        },
       ]);
-    }, 1100);
+    } finally {
+      setPending(false);
+    }
   }
 
   if (loading) {
@@ -676,6 +689,9 @@ function Dot({ delay }: { delay: number }) {
 }
 
 function AIBubble({ block }: { block: AskAIBlock }) {
+  const hasEvidence = block.evidence.length > 0;
+  const hasNext = block.next.length > 0;
+  const hasRelated = block.related.length > 0;
   return (
     <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "flex-start" }}>
       <div
@@ -699,74 +715,81 @@ function AIBubble({ block }: { block: AskAIBlock }) {
           <SectionHeader icon={I.warn(14)} iconColor="var(--warn-500)" label="当前结论" />
           <div style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--ink-900)" }}>{block.verdict}</div>
 
-          <div className="sep" style={{ margin: "12px 0 10px" }} />
-
-          {/* Evidence */}
-          <SectionHeader icon={I.link(13)} iconColor="var(--ink-500)" label="证据支持" />
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {block.evidence.map((e) => (
-              <EvidenceChip key={e.id} type={e.type} label={e.label} />
-            ))}
-          </div>
-
-          <div className="sep" style={{ margin: "12px 0 10px" }} />
-
-          {/* Next steps */}
-          <SectionHeader icon={I.bulb(13)} iconColor="var(--ai-500)" label="下一步建议" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {block.next.map((n, i) => (
-              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <div
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 9,
-                    background: "var(--ai-100)",
-                    color: "var(--ai-700)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                    marginTop: 1,
-                  }}
-                >
-                  {i + 1}
-                </div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--ink-800)", flex: 1 }}>{n}</div>
+          {hasEvidence && (
+            <>
+              <div className="sep" style={{ margin: "12px 0 10px" }} />
+              <SectionHeader icon={I.link(13)} iconColor="var(--ink-500)" label="证据支持" />
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {block.evidence.map((e) => (
+                  <EvidenceChip key={e.id} type={e.type} label={e.label} />
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
 
-          <div className="sep" style={{ margin: "12px 0 10px" }} />
+          {hasNext && (
+            <>
+              <div className="sep" style={{ margin: "12px 0 10px" }} />
+              <SectionHeader icon={I.bulb(13)} iconColor="var(--ai-500)" label="下一步建议" />
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {block.next.map((n, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        background: "var(--ai-100)",
+                        color: "var(--ai-700)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        marginTop: 1,
+                      }}
+                    >
+                      {i + 1}
+                    </div>
+                    <div style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--ink-800)", flex: 1 }}>{n}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: "var(--ink-500)",
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            相关记录
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {block.related.map((r, i) => (
-              <span
-                key={i}
-                className="pill pill-ink"
-                style={{ fontSize: 11, padding: "4px 10px", fontWeight: 500, color: "var(--ink-700)" }}
+          {hasRelated && (
+            <>
+              <div className="sep" style={{ margin: "12px 0 10px" }} />
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--ink-500)",
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                  marginBottom: 8,
+                }}
               >
-                <span style={{ color: "var(--ink-500)" }}>
-                  {r.kind === "联系人" ? I.customers(11) : I.doc(11)}
-                </span>
-                {r.label}
-              </span>
-            ))}
-          </div>
+                相关记录
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {block.related.map((r, i) => (
+                  <span
+                    key={i}
+                    className="pill pill-ink"
+                    style={{ fontSize: 11, padding: "4px 10px", fontWeight: 500, color: "var(--ink-700)" }}
+                  >
+                    <span style={{ color: "var(--ink-500)" }}>
+                      {r.kind === "联系人" ? I.customers(11) : I.doc(11)}
+                    </span>
+                    {r.label}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 6, paddingLeft: 4 }}>
           <button style={{ background: "transparent", border: "none", fontSize: 11, color: "var(--ink-500)", cursor: "pointer" }}>
@@ -875,47 +898,4 @@ function CustomerPickerSheet({
       </div>
     </>
   );
-}
-
-function makeMockReply(question: string, customer: CustomerDetail | null): AskAIBlock {
-  if (!customer) {
-    return {
-      verdict:
-        "本周需要重点跟进 3 家客户：万华化学（尾款 ¥32.2 万到期）、盛丰汽配（账期连续延期）、巨华机电（续约窗口本月结束）。其余客户暂无紧急事项。",
-      evidence: [
-        { id: "e1", type: "微信", label: "万华化学 · 王总 · 昨天" },
-        { id: "e2", type: "合同", label: "盛丰汽配 · 应收账款明细" },
-        { id: "e3", type: "合同", label: "巨华机电 · 框架协议" },
-      ],
-      next: [
-        "优先联系万华化学王总，确认 10 月底前付款。",
-        "复盘盛丰汽配账期，决定是否暂缓发货。",
-        "本周内启动巨华机电续约谈判。",
-      ],
-      related: [
-        { kind: "合同", label: "应收账款总览" },
-        { kind: "联系人", label: "本周需联系名单" },
-      ],
-    };
-  }
-  if (question.includes("钱") || question.includes("款") || question.includes("收")) {
-    return {
-      verdict: `${customer.name} 当前未收款 ${fmtCNYRaw(customer.metrics.receivable)}，对应 ${customer.metrics.contracts} 份合同。客户王总在最近一次微信中承诺月底前完成付款。`,
-      evidence: [
-        { id: "e1", type: "合同", label: "终验补充协议_v2.pdf · §尾款" },
-        { id: "e2", type: "微信", label: "微信记录 · 王总 · 昨天" },
-      ],
-      next: ["本周内致电王总确认入账时点。", "同步财务陈姐准备催收预案。"],
-      related: [
-        { kind: "联系人", label: "王志强 · 采购总监" },
-        { kind: "合同", label: "设备采购合同_2026Q1.pdf" },
-      ],
-    };
-  }
-  return {
-    verdict: `已基于 ${customer.name} 的客户档案进行了分析，请见以下要点。`,
-    evidence: [{ id: "e1", type: "合同", label: "终验补充协议_v2.pdf" }],
-    next: ["查看客户详情页可看到完整时间线。", "需要更具体的内容欢迎追问。"],
-    related: [{ kind: "联系人", label: "王志强 · 采购总监" }],
-  };
 }

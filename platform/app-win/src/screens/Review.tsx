@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import type { GoFn } from "../App";
 import { getReview } from "../api/client";
-import { batchToReview, getLastBatch } from "../api/ingest";
+import {
+  archiveBatch,
+  batchToReview,
+  clearLastBatch,
+  getLastBatch,
+  ignoreBatch,
+  type ArchiveResult,
+  type Batch,
+} from "../api/ingest";
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
@@ -22,8 +30,12 @@ const EXTRACTION_STYLE: Record<
 export function ReviewScreen({ go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
   const [review, setReview] = useState<Review | null>(null);
+  const [batch, setBatch] = useState<Batch | null>(null);
   const [showEvidence, setShowEvidence] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveResult, setArchiveResult] = useState<ArchiveResult | null>(null);
 
   useEffect(() => {
     // Prefer a real ingest batch when the user just came from Upload.
@@ -32,11 +44,49 @@ export function ReviewScreen({ go }: { go: GoFn }) {
     const batch = getLastBatch();
     const fromBatch = batch ? batchToReview(batch) : null;
     if (fromBatch) {
+      setBatch(batch);
       setReview(fromBatch);
       return;
     }
     getReview("last").then(setReview);
   }, []);
+
+  async function handleArchive() {
+    if (archiving) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      if (!batch) {
+        setDone(true);
+        return;
+      }
+      const result = await archiveBatch(batch);
+      clearLastBatch();
+      setArchiveResult(result);
+      setDone(true);
+    } catch (e) {
+      setArchiveError(e instanceof Error ? e.message : "归档失败");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  async function handleIgnore() {
+    if (archiving) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      if (batch) {
+        await ignoreBatch(batch);
+        clearLastBatch();
+      }
+      go("upload");
+    } catch (e) {
+      setArchiveError(e instanceof Error ? e.message : "忽略失败");
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   if (!review) {
     return (
@@ -81,8 +131,15 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             <button className="btn btn-secondary" onClick={() => go("upload")}>
               继续上传
             </button>
-            <button className="btn btn-primary" onClick={() => go("list")}>
-              返回客户列表
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                const customerId = archiveResult?.customerIds[0];
+                if (customerId) go("detail", { id: customerId });
+                else go("list");
+              }}
+            >
+              {archiveResult?.customerIds[0] ? "查看客户档案" : "返回客户列表"}
             </button>
           </div>
         </div>
@@ -386,6 +443,24 @@ export function ReviewScreen({ go }: { go: GoFn }) {
         </div>
       </div>
 
+      {archiveError && (
+        <div
+          style={{
+            margin: isDesktop ? "0 auto 10px" : "0 16px 10px",
+            maxWidth: isDesktop ? 1080 : undefined,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid var(--risk-100)",
+            background: "#fff1f0",
+            color: "var(--risk-500)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          {archiveError}
+        </div>
+      )}
+
       {/* Bottom action bar */}
       <div
         style={{
@@ -403,14 +478,19 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             margin: "0 auto",
           }}
         >
-          <button className="btn btn-secondary" style={{ flex: "0 0 auto", padding: "14px 14px" }}>
-            忽略
+          <button
+            className="btn btn-secondary"
+            style={{ flex: "0 0 auto", padding: "14px 14px" }}
+            onClick={handleIgnore}
+            disabled={archiving}
+          >
+            {archiving ? "处理中…" : "忽略"}
           </button>
-          <button className="btn btn-secondary" style={{ flex: 1 }}>
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => go("upload")} disabled={archiving}>
             修改
           </button>
-          <button className="btn btn-primary" style={{ flex: 1.4 }} onClick={() => setDone(true)}>
-            {I.check(16, "#fff")} 确认归档
+          <button className="btn btn-primary" style={{ flex: 1.4 }} onClick={handleArchive} disabled={archiving}>
+            {I.check(16, "#fff")} {archiving ? "归档中…" : "确认归档"}
           </button>
         </div>
       </div>
