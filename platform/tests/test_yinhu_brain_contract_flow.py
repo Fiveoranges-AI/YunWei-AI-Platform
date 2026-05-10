@@ -101,14 +101,14 @@ async def test_business_card_ingest_creates_customer_and_attaches_contact(monkey
         return {
             "name": "王强",
             "title": "销售经理",
-            "company_full_name": "测试客户有限公司",
+            "company": "测试客户有限公司",
             "company_short_name": "测试客户",
             "mobile": "13800000000",
             "email": "wang@example.com",
             "address": "上海市测试路 1 号",
             "field_provenance": [
                 {
-                    "path": "company_full_name",
+                    "path": "company",
                     "source_page": None,
                     "source_excerpt": "测试客户有限公司",
                 },
@@ -159,6 +159,73 @@ async def test_business_card_ingest_creates_customer_and_attaches_contact(monkey
         assert result.contact_name == "王强"
         assert doc.assigned_customer_id == customers[0].id
         assert doc.review_status == DocumentReviewStatus.confirmed
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_business_card_ingest_uses_domain_fallback_when_company_missing(monkeypatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async def fake_call_claude(*args, **kwargs):
+        return object()
+
+    def fake_extract_tool_use_input(response, tool_name):
+        return {
+            "name": "Alice Chen",
+            "title": "Account Manager",
+            "mobile": "13800000001",
+            "email": "alice@acme-industrial.com",
+            "website": "https://www.acme-industrial.com",
+            "field_provenance": [
+                {"path": "name", "source_page": None, "source_excerpt": "Alice Chen"},
+                {
+                    "path": "website",
+                    "source_page": None,
+                    "source_excerpt": "www.acme-industrial.com",
+                },
+            ],
+            "confidence_overall": 0.81,
+            "parse_warnings": [],
+        }
+
+    monkeypatch.setattr(business_card_service, "call_claude", fake_call_claude)
+    monkeypatch.setattr(
+        business_card_service,
+        "extract_tool_use_input",
+        fake_extract_tool_use_input,
+    )
+    monkeypatch.setattr(
+        business_card_service,
+        "store_upload",
+        lambda image_bytes, original_filename, default_ext=".jpg": (
+            "/tmp/card.jpg",
+            "2" * 64,
+            len(image_bytes),
+        ),
+    )
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        result = await business_card_service.ingest_business_card(
+            session=session,
+            image_bytes=b"fake image",
+            original_filename="domain-card.jpg",
+            content_type="image/jpeg",
+            uploader="tester",
+        )
+        await session.commit()
+
+        customer = (await session.execute(select(Customer))).scalar_one()
+        contact = (await session.execute(select(Contact))).scalar_one()
+
+        assert customer.full_name == "acme-industrial.com"
+        assert customer.short_name == "acme-industrial"
+        assert contact.customer_id == customer.id
+        assert result.customer_id == customer.id
+        assert result.needs_review is True
+        assert any("company inferred from domain" in w for w in result.warnings)
 
     await engine.dispose()
 

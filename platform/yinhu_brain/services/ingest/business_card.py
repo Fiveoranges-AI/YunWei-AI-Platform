@@ -12,6 +12,8 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +46,56 @@ _PROMPT_PATH = (
 
 _MOBILE_RE = re.compile(r"^1[3-9]\d{9}$")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_GENERIC_EMAIL_DOMAINS = {
+    "126.com",
+    "139.com",
+    "163.com",
+    "foxmail.com",
+    "gmail.com",
+    "hotmail.com",
+    "icloud.com",
+    "live.com",
+    "msn.com",
+    "outlook.com",
+    "qq.com",
+    "sina.com",
+    "sohu.com",
+    "yahoo.com",
+}
+_FIELD_ALIASES = {
+    "company": "company_full_name",
+    "company_name": "company_full_name",
+    "companyname": "company_full_name",
+    "organization": "company_full_name",
+    "organization_name": "company_full_name",
+    "org": "company_full_name",
+    "business_name": "company_full_name",
+    "企业": "company_full_name",
+    "企业名称": "company_full_name",
+    "公司": "company_full_name",
+    "公司名称": "company_full_name",
+    "单位": "company_full_name",
+    "单位名称": "company_full_name",
+    "brand": "company_short_name",
+    "brand_name": "company_short_name",
+    "logo": "company_short_name",
+    "logo_text": "company_short_name",
+    "short_name": "company_short_name",
+    "简称": "company_short_name",
+    "品牌": "company_short_name",
+    "姓名": "name",
+    "联系人": "name",
+    "职位": "title",
+    "职务": "title",
+    "手机": "mobile",
+    "手机号": "mobile",
+    "电话": "phone",
+    "座机": "phone",
+    "邮箱": "email",
+    "地址": "address",
+    "网址": "website",
+    "网站": "website",
+}
 
 
 @dataclass
@@ -73,11 +125,97 @@ def _media_type(filename: str, content_type: str | None) -> str:
     return "image/jpeg"
 
 
-def _clean(value: str | None) -> str | None:
+def _clean(value: Any) -> str | None:
     if value is None:
         return None
-    value = value.strip()
-    return value or None
+    if not isinstance(value, str):
+        value = str(value)
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _alias_value(raw: dict[str, Any], *names: str) -> str | None:
+    for name in names:
+        value = raw.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _canonical_field_name(path: str) -> str:
+    attr = path.split(".")[-1] if "." in path else path
+    normalized = re.sub(r"[\s\-_]+", "_", attr.strip()).lower()
+    return _FIELD_ALIASES.get(normalized, _FIELD_ALIASES.get(attr.strip(), attr))
+
+
+def _normalize_tool_input(raw: dict[str, Any]) -> dict[str, Any]:
+    """Recover common non-schema keys before Pydantic drops them.
+
+    Vision models often return ``company`` / ``company_name`` / ``公司名称``
+    even when the schema asks for ``company_full_name``. Dropping those aliases
+    is exactly what makes the final customer unresolved, so normalize them
+    before validation.
+    """
+    normalized = dict(raw)
+    normalized["company_full_name"] = _clean(normalized.get("company_full_name")) or _alias_value(
+        raw,
+        "company",
+        "company_name",
+        "companyName",
+        "organization",
+        "organization_name",
+        "org",
+        "business_name",
+        "企业名称",
+        "公司名称",
+        "公司",
+        "单位名称",
+        "单位",
+    )
+    normalized["company_short_name"] = _clean(normalized.get("company_short_name")) or _alias_value(
+        raw,
+        "company_short",
+        "company_short_name",
+        "short_name",
+        "brand",
+        "brand_name",
+        "logo",
+        "logo_text",
+        "简称",
+        "品牌",
+    )
+    normalized["name"] = _clean(normalized.get("name")) or _alias_value(raw, "姓名", "联系人", "person_name")
+    normalized["title"] = _clean(normalized.get("title")) or _alias_value(raw, "职位", "职务", "job_title")
+    normalized["mobile"] = _clean(normalized.get("mobile")) or _alias_value(raw, "手机", "手机号", "cellphone")
+    normalized["phone"] = _clean(normalized.get("phone")) or _alias_value(raw, "电话", "座机", "tel")
+    normalized["email"] = _clean(normalized.get("email")) or _alias_value(raw, "邮箱", "mail")
+    normalized["address"] = _clean(normalized.get("address")) or _alias_value(raw, "地址")
+    normalized["website"] = _clean(normalized.get("website")) or _alias_value(raw, "网址", "网站", "url")
+    return normalized
+
+
+def _extract_domain(value: str | None) -> str | None:
+    value = _clean(value)
+    if not value:
+        return None
+    if "@" in value and not value.startswith("http"):
+        domain = value.rsplit("@", 1)[-1]
+    else:
+        parsed = urlsplit(value if "://" in value else f"https://{value}")
+        domain = parsed.netloc or parsed.path.split("/", 1)[0]
+    domain = domain.lower().strip().removeprefix("www.")
+    return domain or None
+
+
+def _fill_company_from_domain(result: BusinessCardExtraction) -> str | None:
+    if _clean(result.company_full_name) or _clean(result.company_short_name):
+        return None
+    domain = _extract_domain(result.website) or _extract_domain(result.email)
+    if not domain or domain in _GENERIC_EMAIL_DOMAINS:
+        return None
+    result.company_full_name = domain
+    result.company_short_name = domain.split(".", 1)[0]
+    return domain
 
 
 async def _resolve_customer(
@@ -174,7 +312,7 @@ async def ingest_business_card(
     doc.raw_llm_response = tool_input
     await session.flush()
 
-    result = BusinessCardExtraction.model_validate(tool_input)
+    result = BusinessCardExtraction.model_validate(_normalize_tool_input(tool_input))
 
     # Post-validate phone/email; halve confidence on bad ones, flag needs_review
     warnings: list[str] = list(result.parse_warnings)
@@ -187,6 +325,10 @@ async def ingest_business_card(
         needs_review = True
     if not result.name:
         warnings.append("no name extracted; needs review")
+        needs_review = True
+    domain_fallback = _fill_company_from_domain(result)
+    if domain_fallback:
+        warnings.append(f"company inferred from domain {domain_fallback!r}; needs review")
         needs_review = True
 
     customer = await _resolve_customer(session, result)
@@ -214,7 +356,7 @@ async def ingest_business_card(
 
     # Provenance — paths all point at the single Contact row.
     for entry in result.field_provenance:
-        attr = entry.path.split(".")[-1] if "." in entry.path else entry.path
+        attr = _canonical_field_name(entry.path)
         entity_type = EntityType.contact
         entity_id = contact.id
         field_name = attr

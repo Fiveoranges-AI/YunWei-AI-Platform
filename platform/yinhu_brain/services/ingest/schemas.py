@@ -292,16 +292,25 @@ class ContractConfirmRequest(BaseModel):
 class BusinessCardExtraction(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    name: str | None = None
-    title: str | None = None
-    company_full_name: str | None = None
-    company_short_name: str | None = None
-    phone: str | None = None
-    mobile: str | None = None
-    email: str | None = None
-    address: str | None = None
-    wechat_id: str | None = None
-    website: str | None = None
+    name: str | None = Field(default=None, description="Person name on the business card.")
+    title: str | None = Field(default=None, description="Job title or role.")
+    company_full_name: str | None = Field(
+        default=None,
+        description=(
+            "Company/customer/organization name printed on the card. If only a logo, brand, "
+            "English name, or abbreviation is visible, still fill this field with that visible text."
+        ),
+    )
+    company_short_name: str | None = Field(
+        default=None,
+        description="Short name, logo text, brand name, or abbreviation printed on the card.",
+    )
+    phone: str | None = Field(default=None, description="Landline phone number.")
+    mobile: str | None = Field(default=None, description="Mobile phone number.")
+    email: str | None = Field(default=None, description="Email address.")
+    address: str | None = Field(default=None, description="Mailing or office address.")
+    wechat_id: str | None = Field(default=None, description="WeChat ID.")
+    website: str | None = Field(default=None, description="Company website URL or domain.")
     field_provenance: list[FieldProvenanceEntry] = Field(default_factory=list)
     confidence_overall: float = Field(ge=0.0, le=1.0, default=0.5)
     parse_warnings: list[str] = Field(default_factory=list)
