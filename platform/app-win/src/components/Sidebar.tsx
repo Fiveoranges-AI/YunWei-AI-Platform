@@ -28,23 +28,17 @@ export function Sidebar({ active, onChange }: Props) {
     >
       {/* Brand */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 8px 24px" }}>
-        <div
+        <img
+          src={`${import.meta.env.BASE_URL}logo.png`}
+          alt="Five Oranges AI"
           style={{
             width: 32,
             height: 32,
-            borderRadius: 10,
-            background: "linear-gradient(135deg, var(--brand-500), var(--ai-500))",
-            color: "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 700,
-            fontSize: 14,
-            letterSpacing: "-0.02em",
+            borderRadius: 8,
+            display: "block",
+            flexShrink: 0,
           }}
-        >
-          智
-        </div>
+        />
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-900)", letterSpacing: "-0.01em" }}>
             智通客户
