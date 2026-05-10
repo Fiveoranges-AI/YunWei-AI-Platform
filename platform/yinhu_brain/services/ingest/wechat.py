@@ -24,6 +24,7 @@ from yinhu_brain.services.ingest.schemas import (
 )
 from yinhu_brain.config import settings
 from yinhu_brain.services.llm import call_claude, extract_tool_use_input
+from yinhu_brain.services.ingest.progress import ProgressCallback, emit_progress
 from yinhu_brain.services.mistral_ocr_client import (
     MistralOCRUnavailable,
     parse_image_to_markdown,
@@ -67,10 +68,12 @@ async def ingest_wechat_screenshot(
     original_filename: str,
     content_type: str | None = None,
     uploader: str | None = None,
+    progress: ProgressCallback | None = None,
 ) -> WeChatIngestResult:
     file_path, sha, size = store_upload(
         image_bytes, original_filename, default_ext=".jpg"
     )
+    await emit_progress(progress, "stored", "原始图片已保存，开始 OCR")
 
     doc = Document(
         type=DocumentType.chat_log,
@@ -89,6 +92,7 @@ async def ingest_wechat_screenshot(
     prompt = _PROMPT_PATH.read_text(encoding="utf-8")
     ocr_text = ""
     ocr_warnings: list[str] = []
+    await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别截图文字")
     try:
         ocr_text = await parse_image_to_markdown(
             image_bytes,
@@ -109,6 +113,7 @@ async def ingest_wechat_screenshot(
         )
     await session.flush()
 
+    await emit_progress(progress, "extract", "OCR 完成，AI 正在抽取聊天内容")
     messages = [
         {
             "role": "user",
@@ -140,6 +145,7 @@ async def ingest_wechat_screenshot(
     await session.flush()
 
     result = WeChatExtraction.model_validate(tool_input)
+    await emit_progress(progress, "persist", "正在保存截图解析结果")
     doc.parse_warnings = ocr_warnings + list(result.parse_warnings)
     await session.flush()
 

@@ -38,6 +38,14 @@ export type IngestFailure = {
 
 export type IngestResult = IngestSuccess | IngestFailure;
 
+export type IngestProgress = {
+  stage: string;
+  message: string;
+  status: "uploading" | "progress" | "processing";
+};
+
+export type IngestProgressCallback = (event: IngestProgress) => void;
+
 function endpointFor(kind: string): string | null {
   if (kind === "合同") return "/contract";
   if (kind === "名片") return "/business_card";
@@ -45,7 +53,11 @@ function endpointFor(kind: string): string | null {
   return null;
 }
 
-export async function uploadStagedFile(file: File, kind: string): Promise<IngestResult> {
+export async function uploadStagedFile(
+  file: File,
+  kind: string,
+  onProgress?: IngestProgressCallback,
+): Promise<IngestResult> {
   const endpoint = endpointFor(kind);
   if (!endpoint) {
     return { ok: false, error: "暂不支持该文件类型", unsupported: true };
@@ -53,6 +65,7 @@ export async function uploadStagedFile(file: File, kind: string): Promise<Ingest
   const fd = new FormData();
   fd.append("file", file);
   try {
+    onProgress?.({ status: "uploading", stage: "upload", message: "正在上传文件" });
     const res = await fetch(`${API_BASE}${endpoint}`, {
       method: "POST",
       body: fd,
@@ -71,7 +84,7 @@ export async function uploadStagedFile(file: File, kind: string): Promise<Ingest
     }
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("application/x-ndjson")) {
-      return await readNdjsonResult(res);
+      return await readNdjsonResult(res, onProgress);
     }
     // Backwards compat with non-streaming responses.
     const body = (await res.json()) as { document_id?: string };
@@ -81,18 +94,47 @@ export async function uploadStagedFile(file: File, kind: string): Promise<Ingest
   }
 }
 
-// The ingest endpoints stream NDJSON: zero or more {"status":"processing"}
-// heartbeats keep Cloudflare's 100s edge timeout from firing during a long
-// LLM call; the final non-empty line is either {"status":"done", ...result}
-// or {"status":"error", "error": "..."}.
-async function readNdjsonResult(res: Response): Promise<IngestResult> {
+// The ingest endpoints stream NDJSON: zero or more
+// {"status":"progress","stage":"ocr","message":"..."} events update the UI
+// pipeline, {"status":"processing"} heartbeats keep Cloudflare's 100s edge
+// timeout from firing during a long LLM call, and the final non-empty
+// done/error line is the result.
+async function readNdjsonResult(
+  res: Response,
+  onProgress?: IngestProgressCallback,
+): Promise<IngestResult> {
   if (!res.body) {
     return { ok: false, error: "无响应数据" };
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  let last: { status?: string; error?: string; document_id?: string } | null = null;
+  type StreamMessage = {
+    status?: string;
+    stage?: string;
+    message?: string;
+    error?: string;
+    document_id?: string;
+  };
+  let last: StreamMessage | null = null;
+  const handleLine = (line: string): StreamMessage | null => {
+    try {
+      const parsed = JSON.parse(line) as StreamMessage;
+      if (parsed.status === "progress" || parsed.status === "processing") {
+        onProgress?.({
+          status: parsed.status,
+          stage: parsed.stage ?? "processing",
+          message: parsed.message ?? "处理中",
+        });
+      }
+      if (parsed.status === "done" || parsed.status === "error") {
+        return parsed;
+      }
+    } catch {
+      /* ignore partial / malformed lines */
+    }
+    return null;
+  };
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -102,11 +144,7 @@ async function readNdjsonResult(res: Response): Promise<IngestResult> {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
       if (line) {
-        try {
-          last = JSON.parse(line);
-        } catch {
-          /* ignore partial / malformed lines */
-        }
+        last = handleLine(line) ?? last;
       }
       nl = buf.indexOf("\n");
     }
@@ -114,11 +152,7 @@ async function readNdjsonResult(res: Response): Promise<IngestResult> {
   // Drain any trailing line that lacked a terminator.
   const tail = buf.trim();
   if (tail) {
-    try {
-      last = JSON.parse(tail);
-    } catch {
-      /* ignore */
-    }
+    last = handleLine(tail) ?? last;
   }
   if (!last) return { ok: false, error: "服务器未返回结果" };
   if (last.status === "done") {

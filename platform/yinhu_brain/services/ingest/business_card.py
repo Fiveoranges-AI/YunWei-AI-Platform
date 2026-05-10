@@ -31,6 +31,7 @@ from yinhu_brain.services.ingest.schemas import (
     business_card_tool,
 )
 from yinhu_brain.services.ingest.provenance import upsert_field_provenance
+from yinhu_brain.services.ingest.progress import ProgressCallback, emit_progress
 from yinhu_brain.config import settings
 from yinhu_brain.services.llm import call_claude, extract_tool_use_input
 from yinhu_brain.services.match import find_customer_candidates
@@ -223,10 +224,12 @@ async def ingest_business_card(
     original_filename: str,
     content_type: str | None = None,
     uploader: str | None = None,
+    progress: ProgressCallback | None = None,
 ) -> BusinessCardIngestResult:
     file_path, sha, size = store_upload(
         image_bytes, original_filename, default_ext=".jpg"
     )
+    await emit_progress(progress, "stored", "原始图片已保存，开始 OCR")
 
     doc = Document(
         type=DocumentType.business_card,
@@ -246,6 +249,7 @@ async def ingest_business_card(
     prompt = _PROMPT_PATH.read_text(encoding="utf-8")
     ocr_text = ""
     ocr_warnings: list[str] = []
+    await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别名片文字")
     try:
         ocr_text = await parse_image_to_markdown(
             image_bytes,
@@ -282,6 +286,7 @@ async def ingest_business_card(
             ],
         }
     ]
+    await emit_progress(progress, "extract", "OCR 完成，AI 正在抽取联系人字段")
     response = await call_claude(
         messages,
         purpose="business_card_extraction",
@@ -312,6 +317,7 @@ async def ingest_business_card(
         warnings.append("no name extracted; needs review")
         needs_review = True
 
+    await emit_progress(progress, "match", "字段抽取完成，正在匹配客户")
     customer = await _resolve_customer(session, result)
     if customer is None:
         warnings.append("no company extracted; contact is not attached to a customer")
@@ -335,6 +341,7 @@ async def ingest_business_card(
     session.add(contact)
     await session.flush()
 
+    await emit_progress(progress, "persist", "正在写入客户、联系人和字段来源")
     # Provenance — paths all point at the single Contact row.
     for entry in result.field_provenance:
         attr = _canonical_field_name(entry.path)
