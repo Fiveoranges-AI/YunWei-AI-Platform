@@ -164,7 +164,13 @@ async def test_business_card_ingest_creates_customer_and_attaches_contact(monkey
 
 
 @pytest.mark.asyncio
-async def test_business_card_ingest_uses_domain_fallback_when_company_missing(monkeypatch) -> None:
+async def test_business_card_ingest_does_not_fabricate_customer_from_domain(monkeypatch) -> None:
+    """When the model can't read a company off the card, we must NOT fabricate
+    one from the email / website domain. Domain text is not the same as the
+    person's employer printed on the card; auto-writing it produced "phantom
+    customers" the user perceived as hallucination. Contact still lands, but
+    unattached and flagged for review.
+    """
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -217,15 +223,15 @@ async def test_business_card_ingest_uses_domain_fallback_when_company_missing(mo
         )
         await session.commit()
 
-        customer = (await session.execute(select(Customer))).scalar_one()
+        customers = (await session.execute(select(Customer))).scalars().all()
         contact = (await session.execute(select(Contact))).scalar_one()
 
-        assert customer.full_name == "acme-industrial.com"
-        assert customer.short_name == "acme-industrial"
-        assert contact.customer_id == customer.id
-        assert result.customer_id == customer.id
+        assert customers == []
+        assert contact.customer_id is None
+        assert result.customer_id is None
+        assert result.customer_name is None
         assert result.needs_review is True
-        assert any("company inferred from domain" in w for w in result.warnings)
+        assert any("no company extracted" in w for w in result.warnings)
 
     await engine.dispose()
 
