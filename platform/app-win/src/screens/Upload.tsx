@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
 import { setLastBatch, uploadStagedFile } from "../api/ingest";
 import { I } from "../icons";
@@ -14,6 +14,7 @@ type StagedFile = {
   status: StagedStatus;
   error?: string;
   documentId?: string;
+  previewUrl?: string; // object URL for image previews; revoked on remove/unmount
 };
 
 export function UploadScreen({ go }: { go: GoFn }) {
@@ -22,10 +23,14 @@ export function UploadScreen({ go }: { go: GoFn }) {
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   function addFile(blob: File, kind: string) {
+    const previewUrl = blob.type.startsWith("image/")
+      ? URL.createObjectURL(blob)
+      : undefined;
     setFiles((f) => [
       ...f,
       {
@@ -34,12 +39,27 @@ export function UploadScreen({ go }: { go: GoFn }) {
         kind,
         blob,
         status: "idle",
+        previewUrl,
       },
     ]);
   }
   function removeFile(id: string) {
-    setFiles((f) => f.filter((x) => x.id !== id));
+    setFiles((f) => {
+      const target = f.find((x) => x.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return f.filter((x) => x.id !== id);
+    });
   }
+
+  // Free any unrevoked object URLs when the screen unmounts (tab switch, etc.).
+  useEffect(() => {
+    return () => {
+      setFiles((current) => {
+        for (const f of current) if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+        return current;
+      });
+    };
+  }, []);
 
   function detectKind(name: string): string {
     const ext = name.split(".").pop()?.toLowerCase() ?? "";
@@ -332,20 +352,45 @@ export function UploadScreen({ go }: { go: GoFn }) {
                   className="card"
                   style={{ padding: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}
                 >
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 10,
-                      background: "var(--surface-3)",
-                      color: "var(--ink-600)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {icon}
-                  </div>
+                  {f.previewUrl ? (
+                    <button
+                      onClick={() => f.previewUrl && setLightbox(f.previewUrl)}
+                      aria-label={`查看 ${f.name}`}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        padding: 0,
+                        border: "1px solid var(--ink-100)",
+                        background: "var(--surface-3)",
+                        flexShrink: 0,
+                        cursor: "zoom-in",
+                      }}
+                    >
+                      <img
+                        src={f.previewUrl}
+                        alt=""
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      />
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 10,
+                        background: "var(--surface-3)",
+                        color: "var(--ink-600)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {icon}
+                    </div>
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
@@ -470,6 +515,62 @@ export function UploadScreen({ go }: { go: GoFn }) {
           </button>
         </div>
       </div>
+
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={lightbox}
+            alt="预览"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+              borderRadius: 8,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            }}
+          />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightbox(null);
+            }}
+            aria-label="关闭"
+            style={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            {I.close(20, "#fff")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
