@@ -1,6 +1,6 @@
 # Keep the build context lean — exclude large dirs not needed by platform/Dockerfile.
-# Stage 1 (node) copies app/package*.json + app/src; node_modules is rebuilt via npm ci.
-# Stage 2 (python) copies platform/pyproject.toml + platform/platform_app + platform/migrations + platform/static.
+# Stage 1a/1b (node) copy app/ and app-win/ package*.json + src; node_modules rebuilt via npm ci.
+# Stage 2 (python) copies platform/pyproject.toml + platform/platform_app + platform/yinhu_brain + platform/migrations + platform/static.
 
 **/node_modules/
 **/dist/

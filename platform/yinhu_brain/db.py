@@ -39,13 +39,28 @@ def _tenant_db_name(enterprise_id: str) -> str:
     return f"tenant_{safe}"
 
 
+def _ensure_async_driver(url: str) -> str:
+    """Promote a plain ``postgresql://`` URL to ``postgresql+asyncpg://``.
+
+    Platform-side code (psycopg) wants the bare URL; SQLAlchemy needs an
+    explicit driver tag. Accepting both keeps the env-var contract simple.
+    """
+    if url.startswith("postgresql+") or url.startswith("postgres+"):
+        return url
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url[len("postgresql://") :]
+    if url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + url[len("postgres://") :]
+    return url
+
+
 def _build_tenant_url(enterprise_id: str) -> str:
     """Derive the per-tenant database URL from settings.database_url.
 
     The base URL points at the platform postgres (typically the ``postgres``
     or ``platform`` database). We swap the database name to the tenant DB.
     """
-    base = settings.database_url
+    base = _ensure_async_driver(settings.database_url)
     if base.startswith("sqlite"):
         return f"sqlite+aiosqlite:///./yinhu_{_tenant_db_name(enterprise_id)}.db"
     parts = urlsplit(base)
@@ -55,7 +70,7 @@ def _build_tenant_url(enterprise_id: str) -> str:
 
 def _admin_url() -> str:
     """A URL pointing at the postgres admin DB so we can CREATE DATABASE."""
-    base = settings.database_url
+    base = _ensure_async_driver(settings.database_url)
     if base.startswith("sqlite"):
         return base
     parts = urlsplit(base)
