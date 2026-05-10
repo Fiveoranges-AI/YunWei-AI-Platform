@@ -238,116 +238,37 @@ export function UploadScreen({ go }: { go: GoFn }) {
           margin: "0 auto",
         }}
       >
-        {/* Intro */}
-        <div style={{ padding: "6px 0 14px" }}>
-          <div
-            style={{
-              fontSize: isDesktop ? 32 : 26,
-              fontWeight: 700,
-              color: "var(--ink-900)",
-              letterSpacing: "-0.01em",
-              lineHeight: 1.2,
-            }}
-          >
-            把客户资料丢进来
+        {/* Intro — collapse to a one-line label once the user already has
+            staged items so the preview list appears above the fold on
+            mobile (the whole reason this block exists). */}
+        {ready ? (
+          <div style={{ padding: "6px 0 10px", fontSize: 13, color: "var(--ink-500)" }}>
+            添加更多资料、或开始整理。
           </div>
-          <div style={{ fontSize: 14, color: "var(--ink-600)", marginTop: 6, lineHeight: 1.5 }}>
-            合同、名片、微信截图、聊天记录、送货单、语音备注……
-            <span style={{ color: "var(--ai-500)", fontWeight: 600 }}> AI 会自动分类、整理</span>
-            ，再由你确认归档。
-          </div>
-        </div>
-
-        {/* Primary actions */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isDesktop ? "1fr 1fr 2fr" : "1fr 1fr",
-            gap: 10,
-            marginBottom: 12,
-          }}
-        >
-          <button
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-              cursor: "pointer",
-              background: dragActive ? "var(--brand-50)" : "var(--surface)",
-              border: dragActive ? "2px solid var(--brand-500)" : "2px dashed var(--brand-300)",
-              borderRadius: 18,
-              padding: "20px 12px",
-              minHeight: 156,
-              transition: "background 120ms ease, border-color 120ms ease",
-            }}
-            onClick={() => fileInputRef.current?.click()}
-          >
+        ) : (
+          <div style={{ padding: "6px 0 14px" }}>
             <div
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
-                background: "var(--brand-50)",
-                color: "var(--brand-500)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 10,
+                fontSize: isDesktop ? 32 : 26,
+                fontWeight: 700,
+                color: "var(--ink-900)",
+                letterSpacing: "-0.01em",
+                lineHeight: 1.2,
               }}
             >
-              {I.cloud(24)}
+              把客户资料丢进来
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
-              {dragActive ? "松开放下" : "上传文件"}
+            <div style={{ fontSize: 14, color: "var(--ink-600)", marginTop: 6, lineHeight: 1.5 }}>
+              合同、名片、微信截图、聊天记录、送货单、语音备注……
+              <span style={{ color: "var(--ai-500)", fontWeight: 600 }}> AI 会自动分类、整理</span>
+              ，再由你确认归档。
             </div>
-            <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4, lineHeight: 1.45 }}>
-              {dragActive ? "拖到这里直接添加" : "合同 · 截图 · Excel · 拖拽"}
-            </div>
-          </button>
+          </div>
+        )}
 
-          <button
-            className="card"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-              cursor: "pointer",
-              padding: "20px 12px",
-              minHeight: 156,
-            }}
-            onClick={() => cameraInputRef.current?.click()}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
-                background: "var(--surface-3)",
-                color: "var(--ink-700)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 10,
-              }}
-            >
-              {I.camera(22)}
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>拍照</div>
-            <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4, lineHeight: 1.45 }}>合同 · 名片</div>
-          </button>
-
-          {/* Desktop: paste area inline as third column */}
-          {isDesktop && <PasteArea pasted={pasted} setPasted={setPasted} compact />}
-        </div>
-
-        {/* Mobile: paste area below */}
-        {!isDesktop && <PasteArea pasted={pasted} setPasted={setPasted} compact={false} />}
-
-        {/* Staged items */}
+        {/* Staged items — rendered ABOVE the action buttons so a freshly
+            captured photo lands on screen instead of below the paste area
+            and out of the mobile viewport. */}
         {(files.length > 0 || pasted.trim()) && (
           <div style={{ marginBottom: 12 }}>
             <div className="sec-h">
@@ -498,6 +419,95 @@ export function UploadScreen({ go }: { go: GoFn }) {
             )}
           </div>
         )}
+
+        {/* Primary actions */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isDesktop ? "1fr 1fr 2fr" : "1fr 1fr",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
+          <button
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              cursor: "pointer",
+              background: dragActive ? "var(--brand-50)" : "var(--surface)",
+              border: dragActive ? "2px solid var(--brand-500)" : "2px dashed var(--brand-300)",
+              borderRadius: 18,
+              padding: "20px 12px",
+              minHeight: 156,
+              transition: "background 120ms ease, border-color 120ms ease",
+            }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                background: "var(--brand-50)",
+                color: "var(--brand-500)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 10,
+              }}
+            >
+              {I.cloud(24)}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
+              {dragActive ? "松开放下" : "上传文件"}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4, lineHeight: 1.45 }}>
+              {dragActive ? "拖到这里直接添加" : "合同 · 截图 · Excel · 拖拽"}
+            </div>
+          </button>
+
+          <button
+            className="card"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              cursor: "pointer",
+              padding: "20px 12px",
+              minHeight: 156,
+            }}
+            onClick={() => cameraInputRef.current?.click()}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                background: "var(--surface-3)",
+                color: "var(--ink-700)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 10,
+              }}
+            >
+              {I.camera(22)}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>拍照</div>
+            <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4, lineHeight: 1.45 }}>合同 · 名片</div>
+          </button>
+
+          {/* Desktop: paste area inline as third column */}
+          {isDesktop && <PasteArea pasted={pasted} setPasted={setPasted} compact />}
+        </div>
+
+        {/* Mobile: paste area below */}
+        {!isDesktop && <PasteArea pasted={pasted} setPasted={setPasted} compact={false} />}
       </div>
 
       {/* Bottom CTA */}
