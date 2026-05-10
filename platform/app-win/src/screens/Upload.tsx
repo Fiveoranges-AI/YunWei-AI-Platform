@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import type { GoFn } from "../App";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
@@ -9,6 +9,8 @@ export function UploadScreen({ go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
   const [pasted, setPasted] = useState("");
   const [files, setFiles] = useState<StagedFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   function addFile(name: string, kind: string) {
     setFiles((f) => [...f, { id: Math.random().toString(36).slice(2), name, kind }]);
@@ -17,11 +19,46 @@ export function UploadScreen({ go }: { go: GoFn }) {
     setFiles((f) => f.filter((x) => x.id !== id));
   }
 
+  function detectKind(name: string): string {
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    if (["pdf", "doc", "docx"].includes(ext)) return "合同";
+    if (["xls", "xlsx", "csv"].includes(ext)) return "Excel";
+    if (["mp3", "wav", "m4a", "ogg", "amr"].includes(ext)) return "语音";
+    return "截图";
+  }
+
+  function handlePicked(e: ChangeEvent<HTMLInputElement>, fixedKind?: string) {
+    const list = e.target.files;
+    if (list) {
+      for (const f of Array.from(list)) {
+        addFile(f.name, fixedKind ?? detectKind(f.name));
+      }
+    }
+    // Reset so picking the same file twice in a row still fires onChange.
+    e.target.value = "";
+  }
+
   const total = files.length + (pasted.trim() ? 1 : 0);
   const ready = total > 0;
 
   return (
     <div className="screen" style={{ background: "var(--bg)" }}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*"
+        onChange={(e) => handlePicked(e)}
+        style={{ display: "none" }}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => handlePicked(e, "名片")}
+        style={{ display: "none" }}
+      />
       {/* Top bar */}
       <div
         style={{
@@ -107,7 +144,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
               padding: "20px 12px",
               minHeight: 156,
             }}
-            onClick={() => addFile("终验补充协议_v2.pdf", "合同")}
+            onClick={() => fileInputRef.current?.click()}
           >
             <div
               style={{
@@ -142,7 +179,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
               padding: "20px 12px",
               minHeight: 156,
             }}
-            onClick={() => addFile("IMG_2398.jpg", "名片")}
+            onClick={() => cameraInputRef.current?.click()}
           >
             <div
               style={{
