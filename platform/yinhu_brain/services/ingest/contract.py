@@ -132,6 +132,20 @@ async def extract_contract_draft(
             mineru_warning = f"MinerU unavailable: {exc!s}"
             logger.warning(mineru_warning)
 
+    # If we still have effectively no text, fail fast with a clear, actionable
+    # error instead of feeding "(no text extracted)" to the LLM and surfacing
+    # whatever Pydantic happens to complain about.
+    if len(pypdf_text.strip()) < 40:
+        msg = (
+            f"未能从 PDF 提取出可读文本 (pypdf {len(pypdf_text.strip())} 字"
+            f", {len(pages)} 页)。"
+        )
+        if mineru_warning:
+            msg += "扫描件需要 OCR，但 " + mineru_warning
+        else:
+            msg += "如果是扫描件请配置 MinerU (MINERU_API_TOKEN 或 MINERU_BASE_URL)。"
+        raise ValueError(msg)
+
     doc = Document(
         type=DocumentType.contract,
         file_url=file_path,

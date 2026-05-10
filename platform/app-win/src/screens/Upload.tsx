@@ -372,6 +372,19 @@ export function UploadScreen({ go }: { go: GoFn }) {
                       <span>{f.kind}</span>
                       <StatusPill file={f} />
                     </div>
+                    {(f.status === "error" || f.status === "unsupported") && f.error && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: f.status === "error" ? "var(--risk-700)" : "var(--warn-700)",
+                          marginTop: 4,
+                          lineHeight: 1.4,
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {f.error}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => removeFile(f.id)}
