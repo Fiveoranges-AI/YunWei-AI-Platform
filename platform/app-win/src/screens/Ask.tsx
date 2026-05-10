@@ -12,7 +12,11 @@ const ALL = "all" as const;
 export function AskScreen({ go, params }: { go: GoFn; params: Record<string, string> }) {
   const isDesktop = useIsDesktop();
   const [customers, setCustomers] = useState<CustomerDetail[]>([]);
-  const [activeId, setActiveId] = useState<string>(params.id ?? "wh");
+  const [loading, setLoading] = useState(true);
+  // Default to "all" when no specific customer requested. Lets new users
+  // (zero customers) still chat in cross-customer mode rather than getting
+  // stuck on a "no customer selected" empty state.
+  const [activeId, setActiveId] = useState<string>(params.id ?? ALL);
   const [msgs, setMsgs] = useState<AskMessage[]>([]);
   const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState("");
@@ -26,9 +30,9 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
   useEffect(() => {
     // Picker only needs id+name+tag; skip the per-customer summary/metrics
     // enrichment to avoid the 1+2N round-trip pattern. ~10x faster mount.
-    listCustomersBasic().then((all) => {
-      setCustomers(all);
-    });
+    listCustomersBasic()
+      .then((all) => setCustomers(all))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -59,13 +63,75 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
     }, 1100);
   }
 
-  if (!customers.length) {
+  if (loading) {
     return (
       <div
         className="screen"
         style={{ background: "var(--bg)", alignItems: "center", justifyContent: "center", display: "flex" }}
       >
         <div style={{ color: "var(--ink-400)", fontSize: 14 }}>加载中…</div>
+      </div>
+    );
+  }
+
+  // Empty state: trial user just registered, no customers yet. Still allow
+  // them to chat (cross-customer mode = "all"), but offer a primary CTA to
+  // upload their first document.
+  if (!customers.length) {
+    return (
+      <div className="screen" style={{ background: "var(--bg)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px 8px" }}>
+          <button
+            onClick={() => go("list")}
+            style={{
+              width: 36, height: 36, borderRadius: 18,
+              background: "transparent", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--ink-700)", cursor: "pointer",
+            }}
+          >
+            {I.back(20)}
+          </button>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-900)" }}>问 AI</div>
+        </div>
+        <div
+          style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            padding: "0 24px", textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              width: 64, height: 64, borderRadius: 16,
+              background: "linear-gradient(135deg, var(--ai-100), #d6deff)",
+              color: "var(--ai-500)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              marginBottom: 16,
+            }}
+          >
+            {I.spark(28)}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ink-900)", marginBottom: 8 }}>
+            还没有客户档案
+          </div>
+          <div
+            style={{
+              fontSize: 14, color: "var(--ink-500)",
+              lineHeight: 1.6, maxWidth: 320, marginBottom: 24,
+            }}
+          >
+            上传一份合同 / 名片 / 微信记录,AI 自动整理成档案后,你就可以来这里问关于这个客户的任何问题。
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => go("upload")}
+            style={{ minWidth: 200 }}
+          >
+            {I.cloud(16, "#fff")}
+            <span>上传第一份资料</span>
+          </button>
+        </div>
       </div>
     );
   }
