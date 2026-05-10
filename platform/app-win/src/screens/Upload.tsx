@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
-import { uploadStagedFile } from "../api/ingest";
+import { setLastBatch, uploadStagedFile } from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 
@@ -123,6 +123,18 @@ export function UploadScreen({ go }: { go: GoFn }) {
 
     const anySucceeded = results.some((r) => r.result.ok);
     if (anySucceeded) {
+      // Hand the real backend payload off to the Review screen so it can
+      // render the actual customer / contacts / fields instead of MOCK_REVIEW.
+      setLastBatch({
+        entries: results.map((r) => {
+          const src = idle.find((x) => x.id === r.id);
+          return {
+            filename: src?.name ?? "",
+            kind: src?.kind ?? "",
+            result: r.result,
+          };
+        }),
+      });
       // Brief pause so the success state is visible before transition.
       window.setTimeout(() => go("review"), 600);
     }
