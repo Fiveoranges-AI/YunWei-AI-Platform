@@ -436,6 +436,21 @@
     .card-foot a { color: var(--brand-blue); font-weight: 600; }
     .card-foot a:hover { text-decoration: underline; }
     .card-foot .en { color: #94A3B8; font-size: 0.75rem; display: block; margin-top: 2px; letter-spacing: 0.04em; }
+    .card-foot-row { padding: 0.5rem 0; }
+    .card-foot-row + .card-foot-row {
+      border-top: 1px dashed rgba(15,35,64,0.08);
+      margin-top: 0.5rem;
+      padding-top: 0.875rem;
+    }
+    .card-foot-row .lead { color: #475569; font-weight: 500; }
+    .card-foot .invite-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--brand-blue);
+    }
+    .card-foot .invite-link .arrow {
+      transition: transform 150ms ease;
+    }
+    .card-foot .invite-link:hover .arrow { transform: translateX(2px); }
 
     .portal-foot {
       display: flex;
@@ -605,9 +620,19 @@
           </div>
 
           <div class="card-foot">
-            <span>还没有账号？</span>
-            <a href="mailto:contact@fiveoranges.ai">联系销售 →</a>
-            <span class="en">Don't have an account? Contact sales</span>
+            <div class="card-foot-row">
+              <span class="lead">已有邀请码？</span>
+              <a href="/register" class="invite-link">
+                使用邀请码注册
+                <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+              </a>
+              <span class="en">Have an invite code? Register here</span>
+            </div>
+            <div class="card-foot-row">
+              <span>还没有账号？</span>
+              <a href="mailto:contact@fiveoranges.ai">联系销售 →</a>
+              <span class="en">Don't have an account? Contact sales</span>
+            </div>
           </div>
         </form>
       </section>
