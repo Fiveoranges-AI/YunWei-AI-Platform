@@ -10,15 +10,29 @@ Routes:
 - /api/ingest/contract          PDF → Customer + Contacts + Order + Contract
 - /api/ingest/business_card     image → Contact + provenance
 - /api/ingest/wechat_screenshot image → chat_log Document + extracted hints
+
+All three endpoints stream their response as NDJSON
+(``application/x-ndjson``). While the LLM is running, the server emits
+``{"status":"processing"}`` heartbeats every 20 seconds so Cloudflare's
+100-second edge timeout (the source of the historical 524 failures on
+app.fiveoranges.ai) doesn't kill the request mid-extraction. The final
+line of the stream is either ``{"status":"done", ...result}`` (with the
+same fields the legacy JSON shape returned, plus the status sentinel) or
+``{"status":"error", "error": "..."}``. Clients should parse the last
+non-empty line as the result.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 
+from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,58 +51,124 @@ from yinhu_brain.services.llm import LLMCallFailed
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ingest")
 
+# How long to wait between {"status":"processing"} heartbeats. Must be
+# comfortably under Cloudflare's 100s edge timeout to keep the connection
+# alive while the LLM runs.
+_HEARTBEAT_SECONDS = 20.0
+
+
+async def _stream_with_heartbeats(
+    work: Awaitable[dict],
+    *,
+    session: AsyncSession,
+    label: str,
+) -> AsyncIterator[bytes]:
+    """Run ``work`` to completion while emitting NDJSON heartbeats every
+    ~20s, then emit a final ``{"status":"done",...}`` (or "error") line.
+
+    ``work`` must return the success-payload dict; this wrapper adds the
+    ``status`` sentinel and handles the session.commit() / rollback so the
+    caller's coroutine stays focused on extraction logic.
+    """
+    task = asyncio.create_task(work)
+    while not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=_HEARTBEAT_SECONDS)
+        except asyncio.TimeoutError:
+            yield b'{"status":"processing"}\n'
+        except BaseException:
+            # The shielded task raised — fall through so the await below
+            # produces the same exception with full traceback.
+            break
+    try:
+        result = await task
+    except LLMCallFailed as exc:
+        logger.exception("%s LLM call failed", label)
+        await session.rollback()
+        yield (
+            json.dumps(
+                {"status": "error", "error": f"upstream LLM error: {exc!s}"},
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        return
+    except Exception as exc:
+        logger.exception("%s failed", label)
+        await session.rollback()
+        yield (
+            json.dumps(
+                {"status": "error", "error": f"{label} failed: {exc!s}"},
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        return
+
+    await session.commit()
+    payload: dict[str, Any] = {"status": "done", **result}
+    yield (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def _ndjson(stream: AsyncIterator[bytes]) -> StreamingResponse:
+    return StreamingResponse(
+        stream,
+        media_type="application/x-ndjson",
+        # Disable nginx/CDN buffering so the heartbeats actually reach
+        # the edge instead of being held until the body completes.
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
+    )
+
 
 @router.post("/contract")
 async def upload_contract_preview(
     file: UploadFile = File(...),
     uploader: str | None = Form(default=None),
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> StreamingResponse:
     """Phase 1: extract a draft from the PDF. Persists the Document and the
     LLM's structured output but does NOT create Customer/Order/Contract rows.
-    Frontend reviews the draft and POSTs to /confirm."""
+    Frontend reviews the draft and POSTs to /confirm.
+
+    Streamed NDJSON — see module docstring."""
     pdf_bytes = await file.read()
     if not pdf_bytes:
         raise HTTPException(400, "empty file")
     if not (file.filename or "").lower().endswith(".pdf") and (file.content_type or "") != "application/pdf":
         raise HTTPException(400, "expected a PDF")
 
-    try:
+    fname = file.filename or "contract.pdf"
+
+    async def _do() -> dict:
         draft = await extract_contract_draft(
             session=session,
             pdf_bytes=pdf_bytes,
-            original_filename=file.filename or "contract.pdf",
+            original_filename=fname,
             uploader=uploader,
         )
-    except LLMCallFailed as exc:
-        logger.exception("contract draft LLM call failed")
-        raise HTTPException(502, f"upstream LLM error: {exc!s}") from exc
-    except Exception as exc:
-        logger.exception("contract draft failed")
-        raise HTTPException(422, f"draft failed: {exc!s}") from exc
+        needs_review = [
+            path
+            for path, conf in draft.result.field_confidence.items()
+            if isinstance(conf, (int, float)) and conf < 0.7
+        ]
+        return {
+            "document_id": str(draft.document_id),
+            "draft": draft.result.model_dump(mode="json"),
+            "candidates": {
+                "customer": [_candidate_dict(c) for c in draft.candidates.customer],
+                "contacts": [
+                    [_candidate_dict(c) for c in slot]
+                    for slot in draft.candidates.contacts
+                ],
+            },
+            "ocr_text": draft.ocr_text[:20000],
+            "warnings": draft.warnings,
+            "needs_review_fields": needs_review,
+        }
 
-    await session.commit()
-
-    needs_review = [
-        path
-        for path, conf in draft.result.field_confidence.items()
-        if isinstance(conf, (int, float)) and conf < 0.7
-    ]
-
-    return {
-        "document_id": str(draft.document_id),
-        "draft": draft.result.model_dump(mode="json"),
-        "candidates": {
-            "customer": [_candidate_dict(c) for c in draft.candidates.customer],
-            "contacts": [
-                [_candidate_dict(c) for c in slot]
-                for slot in draft.candidates.contacts
-            ],
-        },
-        "ocr_text": draft.ocr_text[:20000],
-        "warnings": draft.warnings,
-        "needs_review_fields": needs_review,
-    }
+    return _ndjson(
+        _stream_with_heartbeats(_do(), session=session, label="contract draft"),
+    )
 
 
 def _candidate_dict(c: MatchCandidate) -> dict:
@@ -160,33 +240,34 @@ async def upload_business_card(
     file: UploadFile = File(...),
     uploader: str | None = Form(default=None),
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> StreamingResponse:
     img = await file.read()
     if not img:
         raise HTTPException(400, "empty file")
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(400, "expected an image")
 
-    try:
+    fname = file.filename or "card.jpg"
+    ct = file.content_type
+
+    async def _do() -> dict:
         result = await ingest_business_card(
             session=session,
             image_bytes=img,
-            original_filename=file.filename or "card.jpg",
-            content_type=file.content_type,
+            original_filename=fname,
+            content_type=ct,
             uploader=uploader,
         )
-    except LLMCallFailed as exc:
-        logger.exception("business_card ingest LLM call failed")
-        raise HTTPException(502, f"upstream LLM error: {exc!s}") from exc
+        return {
+            "document_id": str(result.document_id),
+            "contact_id": str(result.contact_id),
+            "needs_review": result.needs_review,
+            "warnings": result.warnings,
+        }
 
-    await session.commit()
-
-    return {
-        "document_id": str(result.document_id),
-        "contact_id": str(result.contact_id),
-        "needs_review": result.needs_review,
-        "warnings": result.warnings,
-    }
+    return _ndjson(
+        _stream_with_heartbeats(_do(), session=session, label="business_card ingest"),
+    )
 
 
 @router.post("/wechat_screenshot")
@@ -194,34 +275,33 @@ async def upload_wechat_screenshot(
     file: UploadFile = File(...),
     uploader: str | None = Form(default=None),
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> StreamingResponse:
     img = await file.read()
     if not img:
         raise HTTPException(400, "empty file")
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(400, "expected an image")
 
-    try:
+    fname = file.filename or "wechat.jpg"
+    ct = file.content_type
+
+    async def _do() -> dict:
         r = await ingest_wechat_screenshot(
             session=session,
             image_bytes=img,
-            original_filename=file.filename or "wechat.jpg",
-            content_type=file.content_type,
+            original_filename=fname,
+            content_type=ct,
             uploader=uploader,
         )
-    except LLMCallFailed as exc:
-        logger.exception("wechat ingest LLM call failed")
-        raise HTTPException(502, f"upstream LLM error: {exc!s}") from exc
+        return {
+            "document_id": str(r.document_id),
+            "message_count": r.message_count,
+            "extracted_entity_count": r.extracted_entity_count,
+            "summary": r.summary,
+            "confidence_overall": r.confidence_overall,
+            "warnings": r.warnings,
+        }
 
-    await session.commit()
-
-    return {
-        "document_id": str(r.document_id),
-        "message_count": r.message_count,
-        "extracted_entity_count": r.extracted_entity_count,
-        "summary": r.summary,
-        "confidence_overall": r.confidence_overall,
-        "warnings": r.warnings,
-    }
-
-
+    return _ndjson(
+        _stream_with_heartbeats(_do(), session=session, label="wechat ingest"),
+    )
