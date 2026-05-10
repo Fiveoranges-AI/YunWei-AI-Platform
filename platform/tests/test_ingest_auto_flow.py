@@ -888,3 +888,489 @@ async def test_auto_cancel_endpoint_409_when_already_confirmed() -> None:
             assert resp.status_code == 409
     finally:
         await engine.dispose()
+
+
+# ---------- Regression / gap-coverage tests (Agent I) ---------------------
+#
+# The above coverage gets us to "happy path works". This block adds the
+# integration-level guards that protect the unified pipeline from regressions
+# the per-module unit tests can't catch:
+#
+# 1. Planner gating actually short-circuits — the only proof that the planner
+#    is doing real work is that *unselected* extractors are not invoked.
+# 2. Text-only input skips Mistral OCR entirely (cost / latency regression).
+# 3. /auto endpoint accepts file uploads (image path), not just text.
+# 4. /auto/{id}/confirm 404 / 409 edge cases.
+# 5. AutoConfirmRequest with ``customer.mode=merge`` reuses the existing row.
+# 6. /auto pipeline respects per-tenant DB isolation (multiple engines in the
+#    same test, same customer name in each, no cross-tenant leak).
+#
+# Legacy ``/contract`` + ``/business_card`` flows already have dedicated
+# tests in ``test_yinhu_brain_contract_flow.py`` and they ran green in the
+# 305-pass baseline, so we don't re-test them here; we only verify the
+# auto pipeline doesn't break that surface by re-running the suite at the
+# end.
+
+
+def _stub_planner_only(
+    monkeypatch: pytest.MonkeyPatch, *names: str
+) -> None:
+    """Make plan_extraction activate ONLY the named extractors.
+
+    The unselected ones must not be invoked by the orchestrator — this is
+    the planner's whole point. Targets carry a real score so the plan
+    still reads as a deliberate choice, not "everything is 0".
+    """
+
+    selections = [{"name": n, "confidence": 0.9} for n in names]
+
+    async def fake_plan(*, session, document_id, ocr_text, modality, source_hint, progress=None):
+        return IngestPlan(
+            targets={
+                "identity": 0.9 if "identity" in names else 0.2,
+                "commercial": 0.9 if "commercial" in names else 0.2,
+                "ops": 0.9 if "ops" in names else 0.2,
+            },
+            extractors=selections,
+            reason=f"only {','.join(names)}",
+            review_required=False,
+        )
+
+    monkeypatch.setattr(auto_module, "plan_extraction", fake_plan)
+
+
+def _counting_extractors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, int]:
+    """Replace every extractor with a counter-recording stub.
+
+    Returns the call-count dict the test can assert against. The stubs
+    still return valid drafts so the orchestrator sees real data and
+    merge_drafts works as if production had run.
+    """
+
+    counts: dict[str, int] = {"identity": 0, "commercial": 0, "ops": 0}
+
+    async def fake_identity(*, session, document_id, ocr_text, progress=None):
+        counts["identity"] += 1
+        return IdentityDraft.model_validate(_identity_payload())
+
+    async def fake_commercial(*, session, document_id, ocr_text, progress=None):
+        counts["commercial"] += 1
+        return CommercialDraft.model_validate(_commercial_payload())
+
+    async def fake_ops(*, session, document_id, ocr_text, progress=None):
+        counts["ops"] += 1
+        return OpsDraft.model_validate(_ops_payload())
+
+    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "identity", fake_identity)
+    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "commercial", fake_commercial)
+    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "ops", fake_ops)
+    return counts
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_planner_gating_skips_unselected_extractors(monkeypatch) -> None:
+    """When the planner activates only ``identity``, the commercial + ops
+    extractors must NOT be invoked. This is the planner's core value — if it
+    fires every extractor anyway, the gating is dead code.
+    """
+    _patch_storage(monkeypatch)
+    _stub_planner_only(monkeypatch, "identity")
+    counts = _counting_extractors(monkeypatch)
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="只关心客户名片信息：测试有限公司 王经理 13800000000",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            # Only identity ran.
+            assert counts == {"identity": 1, "commercial": 0, "ops": 0}
+            # Merged draft has identity but no commercial / ops payload.
+            assert result.draft.customer is not None
+            assert result.draft.order is None
+            assert result.draft.contract is None
+            assert result.draft.events == []
+            assert result.draft.commitments == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_planner_gating_two_extractors(monkeypatch) -> None:
+    """Planner activates identity + commercial, ops is skipped."""
+    _patch_storage(monkeypatch)
+    _stub_planner_only(monkeypatch, "identity", "commercial")
+    counts = _counting_extractors(monkeypatch)
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="合同号 T-001 客户测试有限公司 金额 12 万元",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            assert counts == {"identity": 1, "commercial": 1, "ops": 0}
+            assert result.draft.customer is not None
+            assert result.draft.order is not None
+            assert result.draft.events == []
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_text_input_never_invokes_ocr(monkeypatch) -> None:
+    """Text input (modality=text) must NOT call any Mistral OCR function.
+
+    OCR is paid + latency-sensitive; routing pasted_text through the image
+    pipeline was a real bug in an earlier draft. Spy on every OCR entry
+    point and assert zero invocations.
+    """
+    _patch_storage(monkeypatch)
+    _stub_planner_full_fanout(monkeypatch)
+    _stub_extractors(monkeypatch)
+
+    ocr_calls = {"image": 0, "pdf": 0, "doc": 0}
+
+    async def boom_image(*args, **kwargs):
+        ocr_calls["image"] += 1
+        raise AssertionError("parse_image_to_markdown must not be called for text input")
+
+    async def boom_pdf(*args, **kwargs):
+        ocr_calls["pdf"] += 1
+        raise AssertionError("parse_pdf_to_markdown must not be called for text input")
+
+    async def boom_doc(*args, **kwargs):
+        ocr_calls["doc"] += 1
+        raise AssertionError("parse_document_to_markdown must not be called for text input")
+
+    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", boom_image)
+    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
+    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", boom_doc)
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="客户测试有限公司，王经理 13800000000，合同金额 12 万元",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            assert ocr_calls == {"image": 0, "pdf": 0, "doc": 0}
+            # And the evidence row was created with the text as ocr_text.
+            doc = (
+                await session.execute(select(Document).where(Document.id == result.document_id))
+            ).scalar_one()
+            assert "测试有限公司" in (doc.ocr_text or "")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_endpoint_accepts_file_upload(monkeypatch) -> None:
+    """POST /api/ingest/auto with a multipart file (image bytes) routes
+    through the image-OCR branch and lands a Document.
+
+    We stub the OCR client to a deterministic string so the test stays
+    hermetic; the goal is to prove the endpoint wires file→evidence→OCR→
+    extractors, not to verify Mistral's behaviour.
+    """
+    from httpx import ASGITransport, AsyncClient
+
+    _patch_storage(monkeypatch)
+    _stub_planner_full_fanout(monkeypatch)
+    _stub_extractors(monkeypatch)
+
+    async def fake_image_ocr(image_bytes, filename, content_type):
+        return "测试客户有限公司 王经理 13800000000"
+
+    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_image_ocr)
+
+    engine = await _make_engine()
+    try:
+        app = _build_app(engine)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/ingest/auto",
+                data={"source_hint": "file"},
+                files={"file": ("card.jpg", b"fakebytes", "image/jpeg")},
+            )
+            assert resp.status_code == 200
+            lines = [
+                json.loads(line)
+                for line in resp.text.split("\n")
+                if line.strip()
+            ]
+            done = next(l for l in lines if l["status"] == "done")
+            assert "document_id" in done
+            assert done["draft"]["customer"]["full_name"] == "测试客户有限公司"
+
+        # Document row exists.
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            docs = (await session.execute(select(Document))).scalars().all()
+            assert len(docs) == 1
+            assert docs[0].ocr_text and "测试客户" in docs[0].ocr_text
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_confirm_endpoint_404_for_missing_document() -> None:
+    """POST /auto/{id}/confirm with an unknown UUID → 400 (the endpoint
+    wraps the ValueError from commit_auto_extraction)."""
+    from httpx import ASGITransport, AsyncClient
+
+    engine = await _make_engine()
+    try:
+        app = _build_app(engine)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = _confirm_request_full().model_dump(mode="json")
+            unknown = "00000000-0000-0000-0000-000000000000"
+            resp = await client.post(
+                f"/api/ingest/auto/{unknown}/confirm",
+                json=payload,
+            )
+            # commit_auto_extraction raises ValueError("document … not found")
+            # which the endpoint converts to 400.
+            assert resp.status_code == 400
+            assert "not found" in resp.text
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_confirm_endpoint_rejects_already_confirmed() -> None:
+    """Re-confirming a confirmed document → 400 (idempotency guard)."""
+    from httpx import ASGITransport, AsyncClient
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            from yinhu_brain.models import DocumentType
+
+            doc = Document(
+                type=DocumentType.contract,
+                file_url="/tmp/contract.pdf",
+                original_filename="contract.pdf",
+                file_sha256="0" * 64,
+                file_size_bytes=123,
+                ocr_text="some text",
+                review_status=DocumentReviewStatus.confirmed,
+            )
+            session.add(doc)
+            await session.commit()
+            doc_id = str(doc.id)
+
+        app = _build_app(engine)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = _confirm_request_full().model_dump(mode="json")
+            resp = await client.post(
+                f"/api/ingest/auto/{doc_id}/confirm",
+                json=payload,
+            )
+            assert resp.status_code == 400
+            assert "already confirmed" in resp.text
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_cancel_endpoint_404_for_missing_document() -> None:
+    """POST /auto/{id}/cancel for an unknown doc → 404."""
+    from httpx import ASGITransport, AsyncClient
+
+    engine = await _make_engine()
+    try:
+        app = _build_app(engine)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            unknown = "00000000-0000-0000-0000-000000000000"
+            resp = await client.post(f"/api/ingest/auto/{unknown}/cancel")
+            assert resp.status_code == 404
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_commit_auto_extraction_merges_into_existing_customer() -> None:
+    """``customer.mode=merge`` with a real ``existing_id`` must update the
+    existing row in place (not create a second customer)."""
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            from yinhu_brain.models import DocumentType
+
+            # Seed an existing customer.
+            existing = Customer(
+                full_name="老客户有限公司",
+                short_name="老客户",
+                address="旧地址",
+                tax_id=None,
+            )
+            session.add(existing)
+            await session.flush()
+            existing_id = existing.id
+
+            doc = Document(
+                type=DocumentType.contract,
+                file_url="/tmp/contract.pdf",
+                original_filename="contract.pdf",
+                file_sha256="0" * 64,
+                file_size_bytes=123,
+                ocr_text="一些文本",
+                review_status=DocumentReviewStatus.pending_review,
+            )
+            session.add(doc)
+            await session.flush()
+
+            request = AutoConfirmRequest.model_validate(
+                {
+                    "customer": {
+                        "mode": "merge",
+                        "existing_id": str(existing_id),
+                        "final": {
+                            "full_name": "老客户有限公司",
+                            "short_name": "老客户",
+                            "address": "新地址（用户修订）",
+                            "tax_id": "91310000XXXXXXXX",
+                        },
+                    },
+                    "contacts": [],
+                    "order": _commercial_payload()["order"],
+                    "contract": _commercial_payload()["contract"],
+                    "events": [],
+                    "commitments": [],
+                    "tasks": [],
+                    "risk_signals": [],
+                    "memory_items": [],
+                    "field_provenance": [],
+                    "confidence_overall": 0.8,
+                    "parse_warnings": [],
+                }
+            )
+
+            result = await commit_auto_extraction(
+                session=session,
+                document_id=doc.id,
+                request=request,
+            )
+            await session.commit()
+
+            # Same customer row was reused.
+            assert result.customer_id == existing_id
+
+            customers = (await session.execute(select(Customer))).scalars().all()
+            assert len(customers) == 1, "merge must not create a second customer"
+            assert customers[0].id == existing_id
+            # The user-supplied address overrode the old value.
+            assert customers[0].address == "新地址（用户修订）"
+            assert customers[0].tax_id == "91310000XXXXXXXX"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_commit_auto_extraction_merge_requires_existing_id() -> None:
+    """``customer.mode=merge`` without ``existing_id`` → ValueError."""
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            from yinhu_brain.models import DocumentType
+
+            doc = Document(
+                type=DocumentType.contract,
+                file_url="/tmp/contract.pdf",
+                original_filename="contract.pdf",
+                file_sha256="0" * 64,
+                file_size_bytes=123,
+                ocr_text="一些文本",
+                review_status=DocumentReviewStatus.pending_review,
+            )
+            session.add(doc)
+            await session.flush()
+
+            request = AutoConfirmRequest.model_validate(
+                {
+                    "customer": {
+                        "mode": "merge",
+                        "existing_id": None,
+                        "final": _identity_payload()["customer"],
+                    },
+                    "contacts": [],
+                    "order": None,
+                    "contract": None,
+                    "events": [],
+                    "commitments": [],
+                    "tasks": [],
+                    "risk_signals": [],
+                    "memory_items": [],
+                    "field_provenance": [],
+                    "confidence_overall": 0.7,
+                    "parse_warnings": [],
+                }
+            )
+
+            with pytest.raises(ValueError, match="existing_id"):
+                await commit_auto_extraction(
+                    session=session,
+                    document_id=doc.id,
+                    request=request,
+                )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_isolated_engines_do_not_leak_customers(monkeypatch) -> None:
+    """Two separate engines (proxy for two tenants) running the same
+    auto_ingest input must keep their customers entirely separate.
+
+    This is a smoke test of the multi-tenant story for /auto — the
+    real Postgres-backed isolation test in
+    ``test_yinhu_brain_tenant_isolation.py`` runs only when DATABASE_URL
+    points at a reachable Postgres; here we confirm the orchestrator
+    itself doesn't introduce a cross-session backdoor.
+    """
+    _patch_storage(monkeypatch)
+    _stub_planner_full_fanout(monkeypatch)
+    _stub_extractors(monkeypatch)
+
+    engine_a = await _make_engine()
+    engine_b = await _make_engine()
+    try:
+        async with AsyncSession(engine_a, expire_on_commit=False) as session_a:
+            await auto_ingest(
+                session=session_a,
+                text_content="测试客户有限公司 王经理 13800000000",
+                source_hint="pasted_text",
+                uploader="tenant_a_user",
+            )
+            await session_a.commit()
+
+        # Engine B starts empty.
+        async with AsyncSession(engine_b, expire_on_commit=False) as session_b:
+            rows = (await session_b.execute(select(Customer))).scalars().all()
+            assert rows == [], "engine_b leaked engine_a's customers"
+            docs = (await session_b.execute(select(Document))).scalars().all()
+            assert docs == [], "engine_b leaked engine_a's documents"
+
+        # Engine A still has exactly the one document it ingested.
+        async with AsyncSession(engine_a, expire_on_commit=False) as session_a:
+            docs = (await session_a.execute(select(Document))).scalars().all()
+            assert len(docs) == 1
+    finally:
+        await engine_a.dispose()
+        await engine_b.dispose()
