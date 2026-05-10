@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { GoFn } from "../App";
-import { getAskSeed, listCustomers } from "../api/client";
+import { getAskSeed, listCustomersBasic } from "../api/client";
 import { EvidenceChip } from "../components/EvidenceChip";
 import type { AskAIBlock, AskMessage, CustomerDetail } from "../data/types";
 import { I } from "../icons";
@@ -24,7 +24,9 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
   const customer = customers.find((c) => c.id === activeId) ?? customers[0];
 
   useEffect(() => {
-    listCustomers().then((all) => {
+    // Picker only needs id+name+tag; skip the per-customer summary/metrics
+    // enrichment to avoid the 1+2N round-trip pattern. ~10x faster mount.
+    listCustomersBasic().then((all) => {
       setCustomers(all);
     });
   }, []);

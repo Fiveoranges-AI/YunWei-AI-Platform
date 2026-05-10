@@ -163,6 +163,23 @@ export async function listCustomers(): Promise<CustomerDetail[]> {
   }
 }
 
+/** Lightweight variant: just id + name + tag, no per-customer enrichment.
+ *
+ * Used by Ask AI's customer picker, which needs to render a list of names
+ * but doesn't show metrics or AI summary in the picker itself. Avoids the
+ * 1+2N round-trip pattern of {@link listCustomers}; first paint goes from
+ * ~5s (5 customers) to ~0.5s. Metrics come in via getCustomer() when the
+ * user actually selects a customer. */
+export async function listCustomersBasic(): Promise<CustomerListItem[]> {
+  try {
+    const raw = await fetchJSON<RawCustomer[]>("/customers");
+    return raw.map((c) => transformCustomerBase(c, null));
+  } catch {
+    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+    return MOCK_CUSTOMERS;
+  }
+}
+
 export async function getCustomer(id: string): Promise<CustomerDetail | undefined> {
   try {
     const [raw, summary, metrics, events, commitments, tasks, risks] = await Promise.all([
