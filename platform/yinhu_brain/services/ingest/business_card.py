@@ -1,4 +1,4 @@
-"""Business-card ingest: image → Contact row + provenance.
+"""Business-card ingest: image → Customer/Contact rows + provenance.
 
 Single Claude vision call with the business_card tool. Post-validates phone/
 email and halves confidence on regex-fail (also flags Contact.needs_review).
@@ -15,7 +15,15 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yinhu_brain.models import Contact, ContactRole, Document, DocumentType, EntityType
+from yinhu_brain.models import (
+    Contact,
+    ContactRole,
+    Customer,
+    Document,
+    DocumentReviewStatus,
+    DocumentType,
+    EntityType,
+)
 from yinhu_brain.services.ingest.schemas import (
     BUSINESS_CARD_TOOL_NAME,
     BusinessCardExtraction,
@@ -24,6 +32,7 @@ from yinhu_brain.services.ingest.schemas import (
 from yinhu_brain.services.ingest.provenance import upsert_field_provenance
 from yinhu_brain.config import settings
 from yinhu_brain.services.llm import call_claude, extract_tool_use_input
+from yinhu_brain.services.match import find_customer_candidates
 from yinhu_brain.services.storage import store_upload
 
 logger = logging.getLogger(__name__)
@@ -42,7 +51,13 @@ class BusinessCardIngestResult:
     document_id: uuid.UUID
     contact_id: uuid.UUID
     needs_review: bool
+    customer_id: uuid.UUID | None = None
+    customer_name: str | None = None
+    contact_name: str | None = None
     warnings: list[str] = field(default_factory=list)
+
+
+CUSTOMER_AUTO_MERGE_THRESHOLD = 0.95
 
 
 def _media_type(filename: str, content_type: str | None) -> str:
@@ -56,6 +71,48 @@ def _media_type(filename: str, content_type: str | None) -> str:
     if ext == ".webp":
         return "image/webp"
     return "image/jpeg"
+
+
+def _clean(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+async def _resolve_customer(
+    session: AsyncSession,
+    result: BusinessCardExtraction,
+) -> Customer | None:
+    """Create or reuse the customer named on the card.
+
+    Business-card ingest used to write only ``Contact``. That left the Win
+    customer list empty after importing a card. A card with company text is a
+    customer-bearing document, so attach the contact to a concrete Customer.
+    """
+    full_name = _clean(result.company_full_name) or _clean(result.company_short_name)
+    if not full_name:
+        return None
+
+    hits = await find_customer_candidates(session, full_name)
+    customer: Customer | None = None
+    if hits and hits[0][1] >= CUSTOMER_AUTO_MERGE_THRESHOLD:
+        customer = hits[0][0]
+        if not customer.short_name and _clean(result.company_short_name):
+            customer.short_name = _clean(result.company_short_name)
+        if not customer.address and _clean(result.address):
+            customer.address = _clean(result.address)
+    else:
+        customer = Customer(
+            full_name=full_name,
+            short_name=_clean(result.company_short_name),
+            address=_clean(result.address),
+            tax_id=None,
+        )
+        session.add(customer)
+
+    await session.flush()
+    return customer
 
 
 async def ingest_business_card(
@@ -132,7 +189,16 @@ async def ingest_business_card(
         warnings.append("no name extracted; needs review")
         needs_review = True
 
+    customer = await _resolve_customer(session, result)
+    if customer is None:
+        warnings.append("no company extracted; contact is not attached to a customer")
+        needs_review = True
+    else:
+        doc.assigned_customer_id = customer.id
+        doc.detected_customer_id = customer.id
+
     contact = Contact(
+        customer_id=customer.id if customer else None,
         name=result.name or "(未识别)",
         title=result.title,
         phone=result.phone,
@@ -149,13 +215,21 @@ async def ingest_business_card(
     # Provenance — paths all point at the single Contact row.
     for entry in result.field_provenance:
         attr = entry.path.split(".")[-1] if "." in entry.path else entry.path
+        entity_type = EntityType.contact
+        entity_id = contact.id
+        field_name = attr
+        value = getattr(result, attr, None)
+        if customer is not None and attr in {"company_full_name", "company_short_name"}:
+            entity_type = EntityType.customer
+            entity_id = customer.id
+            field_name = "full_name" if attr == "company_full_name" else "short_name"
         await upsert_field_provenance(
             session,
             document_id=doc.id,
-            entity_type=EntityType.contact,
-            entity_id=contact.id,
-            field_name=attr,
-            value=getattr(result, attr, None),
+            entity_type=entity_type,
+            entity_id=entity_id,
+            field_name=field_name,
+            value=value,
             source_page=entry.source_page,
             source_excerpt=entry.source_excerpt,
             confidence=result.confidence_overall,
@@ -164,11 +238,15 @@ async def ingest_business_card(
         )
 
     doc.parse_warnings = warnings
+    doc.review_status = DocumentReviewStatus.confirmed
     await session.flush()
 
     return BusinessCardIngestResult(
         document_id=doc.id,
         contact_id=contact.id,
         needs_review=needs_review,
+        customer_id=customer.id if customer else None,
+        customer_name=customer.full_name if customer else None,
+        contact_name=contact.name,
         warnings=warnings,
     )

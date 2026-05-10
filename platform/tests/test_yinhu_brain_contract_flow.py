@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 import yinhu_brain.models  # noqa: F401 - register SQLAlchemy mappers
 from yinhu_brain.api.customer_profile.metrics import _milestones_paid
 from yinhu_brain.db import Base
-from yinhu_brain.models import Contract, Customer, Document, DocumentType, Order
+from yinhu_brain.models import Contact, Contract, Customer, Document, DocumentType, Order
 from yinhu_brain.models.customer_memory import DocumentReviewStatus
+from yinhu_brain.services.ingest import business_card as business_card_service
 from yinhu_brain.services.ingest.contract import commit_contract_extraction
 from yinhu_brain.services.ingest.schemas import ContractConfirmRequest
 
@@ -83,6 +84,81 @@ async def test_contract_confirm_writes_customer_order_contract() -> None:
         assert contracts[0].contract_no_external == "T-001"
         assert doc.review_status == DocumentReviewStatus.confirmed
         assert doc.assigned_customer_id == customers[0].id
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_business_card_ingest_creates_customer_and_attaches_contact(monkeypatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async def fake_call_claude(*args, **kwargs):
+        return object()
+
+    def fake_extract_tool_use_input(response, tool_name):
+        return {
+            "name": "王强",
+            "title": "销售经理",
+            "company_full_name": "测试客户有限公司",
+            "company_short_name": "测试客户",
+            "mobile": "13800000000",
+            "email": "wang@example.com",
+            "address": "上海市测试路 1 号",
+            "field_provenance": [
+                {
+                    "path": "company_full_name",
+                    "source_page": None,
+                    "source_excerpt": "测试客户有限公司",
+                },
+                {"path": "name", "source_page": None, "source_excerpt": "王强"},
+            ],
+            "confidence_overall": 0.93,
+            "parse_warnings": [],
+        }
+
+    monkeypatch.setattr(business_card_service, "call_claude", fake_call_claude)
+    monkeypatch.setattr(
+        business_card_service,
+        "extract_tool_use_input",
+        fake_extract_tool_use_input,
+    )
+    monkeypatch.setattr(
+        business_card_service,
+        "store_upload",
+        lambda image_bytes, original_filename, default_ext=".jpg": (
+            "/tmp/card.jpg",
+            "1" * 64,
+            len(image_bytes),
+        ),
+    )
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        result = await business_card_service.ingest_business_card(
+            session=session,
+            image_bytes=b"fake image",
+            original_filename="card.jpg",
+            content_type="image/jpeg",
+            uploader="tester",
+        )
+        await session.commit()
+
+        customers = (await session.execute(select(Customer))).scalars().all()
+        contacts = (await session.execute(select(Contact))).scalars().all()
+        doc = (
+            await session.execute(select(Document).where(Document.id == result.document_id))
+        ).scalar_one()
+
+        assert len(customers) == 1
+        assert len(contacts) == 1
+        assert customers[0].full_name == "测试客户有限公司"
+        assert contacts[0].customer_id == customers[0].id
+        assert result.customer_id == customers[0].id
+        assert result.customer_name == "测试客户有限公司"
+        assert result.contact_name == "王强"
+        assert doc.assigned_customer_id == customers[0].id
+        assert doc.review_status == DocumentReviewStatus.confirmed
 
     await engine.dispose()
 

@@ -8,7 +8,7 @@ Document and an llm_calls audit row.
 
 Routes:
 - /api/ingest/contract          PDF → Customer + Contacts + Order + Contract
-- /api/ingest/business_card     image → Contact + provenance
+- /api/ingest/business_card     image → Customer + Contact + provenance
 - /api/ingest/wechat_screenshot image → chat_log Document + extracted hints
 
 All three endpoints stream their response as NDJSON
@@ -261,6 +261,9 @@ async def upload_business_card(
         return {
             "document_id": str(result.document_id),
             "contact_id": str(result.contact_id),
+            "customer_id": str(result.customer_id) if result.customer_id else None,
+            "customer_name": result.customer_name,
+            "contact_name": result.contact_name,
             "needs_review": result.needs_review,
             "warnings": result.warnings,
         }

@@ -1,4 +1,6 @@
+import { useEffect, useState, type ReactNode } from "react";
 import type { GoFn } from "../App";
+import { getMe, type CurrentUser } from "../api/client";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
 import { I } from "../icons";
@@ -6,6 +8,22 @@ import { useIsDesktop } from "../lib/breakpoints";
 
 export function ProfileScreen({ go: _go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
+  const [me, setMe] = useState<CurrentUser | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((user) => {
+        if (!cancelled) setMe(user);
+      })
+      .catch((e) => {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "账号信息加载失败");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleLogout() {
     try {
@@ -17,6 +35,20 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
     // Platform "/" serves login.html when there's no app_session cookie.
     window.location.href = "/";
   }
+
+  const displayName = (me?.display_name || me?.username || "").trim();
+  const profileName = displayName || (loadError ? "账号信息不可用" : "加载中");
+  const initial = displayName.slice(0, 1) || (loadError ? "!" : "?");
+  const enterprise = me?.enterprises?.[0] ?? null;
+  const enterpriseName = (enterprise?.display_name || enterprise?.legal_name || enterprise?.id || "").trim();
+  const role = roleLabel(enterprise?.role);
+  const subtitle = loadError
+    ? "无法读取登录用户"
+    : enterpriseName
+      ? `${role} · ${enterpriseName}`
+      : me
+        ? "未绑定企业"
+        : "正在读取真实账号";
 
   return (
     <div className="screen" style={{ background: "var(--bg)" }}>
@@ -46,11 +78,11 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
       >
         {/* User card */}
         <div className="card" style={{ padding: 16, marginBottom: 16, display: "flex", alignItems: "center", gap: 14 }}>
-          <Mono text="李" color="var(--brand-500)" size={56} radius={28} fontSize={22} />
+          <Mono text={initial} color="var(--brand-500)" size={56} radius={28} fontSize={22} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ink-900)" }}>李欣</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ink-900)" }}>{profileName}</div>
             <div style={{ fontSize: 13, color: "var(--ink-500)", marginTop: 2 }}>
-              销售助理 · 万华化学客户组
+              {subtitle}
             </div>
           </div>
           <button
@@ -71,7 +103,7 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
 
         <Section title="账号设置">
           <div className="card" style={{ padding: "4px 0" }}>
-            <ProfileRow icon={I.profile(16)} label="个人信息" />
+            <ProfileRow icon={I.profile(16)} label="个人信息" sub={me?.username} />
             <Separator />
             <ProfileRow icon={I.bookmark(14)} label="收藏与标签" />
             <Separator />
@@ -132,7 +164,7 @@ function ProfileRow({
   label,
   sub,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   sub?: string;
 }) {
@@ -164,4 +196,17 @@ function ProfileRow({
 
 function Separator() {
   return <div style={{ height: 1, background: "var(--ink-100)", marginLeft: 58 }} />;
+}
+
+function roleLabel(role: string | null | undefined): string {
+  switch (role) {
+    case "owner":
+      return "所有者";
+    case "admin":
+      return "管理员";
+    case "member":
+      return "成员";
+    default:
+      return role || "成员";
+  }
 }

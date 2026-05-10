@@ -1,8 +1,8 @@
 // Backend API client for /win/api/. The backend (yinhu_brain, integrated
 // into platform_app) returns the raw yunwei-tools shape; this module
 // translates each response into the design's shape (CustomerListItem,
-// CustomerDetail, etc.). On any network/HTTP error it falls back to mock
-// data so the UI keeps rendering during local dev.
+// CustomerDetail, etc.). Mock fallback is limited to Vite dev mode; production
+// surfaces API errors so stale demo data cannot mask persistence bugs.
 //
 // Backend → design shape mapping:
 //   id            → id (string-as-uuid)
@@ -34,6 +34,20 @@ import { fmtRelative } from "../lib/format";
 
 const API_BASE = "/win/api";
 const MOCK_DELAY_MS = 200;
+const USE_MOCK_FALLBACK = import.meta.env.DEV;
+
+export type CurrentUser = {
+  id: string;
+  username: string;
+  display_name?: string | null;
+  is_platform_admin: boolean;
+  enterprises: Array<{
+    id: string;
+    display_name?: string | null;
+    legal_name?: string | null;
+    role?: string | null;
+  }>;
+};
 
 type RawCustomer = {
   id: string;
@@ -68,7 +82,13 @@ type RawSummary = {
 };
 
 async function fetchJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include", cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
+  return (await res.json()) as T;
+}
+
+async function fetchPlatformJSON<T>(path: string): Promise<T> {
+  const res = await fetch(path, { credentials: "same-origin", cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
@@ -181,9 +201,12 @@ export async function listCustomers(): Promise<CustomerDetail[]> {
       }),
     );
     return enriched;
-  } catch {
-    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-    return MOCK_CUSTOMERS;
+  } catch (e) {
+    if (USE_MOCK_FALLBACK) {
+      await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+      return MOCK_CUSTOMERS;
+    }
+    throw e;
   }
 }
 
@@ -198,9 +221,12 @@ export async function listCustomersBasic(): Promise<CustomerListItem[]> {
   try {
     const raw = await fetchJSON<RawCustomer[]>("/customers");
     return raw.map((c) => transformCustomerBase(c, null));
-  } catch {
-    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-    return MOCK_CUSTOMERS;
+  } catch (e) {
+    if (USE_MOCK_FALLBACK) {
+      await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+      return MOCK_CUSTOMERS;
+    }
+    throw e;
   }
 }
 
@@ -229,9 +255,12 @@ export async function getCustomer(id: string): Promise<CustomerDetail | undefine
     };
     transformed.risk = deriveRisk(transformed.risks);
     return transformed;
-  } catch {
-    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-    return MOCK_CUSTOMERS.find((c) => c.id === id);
+  } catch (e) {
+    if (USE_MOCK_FALLBACK) {
+      await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+      return MOCK_CUSTOMERS.find((c) => c.id === id);
+    }
+    throw e;
   }
 }
 
@@ -288,10 +317,15 @@ function transformRisks(rows: unknown[] | null): RiskSignal[] {
 }
 
 export async function getReview(_uploadId: string): Promise<Review> {
-  // TODO: wire to /win/api/customers/{id}/inbox/{id}/* once we have a real
-  // upload flow. For now, mock data is the only source.
-  await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-  return MOCK_REVIEW;
+  if (USE_MOCK_FALLBACK) {
+    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+    return MOCK_REVIEW;
+  }
+  throw new Error("没有可复核的上传批次");
+}
+
+export async function getMe(): Promise<CurrentUser> {
+  return fetchPlatformJSON<CurrentUser>("/api/me");
 }
 
 export async function getAskSeed(customerId: string): Promise<AskSeed> {

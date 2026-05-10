@@ -3,6 +3,7 @@ import type { GoFn } from "../App";
 import { setLastBatch, uploadStagedFile } from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
+import { markCustomersChanged } from "../lib/customerRefresh";
 
 type StagedStatus = "idle" | "uploading" | "done" | "error" | "unsupported";
 
@@ -123,6 +124,9 @@ export function UploadScreen({ go }: { go: GoFn }) {
 
     const anySucceeded = results.some((r) => r.result.ok);
     if (anySucceeded) {
+      if (results.some((r) => r.result.ok && Boolean((r.result.raw as { customer_id?: string | null }).customer_id))) {
+        markCustomersChanged();
+      }
       // Hand the real backend payload off to the Review screen so it can
       // render the actual customer / contacts / fields instead of MOCK_REVIEW.
       setLastBatch({

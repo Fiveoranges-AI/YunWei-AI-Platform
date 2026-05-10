@@ -28,12 +28,38 @@ export function CustomerDetailScreen({
 }) {
   const isDesktop = useIsDesktop();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.id) {
-      getCustomer(params.id).then((c) => setCustomer(c ?? null));
+      setLoadError(null);
+      getCustomer(params.id)
+        .then((c) => setCustomer(c ?? null))
+        .catch((e) => {
+          setCustomer(null);
+          setLoadError(e instanceof Error ? e.message : "客户档案加载失败");
+        });
     }
   }, [params.id]);
+
+  if (loadError) {
+    return (
+      <div
+        className="screen"
+        style={{ background: "var(--bg)", alignItems: "center", justifyContent: "center", display: "flex" }}
+      >
+        <div style={{ textAlign: "center", padding: 24 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-900)", marginBottom: 8 }}>
+            客户档案加载失败
+          </div>
+          <div style={{ color: "var(--ink-500)", fontSize: 13, marginBottom: 16 }}>{loadError}</div>
+          <button className="btn btn-secondary" onClick={() => go("list")}>
+            返回客户列表
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!customer) {
     return (
