@@ -230,6 +230,76 @@ def cmd_set_password(args):
     print(f"password updated for {user_id}; existing sessions revoked")
 
 
+def _generate_invite_code() -> str:
+    """Format: WIN-XXXX-XXXX. Confusion-resistant alphabet
+    (no 0/1/I/O/L/Z) so codes are dictation-safe over phone."""
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXY23456789"
+    rand = "".join(secrets.choice(alphabet) for _ in range(8))
+    return f"WIN-{rand[:4]}-{rand[4:]}"
+
+
+def cmd_invites_generate(args):
+    db.init()
+    expires_at_epoch: int | None = None
+    if args.days:
+        expires_at_epoch = _now() + args.days * 86400
+    codes: list[str] = []
+    for _ in range(args.count):
+        # Retry on the rare collision (1-in-30^8 ≈ 1.5e-12 per draw, but be safe).
+        for attempt in range(5):
+            c = _generate_invite_code()
+            try:
+                db.insert_invite(
+                    c,
+                    created_by=args.created_by,
+                    note=args.note,
+                    expires_at_epoch=expires_at_epoch,
+                )
+                codes.append(c)
+                break
+            except Exception as e:
+                if attempt == 4:
+                    raise
+                if "duplicate key" not in str(e).lower():
+                    raise
+    print(f"# Generated {len(codes)} invite codes")
+    if args.note:
+        print(f"# note: {args.note}")
+    if args.days:
+        print(f"# expires: {args.days} days")
+    print("# Share URL pattern: https://app.fiveoranges.ai/register?code=<CODE>")
+    print()
+    for c in codes:
+        print(c)
+
+
+def cmd_invites_list(args):
+    db.init()
+    rows = db.list_invites(active_only=args.active_only)
+    if not rows:
+        print("(no invite codes)")
+        return
+    for r in rows:
+        status = "redeemed" if r["redeemed_at"] else "revoked" if r["revoked_at"] else "active"
+        extra = ""
+        if r["redeemed_by_user_id"]:
+            extra = f" → {r['redeemed_by_user_id']}"
+        if r["expires_at"]:
+            extra += f"  exp={r['expires_at']:%Y-%m-%d}"
+        if r["note"]:
+            extra += f"  ({r['note']})"
+        print(f"{r['code']}  {status:<8}{extra}")
+
+
+def cmd_invites_revoke(args):
+    db.init()
+    ok = db.revoke_invite(args.code.strip().upper())
+    if ok:
+        print(f"revoked {args.code}")
+    else:
+        sys.exit(f"code not found or already revoked: {args.code}")
+
+
 def cmd_delete_user(args):
     db.init()
     user_id = f"u_{args.username}"
@@ -348,6 +418,30 @@ def main():
     s = sp.add_parser("demote-admin")
     s.add_argument("username")
     s.set_defaults(func=cmd_demote_admin)
+
+    # ─── invite codes ───────────────────────────────────────
+    s = sp.add_parser("invites-generate",
+        help="Generate N invite codes for /register self-signup.")
+    s.add_argument("--count", type=int, default=1,
+        help="How many codes to mint (default 1)")
+    s.add_argument("--days", type=int, default=30,
+        help="Validity in days (default 30; 0 = never expires)")
+    s.add_argument("--note", default=None,
+        help="Free-text label, surfaced in invites-list")
+    s.add_argument("--created-by", default="platform-admin",
+        help="Bookkeeping; usually leave default")
+    s.set_defaults(func=cmd_invites_generate)
+
+    s = sp.add_parser("invites-list",
+        help="List all invite codes with status.")
+    s.add_argument("--active-only", action="store_true",
+        help="Only show codes that can still be redeemed")
+    s.set_defaults(func=cmd_invites_list)
+
+    s = sp.add_parser("invites-revoke",
+        help="Disable an invite code (already-redeemed accounts unaffected).")
+    s.add_argument("code")
+    s.set_defaults(func=cmd_invites_revoke)
 
     args = p.parse_args()
     args.func(args)

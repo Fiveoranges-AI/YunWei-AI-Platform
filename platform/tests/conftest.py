@@ -27,7 +27,8 @@ def _clean_state():
             "TRUNCATE api_keys, platform_sessions, agent_grants, "
             "enterprise_members, tenants, enterprises, users, "
             "proxy_log, bronze_files, silver_mappings, "
-            "daily_reports, daily_report_subscriptions RESTART IDENTITY CASCADE"
+            "daily_reports, daily_report_subscriptions, invite_codes "
+            "RESTART IDENTITY CASCADE"
         )
     # Flush Redis test DB
     redis.from_url(os.environ["REDIS_URL"]).flushdb()

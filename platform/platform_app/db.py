@@ -199,6 +199,147 @@ def invalidate_acl_for_enterprise(user_id: str, enterprise_id: str) -> None:
         invalidate_acl(user_id, enterprise_id, r["agent_id"])
 
 
+# ─── invite codes (migration 009) ───────────────────────────────
+
+
+class InviteError(Exception):
+    """Domain-specific failure during invite redemption.
+
+    `code` is a stable error tag (invalid_code / code_redeemed /
+    code_revoked / code_expired / username_taken); `message` is a
+    Chinese end-user message safe to surface in the register page.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def redeem_invite_and_register(
+    *,
+    invite_code: str,
+    user_id: str,
+    username: str,
+    password_hash: str,
+    display_name: str,
+    email: str | None,
+    enterprise_id: str,
+) -> None:
+    """Atomic flow for /api/register: redeem the invite + create the user
+    + create the per-user enterprise + add membership row. All-or-nothing.
+
+    Raises InviteError on user-fixable failures (bad code, already used,
+    username taken). Other exceptions propagate so they get logged.
+    """
+    conn = main()._get()
+    with conn.transaction():
+        # 1. Lock the invite row so concurrent redeems serialize.
+        row = conn.execute(
+            "SELECT redeemed_at, revoked_at, expires_at "
+            "  FROM invite_codes WHERE code = %s FOR UPDATE",
+            (invite_code,),
+        ).fetchone()
+        if not row:
+            raise InviteError("invalid_code", "邀请码无效")
+        if row["redeemed_at"]:
+            raise InviteError("code_redeemed", "邀请码已使用")
+        if row["revoked_at"]:
+            raise InviteError("code_revoked", "邀请码已撤销")
+        if row["expires_at"]:
+            expired_row = conn.execute(
+                "SELECT (expires_at < now()) AS expired "
+                "FROM invite_codes WHERE code = %s",
+                (invite_code,),
+            ).fetchone()
+            if expired_row and expired_row["expired"]:
+                raise InviteError("code_expired", "邀请码已过期")
+
+        # 2. Create user. (FK on invite_codes.redeemed_by_user_id requires
+        #    the user row to exist before we mark the code redeemed.)
+        now = int(time.time())
+        try:
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, display_name, email, created_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (user_id, username, password_hash, display_name, email or None, now),
+            )
+        except psycopg.errors.UniqueViolation as e:
+            raise InviteError("username_taken", "用户名已被占用") from e
+
+        # 3. Create per-user enterprise (id format e_<username>).
+        conn.execute(
+            "INSERT INTO enterprises "
+            "(id, legal_name, display_name, plan, onboarding_stage, created_at) "
+            "VALUES (%s, %s, %s, 'trial', 'signed_up', %s)",
+            (enterprise_id, display_name, display_name, now),
+        )
+
+        # 4. Link user → enterprise as owner.
+        conn.execute(
+            "INSERT INTO enterprise_members "
+            "(user_id, enterprise_id, role, granted_at, granted_by) "
+            "VALUES (%s, %s, 'owner', %s, 'register-flow')",
+            (user_id, enterprise_id, now),
+        )
+
+        # 5. Mark the code redeemed. We still hold the FOR UPDATE lock from
+        #    step 1 so this is atomic with the user/enterprise creation.
+        conn.execute(
+            "UPDATE invite_codes "
+            "   SET redeemed_at = now(), "
+            "       redeemed_by_user_id = %s, "
+            "       redeemed_enterprise_id = %s "
+            " WHERE code = %s",
+            (user_id, enterprise_id, invite_code),
+        )
+
+
+def get_invite(code: str) -> dict | None:
+    row = main().execute(
+        "SELECT code, created_at, expires_at, redeemed_at, revoked_at, "
+        "       redeemed_by_user_id, redeemed_enterprise_id, note "
+        "FROM invite_codes WHERE code=%s",
+        (code,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_invites(active_only: bool = False) -> list[dict]:
+    sql = (
+        "SELECT code, created_at, expires_at, redeemed_at, revoked_at, "
+        "       redeemed_by_user_id, redeemed_enterprise_id, note "
+        "FROM invite_codes"
+    )
+    if active_only:
+        sql += " WHERE redeemed_at IS NULL AND revoked_at IS NULL"
+    sql += " ORDER BY created_at DESC"
+    return [dict(r) for r in main().execute(sql).fetchall()]
+
+
+def insert_invite(code: str, *, created_by: str | None, note: str | None,
+                  expires_at_epoch: int | None) -> None:
+    main().execute(
+        "INSERT INTO invite_codes (code, created_by, note, expires_at) "
+        "VALUES (%s, %s, %s, to_timestamp(%s))"
+        if expires_at_epoch
+        else
+        "INSERT INTO invite_codes (code, created_by, note) "
+        "VALUES (%s, %s, %s)",
+        (code, created_by, note, expires_at_epoch) if expires_at_epoch else (code, created_by, note),
+    )
+
+
+def revoke_invite(code: str) -> bool:
+    cur = main().execute(
+        "UPDATE invite_codes SET revoked_at = now() "
+        "WHERE code = %s AND revoked_at IS NULL "
+        "RETURNING code",
+        (code,),
+    )
+    return cur.rowcount == 1
+
+
 # ─── proxy_log ──────────────────────────────────────────────────
 
 def write_proxy_log(

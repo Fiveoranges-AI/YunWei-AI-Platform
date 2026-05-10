@@ -107,6 +107,12 @@ def index(request: Request):
     return FileResponse(_STATIC / page, headers=_NO_STORE)
 
 
+@app.api_route("/register", methods=["GET", "HEAD"])
+def register_page():
+    """Public: invite-code self-registration. No auth required."""
+    return FileResponse(_STATIC / "register.html", headers=_NO_STORE)
+
+
 @app.api_route("/data", methods=["GET", "HEAD"])
 def data_console(request: Request):
     if not request.cookies.get("app_session"):
