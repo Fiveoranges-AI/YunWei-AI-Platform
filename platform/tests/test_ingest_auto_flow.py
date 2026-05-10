@@ -73,7 +73,20 @@ from yinhu_brain.services.ingest.unified_schemas import (
 
 
 async def _make_engine():
+    # SQLite skips FK enforcement unless ``PRAGMA foreign_keys = ON`` runs on
+    # every connection. Without this, integrity bugs that fail in Postgres
+    # (e.g. inserting llm_calls(document_id=X) when X hasn't been committed
+    # yet) silently pass here and ship to production.
+    from sqlalchemy import event
+
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enable_sqlite_fk(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys = ON")
+        cur.close()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     return engine
