@@ -185,6 +185,7 @@ async def call_claude(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: dict[str, Any] | None = None,
     max_tokens: int = 4096,
+    temperature: float | None = None,
     document_id: UUID | None = None,
 ) -> Any:
     """Call Claude. Always writes to llm_calls. Raises LLMCallFailed on failure."""
@@ -209,6 +210,8 @@ async def call_claude(
         request_payload["tools"] = tools
     if tool_choice is not None:
         request_payload["tool_choice"] = tool_choice
+    if temperature is not None:
+        request_payload["temperature"] = temperature
 
     last_exc: Exception | None = None
     response: Any = None
