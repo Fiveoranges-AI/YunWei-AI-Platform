@@ -19,6 +19,13 @@ dependencies = [
     "markdown-it-py>=3.0",
     "anthropic>=0.92",
     "pdfplumber>=0.11",
+    # yinhu_brain (智通客户) deps — vendored from yunwei-tools.
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "aiosqlite>=0.20",
+    "pydantic-settings>=2.6",
+    "pypdf>=5.1",
+    "tenacity>=9.0",
 ]
 
 [project.optional-dependencies]

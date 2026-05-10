@@ -11,6 +11,10 @@ from . import admin_api, api, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 from .settings import settings
+# yinhu_brain (智通客户) — vendored from yunwei-tools, mounted at /win/api/.
+# Per-enterprise Postgres database; lazy-provisioned on first access.
+from yinhu_brain import router as _yinhu_router
+from yinhu_brain.db import dispose_all as _yinhu_dispose
 
 PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
 
@@ -25,6 +29,7 @@ async def lifespan(app: FastAPI):
     yield
     health_task.cancel()
     scheduler_task.cancel()
+    await _yinhu_dispose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -33,6 +38,42 @@ app.include_router(data_api.router)
 app.include_router(admin_api.router)
 app.include_router(enterprise_api.router)
 app.include_router(daily_report_api.router)
+# /win/api/* — 智通客户 routes. The middleware below stamps
+# request.state.enterprise_id from the app_session cookie, which
+# yinhu_brain.db.get_session reads to pick the right per-tenant DB.
+# NB: yinhu_brain's inner routers already mount under /api/* (legacy from
+# yunwei-tools), so prefix is just /win/.
+app.include_router(_yinhu_router, prefix="/win")
+
+
+@app.middleware("http")
+async def _attach_enterprise(request: Request, call_next):
+    """For /win/api/* requests, resolve the caller's enterprise from the
+    app_session cookie and stamp it on request.state. yinhu_brain.db reads
+    this to route the SQLAlchemy session to the right per-tenant database."""
+    if request.url.path.startswith("/win/api/"):
+        cookie = request.cookies.get("app_session")
+        if not cookie:
+            return JSONResponse(
+                {"error": "not_logged_in", "message": "请登录"}, status_code=401
+            )
+        from . import auth as _auth
+        user = _auth.current_user_from_request(cookie)
+        if not user:
+            return JSONResponse(
+                {"error": "not_logged_in", "message": "请登录"}, status_code=401
+            )
+        enterprises = db.list_user_enterprises(user["id"])
+        if not enterprises:
+            return JSONResponse(
+                {"error": "no_enterprise", "message": "当前账号未绑定企业"},
+                status_code=403,
+            )
+        # Spec: one user = one enterprise. If the data accidentally has more
+        # than one row, take the first deterministically (sorted by name).
+        request.state.enterprise_id = enterprises[0]["id"]
+        request.state.user_id = user["id"]
+    return await call_next(request)
 
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
@@ -47,6 +88,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 # constant) so tests can monkeypatch _APP_DIST and have the change picked up
 # on the next request without touching a derived constant.
 _APP_DIST = Path(__file__).parent.parent.parent / "app" / "dist"
+_WIN_DIST = Path(__file__).parent.parent.parent / "app-win" / "dist"
 # Subpaths under /<client>/<agent>/ that the platform serves from app/dist
 # instead of forwarding to the agent. Anything else proxies through.
 _APP_STATIC_PREFIXES: tuple[str, ...] = ("/assets/", "/base-href.js", "/favicon.ico")
@@ -87,6 +129,39 @@ def enterprise_page(enterprise_id: str, request: Request):
     if not request.cookies.get("app_session"):
         return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
     return FileResponse(_STATIC / "enterprise.html", headers=_NO_STORE)
+
+
+# /win/ — 智通客户 SPA. Cross-enterprise visible: any logged-in user can hit
+# this. The bundled JS calls /win/api/* which the middleware above scopes to
+# the user's enterprise database.
+@app.api_route("/win", methods=["GET", "HEAD"])
+@app.api_route("/win/", methods=["GET", "HEAD"])
+def win_root(request: Request):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    win_index = _WIN_DIST / "index.html"
+    if not win_index.is_file():
+        raise HTTPException(503, {"error": "win_not_built", "message": "前端未构建"})
+    return HTMLResponse(win_index.read_text(encoding="utf-8"), headers=_NO_STORE)
+
+
+@app.api_route("/win/{subpath:path}", methods=["GET", "HEAD"])
+def win_static(subpath: str, request: Request):
+    # /win/api/* is handled by the included router above; this route only
+    # fires for non-api subpaths.
+    if subpath.startswith("api/"):
+        raise HTTPException(404)
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    asset = _WIN_DIST / subpath
+    if asset.is_file():
+        return FileResponse(asset)
+    # SPA fallback: unknown route → serve index.html so client-side routing
+    # works (vite/wouter etc).
+    win_index = _WIN_DIST / "index.html"
+    if win_index.is_file():
+        return HTMLResponse(win_index.read_text(encoding="utf-8"), headers=_NO_STORE)
+    raise HTTPException(404)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
