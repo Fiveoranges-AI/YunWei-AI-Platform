@@ -1387,3 +1387,104 @@ async def test_auto_ingest_isolated_engines_do_not_leak_customers(monkeypatch) -
     finally:
         await engine_a.dispose()
         await engine_b.dispose()
+
+
+# ---------- LandingAI schema-routed flow ---------------------------------
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) -> None:
+    """When ``settings.document_ai_provider == 'landingai'``, the orchestrator
+    runs route_pipelines + extract_selected_pipelines + normalize_pipeline_results
+    instead of the legacy planner/extractor fan-out. The synthesized
+    ``UnifiedDraft`` carries the same identity + contract/order fields the
+    legacy path produced, plus the new ``pipeline_results`` audit list."""
+    engine = await _make_engine()
+    _patch_storage(monkeypatch)
+    monkeypatch.setattr(auto_module.settings, "document_ai_provider", "landingai")
+
+    async def fake_collect_evidence(**kwargs):
+        from yinhu_brain.models import (
+            Document,
+            DocumentProcessingStatus,
+            DocumentReviewStatus,
+            DocumentType,
+        )
+
+        doc = Document(
+            type=DocumentType.contract,
+            file_url="/tmp/fake.pdf",
+            original_filename="contract.pdf",
+            content_type="application/pdf",
+            file_sha256="1" * 64,
+            file_size_bytes=10,
+            ocr_text="甲方：测试客户有限公司\n合同编号：HT-001\n总金额：120000元",
+            processing_status=DocumentProcessingStatus.parsed,
+            review_status=DocumentReviewStatus.pending_review,
+        )
+        kwargs["session"].add(doc)
+        await kwargs["session"].flush()
+        from yinhu_brain.services.ingest.evidence import Evidence
+
+        return Evidence(
+            document_id=doc.id,
+            document=doc,
+            ocr_text=doc.ocr_text,
+            modality="pdf",
+        )
+
+    async def fake_route_pipelines(**kwargs):
+        from yinhu_brain.services.ingest.unified_schemas import (
+            PipelineRoutePlan,
+            PipelineSelection,
+        )
+
+        return PipelineRoutePlan(
+            primary_pipeline="contract_order",
+            selected_pipelines=[
+                PipelineSelection(name="identity", confidence=0.9),
+                PipelineSelection(name="contract_order", confidence=0.9),
+            ],
+            document_summary="contract",
+        )
+
+    async def fake_extract_selected_pipelines(**kwargs):
+        from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
+
+        return [
+            PipelineExtractResult(
+                name="identity",
+                extraction={"customer": {"full_name": "测试客户有限公司"}},
+            ),
+            PipelineExtractResult(
+                name="contract_order",
+                extraction={
+                    "contract": {"contract_number": "HT-001"},
+                    "order": {"amount_total": 120000, "amount_currency": "CNY"},
+                },
+            ),
+        ]
+
+    monkeypatch.setattr(auto_module, "collect_evidence", fake_collect_evidence)
+    monkeypatch.setattr(auto_module, "route_pipelines", fake_route_pipelines)
+    monkeypatch.setattr(
+        auto_module, "extract_selected_pipelines", fake_extract_selected_pipelines
+    )
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                file_bytes=b"%PDF",
+                original_filename="contract.pdf",
+                content_type="application/pdf",
+                source_hint="file",
+            )
+
+            assert result.draft.customer is not None
+            assert result.draft.customer.full_name == "测试客户有限公司"
+            assert result.draft.contract is not None
+            assert result.draft.contract.contract_no_external == "HT-001"
+            assert len(result.draft.pipeline_results) == 2
+    finally:
+        await engine.dispose()
