@@ -30,6 +30,7 @@ from yinhu_brain.services.ingest.customer_memory_schema import (
     ExtractedRiskSignal,
     ExtractedTask,
 )
+from yinhu_brain.services.ingest.landingai_schemas.registry import PipelineName
 from yinhu_brain.services.ingest.schemas import (
     ContactDecision,
     ContactExtraction,
@@ -149,6 +150,9 @@ class UnifiedDraft(BaseModel):
     confidence_overall: float = Field(ge=0.0, le=1.0, default=0.5)
     needs_review_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # LandingAI schema-routed extracts that fed into this draft (one entry per
+    # pipeline that ran). Empty when the legacy Mistral path produced the draft.
+    pipeline_results: list["PipelineExtractResult"] = Field(default_factory=list)
 
 
 # ---------- confirm payload ----------------------------------------------
@@ -177,3 +181,35 @@ class AutoConfirmRequest(BaseModel):
     field_provenance: list[FieldProvenanceEntry] = Field(default_factory=list)
     confidence_overall: float = Field(ge=0.0, le=1.0, default=0.5)
     parse_warnings: list[str] = Field(default_factory=list)
+
+
+class PipelineSelection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: PipelineName
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason: str = ""
+
+
+class PipelineRoutePlan(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    primary_pipeline: PipelineName | None = None
+    selected_pipelines: list[PipelineSelection] = Field(default_factory=list)
+    rejected_pipelines: list[PipelineSelection] = Field(default_factory=list)
+    document_summary: str = ""
+    needs_human_review: bool = False
+
+
+class PipelineExtractResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    extraction: dict = Field(default_factory=dict)
+    extraction_metadata: dict = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+# Resolve the forward reference on UnifiedDraft.pipeline_results now that
+# PipelineExtractResult is defined.
+UnifiedDraft.model_rebuild()

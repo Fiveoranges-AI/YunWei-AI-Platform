@@ -37,11 +37,19 @@ from typing import Awaitable, Callable, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from yinhu_brain.config import settings
 from yinhu_brain.services.ingest.evidence import Evidence, collect_evidence
 from yinhu_brain.services.ingest.extractors.commercial import extract_commercial
 from yinhu_brain.services.ingest.extractors.identity import extract_identity
 from yinhu_brain.services.ingest.extractors.ops import extract_ops
-from yinhu_brain.services.ingest.merge import MergeCandidates, merge_drafts
+from yinhu_brain.services.ingest.landingai_extract import extract_selected_pipelines
+from yinhu_brain.services.ingest.landingai_normalize import normalize_pipeline_results
+from yinhu_brain.services.ingest.merge import (
+    MergeCandidates,
+    build_merge_candidates,
+    merge_drafts,
+)
+from yinhu_brain.services.ingest.pipeline_router import route_pipelines
 from yinhu_brain.services.ingest.planner import plan_extraction
 from yinhu_brain.services.ingest.progress import ProgressCallback, emit_progress
 from yinhu_brain.services.ingest.unified_schemas import (
@@ -171,6 +179,79 @@ async def auto_ingest(
         uploader=uploader,
         progress=progress,
     )
+
+    # ----- 1b. LandingAI schema-routed flow (alternate provider) -----
+    # When the operator picks ``landingai`` as the document AI provider, we
+    # replace the legacy planner + per-extractor LLM fan-out with the
+    # schema-routed pipeline: route_pipelines picks which LandingAI schemas
+    # to fire, extract_selected_pipelines runs them in parallel, and
+    # normalize_pipeline_results folds the responses onto the same
+    # ``UnifiedDraft`` shape the legacy path produces. The synthesized
+    # ``IngestPlan`` keeps the on-wire response identical so the frontend
+    # and existing /auto consumers don't need to know which provider ran.
+    if settings.document_ai_provider == "landingai":
+        await emit_progress(
+            progress, "route", "正在判断需要使用哪些 LandingAI 提取 schema"
+        )
+        route_plan = await route_pipelines(
+            markdown=evidence.ocr_text,
+            modality=evidence.modality,
+            source_hint=source_hint,
+        )
+        await emit_progress(progress, "extract", "正在并行执行 LandingAI schema 提取")
+        pipeline_results = await extract_selected_pipelines(
+            selections=route_plan.selected_pipelines,
+            markdown=evidence.ocr_text,
+        )
+        await emit_progress(progress, "merge", "正在合并 LandingAI 提取结果")
+        draft = normalize_pipeline_results(pipeline_results)
+        draft.needs_review_fields = list(draft.needs_review_fields)
+        if route_plan.needs_human_review:
+            draft.warnings = list(draft.warnings) + ["router requested human review"]
+        draft.summary = draft.summary or route_plan.document_summary
+
+        evidence.document.raw_llm_response = {
+            "provider": "landingai",
+            "route_plan": route_plan.model_dump(mode="json"),
+            "draft": draft.model_dump(mode="json"),
+        }
+        await session.flush()
+        await emit_progress(
+            progress, "auto_done", "LandingAI 提取完成，等待用户确认"
+        )
+
+        # Synthesize a legacy IngestPlan so AutoIngestResult shape stays
+        # constant for the existing endpoint serializer and the frontend client.
+        legacy_plan = IngestPlan(
+            targets={
+                "identity": next(
+                    (s.confidence for s in route_plan.selected_pipelines if s.name == "identity"),
+                    0.0,
+                ),
+                "commercial": next(
+                    (s.confidence for s in route_plan.selected_pipelines if s.name == "contract_order"),
+                    0.0,
+                ),
+                "ops": next(
+                    (s.confidence for s in route_plan.selected_pipelines if s.name == "commitment_task_risk"),
+                    0.0,
+                ),
+            },
+            extractors=[],
+            reason=route_plan.document_summary,
+            review_required=route_plan.needs_human_review,
+        )
+        candidates = await build_merge_candidates(
+            session=session,
+            customer=draft.customer,
+            contacts=draft.contacts,
+        )
+        return AutoIngestResult(
+            document_id=evidence.document_id,
+            plan=legacy_plan,
+            draft=draft,
+            candidates=candidates,
+        )
 
     # ----- 2. Planner -------------------------------------------------
     plan: IngestPlan = await plan_extraction(

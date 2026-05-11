@@ -25,7 +25,7 @@ to 1.0). The UI uses this list to render a yellow halo on those fields.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yinhu_brain.services.ingest.contract import MatchCandidate
 from yinhu_brain.services.ingest.unified_schemas import (
     CommercialDraft,
+    ContactExtraction,
+    CustomerExtraction,
     IdentityDraft,
     OpsDraft,
     UnifiedDraft,
@@ -224,6 +226,30 @@ async def _compute_candidates(
         customer_candidates=customer_candidates,
         contact_candidates=contact_candidate_lists,
     )
+
+
+async def build_merge_candidates(
+    *,
+    session: AsyncSession,
+    customer: CustomerExtraction | None,
+    contacts: Sequence[ContactExtraction] | None,
+) -> MergeCandidates:
+    """Compute match candidates from already-merged customer/contact drafts.
+
+    The legacy ``merge_drafts`` couples merging and candidate computation;
+    the LandingAI flow needs candidates after a separate normalize step, so
+    we expose the candidate calc on its own here.
+    """
+    if customer is None and not contacts:
+        return MergeCandidates()
+    identity = IdentityDraft(
+        customer=customer,
+        contacts=list(contacts or []),
+        field_provenance=[],
+        confidence_overall=1.0,
+        parse_warnings=[],
+    )
+    return await _compute_candidates(session=session, identity=identity)
 
 
 # ---------- public entrypoint --------------------------------------------

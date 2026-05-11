@@ -532,3 +532,5 @@ async def test_progress_callback_emits_stages(monkeypatch) -> None:
     finally:
         await session.close()
         await engine.dispose()
+
+

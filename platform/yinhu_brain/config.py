@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +29,20 @@ class Settings(BaseSettings):
     mistral_base_url: str = "https://api.mistral.ai"
     mistral_ocr_model: str = "mistral-ocr-latest"
     mistral_ocr_timeout_seconds: int = 120
+
+    # ---- Document extraction provider ----------------------------------
+    document_ai_provider: Literal["mistral", "landingai"] = "mistral"
+
+    # ---- LandingAI ADE --------------------------------------------------
+    # LandingAI's Python library reads VISION_AGENT_API_KEY from env. We keep
+    # the value in settings too so Railway/.env config can be validated.
+    vision_agent_api_key: str = ""
+    landingai_environment: Literal["us", "eu"] = "us"
+    landingai_parse_model: str = "dpt-2-latest"
+    landingai_extract_model: str = "extract-latest"
+    landingai_classify_model: str = "classify-latest"
+    landingai_split_model: str = "split-latest"
+    landingai_large_file_pages_threshold: int = 50
 
     # ---- CORS ------------------------------------------------------------
     # Comma-separated. localhost:3000 covers the bundled frontend dev server.

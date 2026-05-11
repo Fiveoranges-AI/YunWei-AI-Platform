@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "properties": {
+    "customer": {
+      "type": "object",
+      "description": "Customer / buyer side of the shipment.",
+      "properties": {
+        "full_name": {"type": "string", "description": "Customer full legal name."},
+        "short_name": {"type": "string", "description": "Short name."},
+        "tax_id": {"type": "string", "description": "Tax ID."},
+        "address": {"type": "string", "description": "Address."}
+      }
+    },
+    "shipment": {
+      "type": "object",
+      "description": "Shipment / delivery note header.",
+      "properties": {
+        "shipment_number": {"type": "string", "description": "Shipment / delivery note number.", "x-alternativeNames": ["送货单号", "发货单号", "运单号"]},
+        "document_date": {"type": "string", "description": "Document date YYYY-MM-DD.", "format": "date"},
+        "status": {"type": "string", "description": "Shipment status.", "enum": ["pending", "shipped", "in_transit", "delivered", "signed", "rejected", "other"]},
+        "carrier": {"type": "string", "description": "Carrier / courier name."},
+        "tracking_number": {"type": "string", "description": "Tracking number."},
+        "delivery_address": {"type": "string", "description": "Delivery address."},
+        "receiver_name": {"type": "string", "description": "Receiver name."},
+        "receiver_phone": {"type": "string", "description": "Receiver phone."},
+        "signed_at": {"type": "string", "description": "Sign-off datetime."}
+      }
+    },
+    "items": {
+      "type": "array",
+      "description": "Shipped items.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_name": {"type": "string", "description": "Product name."},
+          "specification": {"type": "string", "description": "Spec/model."},
+          "quantity": {"type": "string", "description": "Quantity."},
+          "unit": {"type": "string", "description": "Unit."},
+          "batch_number": {"type": "string", "description": "Batch / lot number."},
+          "warehouse": {"type": "string", "description": "Origin warehouse."},
+          "remark": {"type": "string", "description": "Remark."}
+        }
+      }
+    },
+    "inventory_items": {
+      "type": "array",
+      "description": "Inventory snapshot rows if the document is a stock screenshot.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_name": {"type": "string", "description": "Product name."},
+          "specification": {"type": "string", "description": "Spec/model."},
+          "available_quantity": {"type": "string", "description": "Available quantity."},
+          "locked_quantity": {"type": "string", "description": "Locked / reserved quantity."},
+          "unit": {"type": "string", "description": "Unit."},
+          "warehouse": {"type": "string", "description": "Warehouse."},
+          "snapshot_date": {"type": "string", "description": "Snapshot date YYYY-MM-DD.", "format": "date"}
+        }
+      }
+    },
+    "extraction_warnings": {"type": "array", "description": "Warnings.", "items": {"type": "string", "description": "One warning."}}
+  }
+}

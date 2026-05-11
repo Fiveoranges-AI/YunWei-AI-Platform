@@ -152,6 +152,22 @@ export type ExtractedMemoryItem = {
   confidence: number | null;
 };
 
+// LandingAI schema-routed pipeline extraction results
+export type PipelineName =
+  | "identity"
+  | "contract_order"
+  | "finance"
+  | "logistics"
+  | "manufacturing_requirement"
+  | "commitment_task_risk";
+
+export type PipelineExtractResult = {
+  name: PipelineName | string;
+  extraction: Record<string, unknown>;
+  extraction_metadata: Record<string, unknown>;
+  warnings: string[];
+};
+
 // UnifiedDraft — merged output of all activated extractors
 export type UnifiedDraft = {
   customer: IdentityCustomer | null;
@@ -168,6 +184,7 @@ export type UnifiedDraft = {
   confidence_overall: number;
   needs_review_fields: string[];
   warnings: string[];
+  pipeline_results?: PipelineExtractResult[];
 };
 
 export type MatchCandidate<T> = {
@@ -236,6 +253,7 @@ export type AutoIngestRaw = {
   draft: UnifiedDraft;
   candidates: AutoCandidates;
   needs_review_fields: string[];
+  pipeline_results?: PipelineExtractResult[];
 };
 
 export type AutoIngestSuccess = {
@@ -342,6 +360,7 @@ async function readNdjsonResult(
     draft?: UnifiedDraft;
     candidates?: AutoCandidates;
     needs_review_fields?: string[];
+    pipeline_results?: PipelineExtractResult[];
   };
   let last: StreamMessage | null = null;
   const handleLine = (line: string): StreamMessage | null => {
@@ -406,6 +425,7 @@ function finalizeAutoResult(
       draft: body.draft ?? emptyDraft(),
       candidates: body.candidates ?? { customer: [], contacts: [] },
       needs_review_fields: body.needs_review_fields ?? body.draft?.needs_review_fields ?? [],
+      pipeline_results: body.pipeline_results ?? body.draft?.pipeline_results ?? [],
     },
   };
 }
