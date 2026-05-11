@@ -29,7 +29,7 @@ class _FakeParseJobs:
 
 
 class _FakeADE:
-    def __init__(self, *, environment="us"):
+    def __init__(self, *, apikey=None, environment="production"):
         self.parse_jobs = _FakeParseJobs()
 
 

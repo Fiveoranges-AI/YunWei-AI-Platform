@@ -22,7 +22,7 @@ Set in Railway dashboard:
 ```env
 DOCUMENT_AI_PROVIDER=landingai
 VISION_AGENT_API_KEY=<LandingAI key>
-LANDINGAI_ENVIRONMENT=us
+LANDINGAI_ENVIRONMENT=production
 ```
 
 Restart the platform service.

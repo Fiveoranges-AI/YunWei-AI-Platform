@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     # LandingAI's Python library reads VISION_AGENT_API_KEY from env. We keep
     # the value in settings too so Railway/.env config can be validated.
     vision_agent_api_key: str = ""
-    landingai_environment: Literal["us", "eu"] = "us"
+    # LandingAI SDK 1.12 accepts {"production", "eu"} only — "us" is invalid
+    # and trips a runtime Unknown-environment error inside the client.
+    landingai_environment: Literal["production", "eu"] = "production"
     landingai_parse_model: str = "dpt-2-latest"
     landingai_extract_model: str = "extract-latest"
     landingai_classify_model: str = "classify-latest"
