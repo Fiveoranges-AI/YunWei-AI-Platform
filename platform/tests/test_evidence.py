@@ -532,3 +532,88 @@ async def test_progress_callback_emits_stages(monkeypatch) -> None:
     finally:
         await session.close()
         await engine.dispose()
+
+
+# ---------- LandingAI provider -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_landingai_provider_parses_file_once(monkeypatch) -> None:
+    """document_ai_provider=landingai → LandingAI Parse runs, Mistral never does."""
+    _patch_store_upload(monkeypatch)
+    monkeypatch.setattr(evidence_module.settings, "document_ai_provider", "landingai")
+
+    calls: list[str] = []
+
+    async def fake_landingai_parse(path):
+        calls.append(str(path))
+        from yinhu_brain.services.landingai_ade_client import LandingAIParseResult
+
+        return LandingAIParseResult(
+            markdown="# Parsed by LandingAI\n\n甲方：测试客户有限公司",
+            chunks=[],
+            metadata={"page_count": 1},
+            grounding={},
+            splits=[],
+        )
+
+    async def boom_mistral(*a, **k):
+        raise AssertionError("Mistral OCR must not run when provider=landingai")
+
+    monkeypatch.setattr(evidence_module, "parse_file_to_markdown", fake_landingai_parse)
+    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", boom_mistral)
+    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_mistral)
+    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", boom_mistral)
+
+    session, engine = await _make_session()
+    try:
+        result = await collect_evidence(
+            session=session,
+            file_bytes=b"%PDF",
+            original_filename="contract.pdf",
+            content_type="application/pdf",
+            source_hint="file",
+        )
+        await session.commit()
+
+        assert len(calls) == 1
+        assert "Parsed by LandingAI" in result.ocr_text
+        assert result.document.ocr_text == result.ocr_text
+    finally:
+        await session.close()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_landingai_failure_falls_back_to_mistral(monkeypatch) -> None:
+    """LandingAI failure → fall back to existing Mistral path + warning surfaced."""
+    _patch_store_upload(monkeypatch)
+    monkeypatch.setattr(evidence_module.settings, "document_ai_provider", "landingai")
+
+    async def boom_landingai(path):
+        from yinhu_brain.services.landingai_ade_client import LandingAIUnavailable
+
+        raise LandingAIUnavailable("simulated 500")
+
+    async def fake_mistral_image(*a, **k):
+        return "# Mistral fallback"
+
+    monkeypatch.setattr(evidence_module, "parse_file_to_markdown", boom_landingai)
+    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_mistral_image)
+
+    session, engine = await _make_session()
+    try:
+        result = await collect_evidence(
+            session=session,
+            file_bytes=b"jpg",
+            original_filename="card.jpg",
+            content_type="image/jpeg",
+            source_hint="camera",
+        )
+        await session.commit()
+
+        assert "Mistral fallback" in result.ocr_text
+        assert any("LandingAI" in w for w in result.warnings)
+    finally:
+        await session.close()
+        await engine.dispose()
