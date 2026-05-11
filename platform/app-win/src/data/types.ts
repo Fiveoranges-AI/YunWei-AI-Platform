@@ -55,6 +55,11 @@ export type Contact = {
   initial: string;
   phone: string;
   last: string;
+  title?: string;
+  mobile?: string;
+  email?: string;
+  address?: string;
+  wechatId?: string;
 };
 
 export type Document = {

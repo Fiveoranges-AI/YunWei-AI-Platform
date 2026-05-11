@@ -31,6 +31,7 @@ import type {
   TimelineEvent,
 } from "../data/types";
 import { fmtRelative } from "../lib/format";
+import { markCustomersChanged } from "../lib/customerRefresh";
 
 const API_BASE = "/win/api";
 const MOCK_DELAY_MS = 200;
@@ -67,6 +68,10 @@ type RawCustomerDetail = RawCustomer & {
     phone?: string | null;
     mobile?: string | null;
     last?: string | null;
+    title?: string | null;
+    email?: string | null;
+    address?: string | null;
+    wechat_id?: string | null;
   }>;
   orders?: Array<{ id: string; amount_total?: number | null }>;
 };
@@ -114,6 +119,67 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as T;
+}
+
+type CustomerUpdateBody = {
+  full_name?: string;
+  short_name?: string | null;
+  address?: string | null;
+  tax_id?: string | null;
+};
+
+export type ContactInput = {
+  id?: string;
+  name: string;
+  title?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  role?: string;
+  address?: string | null;
+  wechat_id?: string | null;
+};
+
+export async function updateCustomer(id: string, body: CustomerUpdateBody): Promise<void> {
+  const res = await fetch(`${API_BASE}/customers/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  markCustomersChanged();
+}
+
+export async function replaceCustomerContacts(id: string, contacts: ContactInput[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/customers/${id}/contacts`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contacts }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  markCustomersChanged();
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/customers/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  markCustomersChanged();
+}
+
+export async function deleteAllCustomers(): Promise<{ deleted_customers: number }> {
+  const res = await fetch(
+    `${API_BASE}/customers?confirm=DELETE_ALL_IMPORTED_CUSTOMERS`,
+    { method: "DELETE", credentials: "include" },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  const body = (await res.json()) as { deleted_customers: number };
+  markCustomersChanged();
+  return body;
 }
 
 async function fetchOrNull<T>(path: string): Promise<T | null> {
@@ -182,6 +248,11 @@ function transformContacts(raw: RawCustomerDetail["contacts"]): Contact[] {
     initial: c.name.slice(0, 1),
     phone: c.phone ?? c.mobile ?? "",
     last: c.last ?? "",
+    title: c.title ?? undefined,
+    mobile: c.mobile ?? undefined,
+    email: c.email ?? undefined,
+    address: c.address ?? undefined,
+    wechatId: c.wechat_id ?? undefined,
   }));
 }
 
