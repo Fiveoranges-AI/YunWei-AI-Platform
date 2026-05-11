@@ -394,6 +394,10 @@ async def upload_auto(
             "document_id": str(result.document_id),
             "plan": result.plan.model_dump(mode="json"),
             "draft": result.draft.model_dump(mode="json"),
+            "pipeline_results": [
+                r.model_dump(mode="json")
+                for r in getattr(result.draft, "pipeline_results", [])
+            ],
             "candidates": {
                 "customer": [
                     _candidate_dict(c) for c in result.candidates.customer_candidates
