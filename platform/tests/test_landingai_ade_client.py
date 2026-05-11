@@ -14,7 +14,8 @@ from yinhu_brain.services.landingai_ade_client import (
 
 
 class _FakeADE:
-    def __init__(self, *, environment="us"):
+    def __init__(self, *, apikey=None, environment="production"):
+        self.apikey = apikey
         self.environment = environment
 
     def parse(self, *, document, model, save_to=None):
@@ -43,7 +44,7 @@ class _FakeADE:
 async def test_parse_file_to_markdown_uses_landingai_client(monkeypatch, tmp_path):
     monkeypatch.setattr(client_module, "LandingAIADE", _FakeADE)
     monkeypatch.setattr(client_module.settings, "vision_agent_api_key", "test-key")
-    monkeypatch.setattr(client_module.settings, "landingai_environment", "us")
+    monkeypatch.setattr(client_module.settings, "landingai_environment", "production")
     monkeypatch.setattr(client_module.settings, "landingai_parse_model", "dpt-2-latest")
 
     path = tmp_path / "contract.pdf"

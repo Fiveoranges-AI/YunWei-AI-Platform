@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,8 +37,12 @@ def _client() -> LandingAIADE:
     key = settings.vision_agent_api_key.strip()
     if not key:
         raise LandingAIUnavailable("VISION_AGENT_API_KEY is not configured")
-    os.environ.setdefault("VISION_AGENT_API_KEY", key)
-    return LandingAIADE(environment=settings.landingai_environment)
+    # SDK reads VISION_AGENT_API_KEY from env on its own, but pass apikey
+    # explicitly so settings-only configuration (no env var) also works.
+    return LandingAIADE(
+        apikey=key,
+        environment=settings.landingai_environment,
+    )
 
 
 async def parse_file_to_markdown(path: Path) -> LandingAIParseResult:
