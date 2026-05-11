@@ -36,13 +36,8 @@ from yinhu_brain.models import (
     DocumentReviewStatus,
     DocumentType,
 )
-from yinhu_brain.config import settings
 from yinhu_brain.services import pdf as pdf_utils
 from yinhu_brain.services.ingest.progress import ProgressCallback, emit_progress
-from yinhu_brain.services.landingai_ade_client import (
-    LandingAIUnavailable,
-    parse_file_to_markdown,
-)
 from yinhu_brain.services.mistral_ocr_client import (
     MistralOCRUnavailable,
     parse_document_to_markdown,
@@ -241,75 +236,54 @@ async def collect_evidence(
     if modality == "text":
         assert text_content is not None
         ocr_text = text_content.strip()
-    else:
-        # When the LandingAI provider is selected, run Parse first. LandingAI
-        # Parse handles image, PDF, and office in a single API call, replacing
-        # the Mistral image/pdf/office paths. We fall through to Mistral only
-        # when LandingAI is unavailable or returns empty markdown — Mistral
-        # remains the working fallback until the rollout is verified.
-        if settings.document_ai_provider == "landingai":
-            await emit_progress(
-                progress, "landingai_parse", "正在调用 LandingAI Parse 解析文档"
+
+    elif modality == "image":
+        await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别图片")
+        try:
+            ocr_text = await parse_image_to_markdown(
+                payload_bytes,
+                filename_for_store,
+                ct_for_doc,
             )
-            try:
-                parsed = await parse_file_to_markdown(Path(stored.path))
-                ocr_text = parsed.markdown or ""
-                if parsed.metadata:
-                    warnings.append(f"LandingAI Parse metadata: {parsed.metadata}")
-            except LandingAIUnavailable as exc:
-                msg = f"LandingAI parse unavailable: {exc!s}"
-                warnings.append(msg)
-                logger.warning(
-                    "landingai parse failed for %s: %s", filename_for_store, exc
-                )
+        except MistralOCRUnavailable as exc:
+            msg = f"Mistral OCR unavailable: {exc!s}"
+            warnings.append(msg)
+            logger.warning("evidence image OCR failed for %s: %s", filename_for_store, exc)
 
-        if not ocr_text and modality == "image":
-            await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别图片")
+    elif modality == "pdf":
+        # Native text first; only fall back to Mistral OCR when pypdf came
+        # up empty (scanned PDF). If the text layer exists we trust it —
+        # double-OCR'ing is slow and can paper over native text with model
+        # transcription errors.
+        await emit_progress(progress, "ocr", "正在读取 PDF 文本")
+        pages = pdf_utils.extract_text_with_pages(stored.path)
+        native_text = pdf_utils.joined_text(pages)
+        if native_text.strip():
+            ocr_text = native_text
+        else:
+            await emit_progress(progress, "ocr", "扫描件无文本层，正在调用 Mistral OCR")
             try:
-                ocr_text = await parse_image_to_markdown(
-                    payload_bytes,
-                    filename_for_store,
-                    ct_for_doc,
-                )
+                md = await parse_pdf_to_markdown(payload_bytes, filename_for_store)
+                if md.strip():
+                    ocr_text = md
             except MistralOCRUnavailable as exc:
                 msg = f"Mistral OCR unavailable: {exc!s}"
                 warnings.append(msg)
-                logger.warning("evidence image OCR failed for %s: %s", filename_for_store, exc)
+                logger.warning("evidence pdf OCR failed for %s: %s", filename_for_store, exc)
 
-        elif not ocr_text and modality == "pdf":
-            # Native text first; only fall back to Mistral OCR when pypdf came
-            # up empty (scanned PDF). If the text layer exists we trust it —
-            # double-OCR'ing is slow and can paper over native text with model
-            # transcription errors.
-            await emit_progress(progress, "ocr", "正在读取 PDF 文本")
-            pages = pdf_utils.extract_text_with_pages(stored.path)
-            native_text = pdf_utils.joined_text(pages)
-            if native_text.strip():
-                ocr_text = native_text
-            else:
-                await emit_progress(progress, "ocr", "扫描件无文本层，正在调用 Mistral OCR")
-                try:
-                    md = await parse_pdf_to_markdown(payload_bytes, filename_for_store)
-                    if md.strip():
-                        ocr_text = md
-                except MistralOCRUnavailable as exc:
-                    msg = f"Mistral OCR unavailable: {exc!s}"
-                    warnings.append(msg)
-                    logger.warning("evidence pdf OCR failed for %s: %s", filename_for_store, exc)
-
-        elif not ocr_text:  # office (and the unknown-fallback bucket)
-            await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别文档")
-            try:
-                md = await parse_document_to_markdown(
-                    payload_bytes,
-                    filename_for_store,
-                    ct_for_doc,
-                )
-                ocr_text = md or ""
-            except MistralOCRUnavailable as exc:
-                msg = f"Mistral OCR unavailable: {exc!s}"
-                warnings.append(msg)
-                logger.warning("evidence office OCR failed for %s: %s", filename_for_store, exc)
+    else:  # office (and the unknown-fallback bucket)
+        await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别文档")
+        try:
+            md = await parse_document_to_markdown(
+                payload_bytes,
+                filename_for_store,
+                ct_for_doc,
+            )
+            ocr_text = md or ""
+        except MistralOCRUnavailable as exc:
+            msg = f"Mistral OCR unavailable: {exc!s}"
+            warnings.append(msg)
+            logger.warning("evidence office OCR failed for %s: %s", filename_for_store, exc)
 
     # ----- 5. Soft warning when text is too short --------------------
     stripped_len = len(ocr_text.strip())
