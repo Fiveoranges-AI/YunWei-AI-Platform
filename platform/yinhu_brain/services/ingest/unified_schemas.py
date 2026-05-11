@@ -30,6 +30,7 @@ from yinhu_brain.services.ingest.customer_memory_schema import (
     ExtractedRiskSignal,
     ExtractedTask,
 )
+from yinhu_brain.services.ingest.landingai_schemas.registry import PipelineName
 from yinhu_brain.services.ingest.schemas import (
     ContactDecision,
     ContactExtraction,
@@ -177,3 +178,21 @@ class AutoConfirmRequest(BaseModel):
     field_provenance: list[FieldProvenanceEntry] = Field(default_factory=list)
     confidence_overall: float = Field(ge=0.0, le=1.0, default=0.5)
     parse_warnings: list[str] = Field(default_factory=list)
+
+
+class PipelineSelection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: PipelineName
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason: str = ""
+
+
+class PipelineRoutePlan(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    primary_pipeline: PipelineName | None = None
+    selected_pipelines: list[PipelineSelection] = Field(default_factory=list)
+    rejected_pipelines: list[PipelineSelection] = Field(default_factory=list)
+    document_summary: str = ""
+    needs_human_review: bool = False
