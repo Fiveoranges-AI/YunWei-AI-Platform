@@ -72,6 +72,9 @@ export type Document = {
 export type CustomerListItem = {
   id: string;
   name: string;
+  shortName?: string | null;
+  address?: string | null;
+  taxId?: string | null;
   monogram: string;
   color: string;
   tag: string;

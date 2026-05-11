@@ -229,6 +229,9 @@ function transformCustomerBase(raw: RawCustomer, summary: RawSummary | null): Cu
   return {
     id: raw.id,
     name: raw.full_name,
+    shortName: raw.short_name ?? null,
+    address: raw.address ?? null,
+    taxId: raw.tax_id ?? null,
     monogram: deriveMonogram(raw.full_name, raw.short_name),
     color: deriveColor(raw.full_name),
     tag: "客户",

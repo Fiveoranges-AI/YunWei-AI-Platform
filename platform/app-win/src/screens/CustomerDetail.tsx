@@ -317,9 +317,9 @@ function EditPanel({
   onDeleted: () => void;
 }) {
   const [fullName, setFullName] = useState(customer.name);
-  const [shortName, setShortName] = useState(customer.monogram === customer.name.slice(0, 2) ? "" : customer.monogram);
-  const [address, setAddress] = useState("");
-  const [taxId, setTaxId] = useState("");
+  const [shortName, setShortName] = useState(customer.shortName ?? "");
+  const [address, setAddress] = useState(customer.address ?? "");
+  const [taxId, setTaxId] = useState(customer.taxId ?? "");
   const [formContacts, setFormContacts] = useState<EditableContact[]>(() => contactsToEditable(customer.contacts));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
