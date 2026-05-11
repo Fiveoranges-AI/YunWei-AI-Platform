@@ -1,0 +1,86 @@
+{
+  "type": "object",
+  "properties": {
+    "document_type": {"type": "string", "description": "Type of commercial document, e.g. 销售合同 / 采购合同 / 框架合同 / 订单 / 报价单.", "enum": ["sales_contract", "purchase_contract", "framework_contract", "order", "quotation", "other"]},
+    "customer": {
+      "type": "object",
+      "description": "Only extract the customer / buyer / Party A organization. Do not extract Party B / supplier / seller as the customer.",
+      "properties": {
+        "full_name": {"type": "string", "description": "Full legal name of Party A / customer / buyer.", "x-alternativeNames": ["甲方", "买方", "客户", "Customer", "Buyer", "Party A"]},
+        "short_name": {"type": "string", "description": "Short name of Party A."},
+        "tax_id": {"type": "string", "description": "Tax ID of Party A.", "x-alternativeNames": ["统一社会信用代码", "纳税人识别号"]},
+        "address": {"type": "string", "description": "Registered/office address of Party A."}
+      }
+    },
+    "contacts": {
+      "type": "array",
+      "description": "People belonging to the customer / Party A side only. Exclude Party B / supplier / seller-side staff.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Buyer-side contact name."},
+          "title": {"type": "string", "description": "Job title."},
+          "phone": {"type": "string", "description": "Landline phone."},
+          "mobile": {"type": "string", "description": "Mobile phone."},
+          "email": {"type": "string", "description": "Email address."},
+          "role": {"type": "string", "description": "Functional role.", "enum": ["primary_business", "procurement", "delivery", "acceptance", "invoice", "payment", "legal", "other"]}
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "description": "Headline contract / agreement metadata.",
+      "properties": {
+        "contract_number": {"type": "string", "description": "External contract number printed on the document.", "x-alternativeNames": ["合同编号", "合同号", "Contract No"]},
+        "signing_date": {"type": "string", "description": "ISO date YYYY-MM-DD when contract was signed.", "format": "date"},
+        "effective_date": {"type": "string", "description": "Effective date YYYY-MM-DD.", "format": "date"},
+        "expiry_date": {"type": "string", "description": "Expiry date YYYY-MM-DD.", "format": "date"},
+        "delivery_terms": {"type": "string", "description": "Free-form delivery clauses."},
+        "penalty_terms": {"type": "string", "description": "Penalty / liability clauses raw text."},
+        "currency": {"type": "string", "description": "Currency code, e.g. CNY/USD."}
+      }
+    },
+    "order": {
+      "type": "object",
+      "description": "Order / purchase totals associated with this contract.",
+      "properties": {
+        "total_amount": {"type": "string", "description": "Total amount including tax. Numeric, no currency symbol."},
+        "currency": {"type": "string", "description": "Currency code."},
+        "delivery_promised_date": {"type": "string", "description": "Promised delivery date YYYY-MM-DD.", "format": "date"},
+        "delivery_address": {"type": "string", "description": "Delivery address."},
+        "summary": {"type": "string", "description": "One-sentence description of what is being ordered."}
+      }
+    },
+    "items": {
+      "type": "array",
+      "description": "Line items in the contract / order.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string", "description": "Product/service description."},
+          "specification": {"type": "string", "description": "Spec/grade/model."},
+          "quantity": {"type": "string", "description": "Numeric quantity."},
+          "unit": {"type": "string", "description": "Unit of measure."},
+          "unit_price": {"type": "string", "description": "Unit price as numeric string."},
+          "amount": {"type": "string", "description": "Line total amount."}
+        }
+      }
+    },
+    "payment_milestones": {
+      "type": "array",
+      "description": "Payment milestones extracted from payment clauses.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Milestone Chinese name from original text."},
+          "ratio": {"type": "string", "description": "Percentage or decimal share of total amount."},
+          "trigger_event": {"type": "string", "description": "Trigger event.", "enum": ["contract_signed", "before_shipment", "on_delivery", "on_acceptance", "invoice_issued", "warranty_end", "on_demand", "other"]},
+          "trigger_offset_days": {"type": "string", "description": "Numeric days after trigger event."},
+          "raw_text": {"type": "string", "description": "Verbatim payment clause excerpt."}
+        }
+      }
+    },
+    "risk_terms": {"type": "string", "description": "Concatenated raw text of penalty / liability / dispute / quality clauses, up to ~2000 chars."},
+    "extraction_warnings": {"type": "array", "description": "Warnings about ambiguity, conflicts, or missing fields.", "items": {"type": "string", "description": "One warning."}}
+  }
+}
