@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -82,3 +83,44 @@ async def extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIEx
         extraction_metadata=dict(response.extraction_metadata or {}),
         metadata=dict(response.metadata or {}),
     )
+
+
+async def parse_large_file_job(path: Path, *, poll_seconds: float = 5.0) -> LandingAIParseResult:
+    """Submit a parse job for large documents and poll until completion.
+
+    Use for documents likely to exceed LandingAI's synchronous parse limits
+    (defaults to the page threshold ``settings.landingai_large_file_pages_threshold``,
+    typically 50 pages). Not currently wired into the production pipeline —
+    parse defaults to Mistral OCR; this wrapper is here so a later switch
+    is small.
+    """
+
+    def _run():
+        client = _client()
+        job = client.parse_jobs.create(
+            document=path,
+            model=settings.landingai_parse_model,
+        )
+        while True:
+            response = client.parse_jobs.get(job.job_id)
+            if response.status == "completed":
+                data = response.data
+                return LandingAIParseResult(
+                    markdown=data.markdown or "",
+                    chunks=list(data.chunks or []),
+                    metadata=dict(data.metadata or {}),
+                    grounding=dict(data.grounding or {}),
+                    splits=list(data.splits or []),
+                )
+            if response.status in {"failed", "error", "cancelled"}:
+                raise LandingAIUnavailable(
+                    f"LandingAI parse job {job.job_id} ended with {response.status}"
+                )
+            time.sleep(poll_seconds)
+
+    try:
+        return await asyncio.to_thread(_run)
+    except LandingAIUnavailable:
+        raise
+    except Exception as exc:
+        raise LandingAIUnavailable(f"LandingAI parse job failed: {exc!s}") from exc
