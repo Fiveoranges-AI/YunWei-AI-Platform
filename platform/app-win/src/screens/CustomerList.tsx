@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getMe, listCustomers } from "../api/client";
+import { deleteAllCustomers, getMe, listCustomers } from "../api/client";
 import { AISummary } from "../components/AISummary";
 import { MiniStat } from "../components/MiniStat";
 import type { CustomerDetail } from "../data/types";
@@ -15,7 +15,34 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
   const [displayName, setDisplayName] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const isDesktop = useIsDesktop();
+
+  async function handleClearAll() {
+    if (customers.length === 0) return;
+    if (
+      !window.confirm(
+        `这将删除全部 ${customers.length} 个客户，包括他们的合同、订单、联系人、任务和风险记录。原始上传文档保留作为审计。继续吗？`,
+      )
+    )
+      return;
+    const typed = window.prompt(`再次确认：输入「清空全部客户」以继续。`);
+    if (typed !== "清空全部客户") {
+      if (typed !== null) window.alert("输入不匹配，已取消。");
+      return;
+    }
+    setBulkDeleting(true);
+    setBulkError(null);
+    try {
+      await deleteAllCustomers();
+      setCustomers([]);
+    } catch (e) {
+      setBulkError(e instanceof Error ? e.message : "清空失败");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -104,25 +131,86 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
               {displayName || "—"}
             </div>
           </div>
-          <button
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {customers.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                disabled={bulkDeleting}
+                style={{
+                  height: 32,
+                  padding: "0 12px",
+                  borderRadius: 16,
+                  background: "transparent",
+                  border: "1px solid var(--ink-100)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--ink-500)",
+                  cursor: bulkDeleting ? "not-allowed" : "pointer",
+                  fontFamily: "var(--font)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  opacity: bulkDeleting ? 0.6 : 1,
+                }}
+                aria-label="清空全部客户"
+              >
+                {bulkDeleting ? "清空中…" : "清空"}
+              </button>
+            )}
+            <button
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                background: "var(--surface)",
+                border: "1px solid var(--ink-100)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "var(--shadow-card)",
+                color: "var(--ink-700)",
+                cursor: "pointer",
+              }}
+              aria-label="search"
+            >
+              {I.search(18)}
+            </button>
+          </div>
+        </div>
+        {bulkError && (
+          <div
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              background: "var(--surface)",
-              border: "1px solid var(--ink-100)",
+              marginTop: 8,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "var(--shadow-card)",
-              color: "var(--ink-700)",
-              cursor: "pointer",
+              justifyContent: "space-between",
+              gap: 8,
+              fontSize: 12,
+              color: "var(--risk-700)",
+              background: "var(--risk-100)",
+              border: "1px solid #f4cfcf",
+              padding: "6px 10px",
+              borderRadius: 10,
             }}
-            aria-label="search"
           >
-            {I.search(18)}
-          </button>
-        </div>
+            <span>{bulkError}</span>
+            <button
+              onClick={() => setBulkError(null)}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "var(--risk-700)",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+              aria-label="dismiss"
+            >
+              关闭
+            </button>
+          </div>
+        )}
       </div>
 
       <div

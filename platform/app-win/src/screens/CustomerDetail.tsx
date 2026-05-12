@@ -1,16 +1,88 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { GoFn } from "../App";
-import { getCustomer } from "../api/client";
+import {
+  deleteCustomer,
+  getCustomer,
+  replaceCustomerContacts,
+  updateCustomer,
+  type ContactInput,
+} from "../api/client";
 import { AISummary } from "../components/AISummary";
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { RowCard } from "../components/RowCard";
 import { Section } from "../components/Section";
 import { SmallStat } from "../components/SmallStat";
-import type { CustomerDetail, TimelineEvent } from "../data/types";
+import type { Contact, CustomerDetail, TimelineEvent } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { fmtCNYRaw } from "../lib/format";
+
+type EditableContact = {
+  key: string;
+  id?: string;
+  name: string;
+  title: string;
+  phone: string;
+  mobile: string;
+  email: string;
+  role: string;
+  address: string;
+  wechatId: string;
+};
+
+const CONTACT_ROLES: { value: string; label: string }[] = [
+  { value: "buyer", label: "采购" },
+  { value: "delivery", label: "收货" },
+  { value: "acceptance", label: "验收" },
+  { value: "invoice", label: "开票" },
+  { value: "seller", label: "销售" },
+  { value: "other", label: "其他" },
+];
+
+function genKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `tmp-${crypto.randomUUID()}`;
+  }
+  return `tmp-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+}
+
+function contactsToEditable(contacts: Contact[] | undefined): EditableContact[] {
+  if (!contacts) return [];
+  return contacts.map((c) => ({
+    key: c.id,
+    id: c.id,
+    name: c.name ?? "",
+    title: c.title ?? "",
+    phone: c.phone ?? "",
+    mobile: c.mobile ?? "",
+    email: c.email ?? "",
+    role: c.role || "other",
+    address: c.address ?? "",
+    wechatId: c.wechatId ?? "",
+  }));
+}
+
+const INPUT_STYLE: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid var(--ink-100)",
+  borderRadius: 10,
+  padding: "9px 12px",
+  fontFamily: "var(--font)",
+  fontSize: 14,
+  color: "var(--ink-800)",
+  background: "var(--surface)",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const LABEL_STYLE: React.CSSProperties = {
+  fontSize: 12,
+  color: "var(--ink-500)",
+  fontWeight: 600,
+  marginBottom: 4,
+  display: "block",
+};
 
 const TIMELINE_ICON: Record<TimelineEvent["kind"], (s?: number) => ReactNode> = {
   upload: (s = 13) => I.cloud(s),
@@ -29,10 +101,12 @@ export function CustomerDetailScreen({
   const isDesktop = useIsDesktop();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (params.id) {
       setLoadError(null);
+      setEditing(false);
       getCustomer(params.id)
         .then((c) => setCustomer(c ?? null))
         .catch((e) => {
@@ -105,20 +179,24 @@ export function CustomerDetailScreen({
         </button>
         <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-700)" }}>客户档案</div>
         <button
+          onClick={() => setEditing((v) => !v)}
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            background: "transparent",
-            border: "none",
+            height: 32,
+            padding: "0 14px",
+            borderRadius: 16,
+            background: editing ? "var(--ink-100)" : "transparent",
+            border: "1px solid var(--ink-100)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: "var(--ink-700)",
             cursor: "pointer",
+            fontFamily: "var(--font)",
+            fontSize: 13,
+            fontWeight: 600,
           }}
         >
-          {I.bookmark(20)}
+          {editing ? "完成" : "编辑"}
         </button>
       </div>
 
@@ -133,19 +211,50 @@ export function CustomerDetailScreen({
         }}
       >
         {isDesktop ? (
-          <DesktopLayout customer={customer} go={go} />
+          <DesktopLayout
+            customer={customer}
+            go={go}
+            editing={editing}
+            setEditing={setEditing}
+            setCustomer={setCustomer}
+          />
         ) : (
-          <MobileLayout customer={customer} go={go} />
+          <MobileLayout
+            customer={customer}
+            go={go}
+            editing={editing}
+            setEditing={setEditing}
+            setCustomer={setCustomer}
+          />
         )}
       </div>
     </div>
   );
 }
 
-function MobileLayout({ customer, go }: { customer: CustomerDetail; go: GoFn }) {
+type LayoutProps = {
+  customer: CustomerDetail;
+  go: GoFn;
+  editing: boolean;
+  setEditing: (v: boolean) => void;
+  setCustomer: (c: CustomerDetail) => void;
+};
+
+function MobileLayout({ customer, go, editing, setEditing, setCustomer }: LayoutProps) {
   return (
     <>
       <Header customer={customer} />
+      {editing && (
+        <EditPanel
+          customer={customer}
+          onCancel={() => setEditing(false)}
+          onSaved={(c) => {
+            setCustomer(c);
+            setEditing(false);
+          }}
+          onDeleted={() => go("list")}
+        />
+      )}
       <AISummary style={{ marginBottom: 12 }}>{customer.aiSummary}</AISummary>
       <KeyMetricsRow customer={customer} />
       <SmallMetricsRow customer={customer} />
@@ -160,12 +269,23 @@ function MobileLayout({ customer, go }: { customer: CustomerDetail; go: GoFn }) 
   );
 }
 
-function DesktopLayout({ customer, go }: { customer: CustomerDetail; go: GoFn }) {
+function DesktopLayout({ customer, go, editing, setEditing, setCustomer }: LayoutProps) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 24, alignItems: "flex-start" }}>
       {/* Main column */}
       <div>
         <Header customer={customer} />
+        {editing && (
+          <EditPanel
+            customer={customer}
+            onCancel={() => setEditing(false)}
+            onSaved={(c) => {
+              setCustomer(c);
+              setEditing(false);
+            }}
+            onDeleted={() => go("list")}
+          />
+        )}
         <AISummary style={{ marginBottom: 16 }}>{customer.aiSummary}</AISummary>
         <RisksSection customer={customer} />
         <CommitmentsSection customer={customer} />
@@ -181,6 +301,399 @@ function DesktopLayout({ customer, go }: { customer: CustomerDetail; go: GoFn })
         <AskCustomerCTA customer={customer} go={go} />
         <ContactsSection customer={customer} />
       </aside>
+    </div>
+  );
+}
+
+function EditPanel({
+  customer,
+  onCancel,
+  onSaved,
+  onDeleted,
+}: {
+  customer: CustomerDetail;
+  onCancel: () => void;
+  onSaved: (next: CustomerDetail) => void;
+  onDeleted: () => void;
+}) {
+  const [fullName, setFullName] = useState(customer.name);
+  const [shortName, setShortName] = useState(customer.shortName ?? "");
+  const [address, setAddress] = useState(customer.address ?? "");
+  const [taxId, setTaxId] = useState(customer.taxId ?? "");
+  const [formContacts, setFormContacts] = useState<EditableContact[]>(() => contactsToEditable(customer.contacts));
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  function updateContact(key: string, patch: Partial<EditableContact>) {
+    setFormContacts((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function removeContact(key: string) {
+    setFormContacts((rows) => rows.filter((r) => r.key !== key));
+  }
+
+  function addContact() {
+    setFormContacts((rows) => [
+      ...rows,
+      {
+        key: genKey(),
+        name: "",
+        title: "",
+        phone: "",
+        mobile: "",
+        email: "",
+        role: "other",
+        address: "",
+        wechatId: "",
+      },
+    ]);
+  }
+
+  async function save() {
+    if (!fullName.trim()) {
+      setActionError("客户全称不能为空");
+      return;
+    }
+    if (formContacts.some((c) => !c.name.trim())) {
+      setActionError("联系人姓名不能为空");
+      return;
+    }
+    setSaving(true);
+    setActionError(null);
+    try {
+      await updateCustomer(customer.id, {
+        full_name: fullName.trim(),
+        short_name: shortName.trim() || null,
+        address: address.trim() || null,
+        tax_id: taxId.trim() || null,
+      });
+      const payload: ContactInput[] = formContacts.map((c) => {
+        const base: ContactInput = {
+          name: c.name.trim(),
+          title: c.title.trim() || null,
+          phone: c.phone.trim() || null,
+          mobile: c.mobile.trim() || null,
+          email: c.email.trim() || null,
+          role: c.role || "other",
+          address: c.address.trim() || null,
+          wechat_id: c.wechatId.trim() || null,
+        };
+        // Existing contacts have a real backend id (not tmp-...); send it back.
+        if (c.id && !c.id.startsWith("tmp-")) {
+          base.id = c.id;
+        }
+        return base;
+      });
+      await replaceCustomerContacts(customer.id, payload);
+      const fresh = await getCustomer(customer.id);
+      if (fresh) onSaved(fresh);
+      else onSaved(customer);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        `确定要删除客户「${customer.name}」吗？此操作不可撤销，将同时删除该客户的合同、订单、联系人、记忆与任务记录。`,
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setActionError(null);
+    try {
+      await deleteCustomer(customer.id);
+      onDeleted();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "删除失败");
+      setDeleting(false);
+    }
+  }
+
+  const busy = saving || deleting;
+
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 16,
+        marginBottom: 16,
+        border: "1px solid var(--ink-100)",
+        background: "var(--surface)",
+      }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-900)", marginBottom: 12 }}>
+        编辑客户信息
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={LABEL_STYLE}>客户全称 *</label>
+          <input
+            style={INPUT_STYLE}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="客户全称"
+            disabled={busy}
+          />
+        </div>
+        <div>
+          <label style={LABEL_STYLE}>简称</label>
+          <input
+            style={INPUT_STYLE}
+            value={shortName}
+            onChange={(e) => setShortName(e.target.value)}
+            placeholder="简称"
+            disabled={busy}
+          />
+        </div>
+        <div>
+          <label style={LABEL_STYLE}>税号</label>
+          <input
+            style={INPUT_STYLE}
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
+            placeholder="税号"
+            disabled={busy}
+          />
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={LABEL_STYLE}>地址</label>
+          <input
+            style={INPUT_STYLE}
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="地址"
+            disabled={busy}
+          />
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: "var(--ink-900)",
+          marginTop: 4,
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <span>联系人 · {formContacts.length}</span>
+        <button
+          type="button"
+          onClick={addContact}
+          disabled={busy}
+          style={{
+            height: 28,
+            padding: "0 10px",
+            borderRadius: 14,
+            border: "1px solid var(--ink-100)",
+            background: "var(--surface)",
+            color: "var(--ink-700)",
+            cursor: busy ? "not-allowed" : "pointer",
+            fontFamily: "var(--font)",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          + 添加联系人
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+        {formContacts.length === 0 && (
+          <div style={{ fontSize: 12, color: "var(--ink-400)", padding: "8px 0" }}>
+            暂无联系人。点击「添加联系人」新增。
+          </div>
+        )}
+        {formContacts.map((c) => (
+          <div
+            key={c.key}
+            style={{
+              border: "1px solid var(--ink-100)",
+              borderRadius: 12,
+              padding: 10,
+              background: "var(--bg)",
+            }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <label style={LABEL_STYLE}>姓名 *</label>
+                <input
+                  style={INPUT_STYLE}
+                  value={c.name}
+                  onChange={(e) => updateContact(c.key, { name: e.target.value })}
+                  placeholder="姓名"
+                  disabled={busy}
+                />
+              </div>
+              <div>
+                <label style={LABEL_STYLE}>职位</label>
+                <input
+                  style={INPUT_STYLE}
+                  value={c.title}
+                  onChange={(e) => updateContact(c.key, { title: e.target.value })}
+                  placeholder="职位"
+                  disabled={busy}
+                />
+              </div>
+              <div>
+                <label style={LABEL_STYLE}>手机</label>
+                <input
+                  style={INPUT_STYLE}
+                  value={c.mobile}
+                  onChange={(e) => updateContact(c.key, { mobile: e.target.value })}
+                  placeholder="手机"
+                  disabled={busy}
+                />
+              </div>
+              <div>
+                <label style={LABEL_STYLE}>邮箱</label>
+                <input
+                  style={INPUT_STYLE}
+                  value={c.email}
+                  onChange={(e) => updateContact(c.key, { email: e.target.value })}
+                  placeholder="邮箱"
+                  disabled={busy}
+                />
+              </div>
+              <div>
+                <label style={LABEL_STYLE}>角色</label>
+                <select
+                  style={INPUT_STYLE}
+                  value={c.role}
+                  onChange={(e) => updateContact(c.key, { role: e.target.value })}
+                  disabled={busy}
+                >
+                  {CONTACT_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => removeContact(c.key)}
+                  disabled={busy}
+                  style={{
+                    height: 32,
+                    padding: "0 10px",
+                    borderRadius: 8,
+                    border: "1px solid var(--ink-100)",
+                    background: "transparent",
+                    color: "var(--risk-700)",
+                    cursor: busy ? "not-allowed" : "pointer",
+                    fontFamily: "var(--font)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  删除联系人
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {actionError && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--risk-700)",
+            background: "var(--risk-100)",
+            border: "1px solid #f4cfcf",
+            padding: "8px 12px",
+            borderRadius: 10,
+            marginBottom: 10,
+          }}
+        >
+          {actionError}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          style={{
+            height: 36,
+            padding: "0 16px",
+            borderRadius: 18,
+            border: "1px solid var(--ink-100)",
+            background: "var(--surface)",
+            color: "var(--ink-700)",
+            cursor: busy ? "not-allowed" : "pointer",
+            fontFamily: "var(--font)",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          style={{
+            height: 36,
+            padding: "0 16px",
+            borderRadius: 18,
+            border: "none",
+            background: "var(--ink-900)",
+            color: "#fff",
+            cursor: busy ? "not-allowed" : "pointer",
+            fontFamily: "var(--font)",
+            fontSize: 13,
+            fontWeight: 600,
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {saving ? "保存中…" : "保存"}
+        </button>
+      </div>
+
+      <div
+        style={{
+          marginTop: 12,
+          paddingTop: 12,
+          borderTop: "1px dashed var(--ink-100)",
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={busy}
+          style={{
+            height: 32,
+            padding: "0 12px",
+            borderRadius: 16,
+            border: "1px solid #f4cfcf",
+            background: "var(--risk-100)",
+            color: "var(--risk-700)",
+            cursor: busy ? "not-allowed" : "pointer",
+            fontFamily: "var(--font)",
+            fontSize: 12,
+            fontWeight: 600,
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {deleting ? "删除中…" : "删除客户"}
+        </button>
+      </div>
     </div>
   );
 }
