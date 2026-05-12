@@ -4,8 +4,9 @@ After ``auto_ingest`` produces a ``UnifiedDraft`` and the user reviews it
 in the frontend, this module persists the user-reviewed payload to the
 canonical entity tables:
 
-- ``customers`` — INSERT or UPDATE (per-entity decision: ``new`` vs ``merge``)
-- ``contacts`` — INSERT or UPDATE per slot (same convention as customer)
+- ``customers`` — INSERT, UPDATE, or attach-only (per-entity decision:
+  ``new`` vs ``merge`` vs ``bind_existing``)
+- ``contacts`` — INSERT, UPDATE, or attach-only per slot (same convention as customer)
 - ``orders`` + ``contracts`` — always INSERT, mirrors the legacy /contract
   confirm flow (one document → one order + contract)
 - Customer-memory tables (events / commitments / tasks / risk_signals /
@@ -222,7 +223,15 @@ async def commit_auto_extraction(
     customer: Customer | None = None
     if request.customer is not None:
         cust_final = request.customer.final
-        if not (cust_final.full_name and cust_final.full_name.strip()):
+
+        # When binding to an existing customer, the user is overriding the
+        # OCR'd name with the row already in DB — accept an empty
+        # final.full_name. For ``new`` and ``merge``, full_name remains
+        # required because we'd write it to the DB.
+        mode = request.customer.mode
+        if mode != "bind_existing" and not (
+            cust_final.full_name and cust_final.full_name.strip()
+        ):
             doc.parse_error = (
                 "customer name not extracted (likely OCR failure)"
             )
@@ -231,7 +240,7 @@ async def commit_auto_extraction(
                 "customer name is required; OCR likely failed on the buyer/甲方 region"
             )
 
-        if request.customer.mode == "merge":
+        if mode == "merge":
             if request.customer.existing_id is None:
                 raise ValueError("customer.mode=merge requires existing_id")
             customer = (
@@ -245,11 +254,30 @@ async def commit_auto_extraction(
                 raise ValueError(
                     f"customer {request.customer.existing_id} not found"
                 )
+            # merge: update master fields from draft
             customer.full_name = cust_final.full_name.strip()
             customer.short_name = cust_final.short_name
             customer.address = cust_final.address
             customer.tax_id = cust_final.tax_id
-        else:
+        elif mode == "bind_existing":
+            if request.customer.existing_id is None:
+                raise ValueError(
+                    "customer.mode=bind_existing requires existing_id"
+                )
+            customer = (
+                await session.execute(
+                    select(Customer).where(
+                        Customer.id == request.customer.existing_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if customer is None:
+                raise ValueError(
+                    f"customer {request.customer.existing_id} not found"
+                )
+            # bind_existing: do NOT touch master fields. Order/contract/
+            # contacts/ops rows still attach via customer.id below.
+        else:  # mode == "new"
             customer = Customer(
                 full_name=cust_final.full_name.strip(),
                 short_name=cust_final.short_name,
@@ -274,7 +302,13 @@ async def commit_auto_extraction(
     if customer is not None:
         for decision in request.contacts:
             c_final = decision.final
-            if not (c_final.name and c_final.name.strip()):
+            # For ``new`` / ``merge`` we'd write c_final.name into the DB so
+            # an empty name is unusable → skip the slot. For ``bind_existing``
+            # the user is binding to a row that already has a name; the draft
+            # name is irrelevant.
+            if decision.mode != "bind_existing" and not (
+                c_final.name and c_final.name.strip()
+            ):
                 skipped_contacts += 1
                 contact_slots.append(None)
                 continue
@@ -302,7 +336,24 @@ async def commit_auto_extraction(
                 ct.email = c_final.email
                 ct.role = role
                 ct.address = c_final.address
-            else:
+            elif decision.mode == "bind_existing":
+                if decision.existing_id is None:
+                    raise ValueError(
+                        "contact.mode=bind_existing requires existing_id"
+                    )
+                ct = (
+                    await session.execute(
+                        select(Contact).where(Contact.id == decision.existing_id)
+                    )
+                ).scalar_one_or_none()
+                if ct is None:
+                    raise ValueError(
+                        f"contact {decision.existing_id} not found"
+                    )
+                # bind only — preserve existing contact fields, just
+                # re-anchor to the resolved customer if needed.
+                ct.customer_id = customer.id
+            else:  # mode == "new"
                 ct = Contact(
                     customer_id=customer.id,
                     name=c_final.name.strip(),

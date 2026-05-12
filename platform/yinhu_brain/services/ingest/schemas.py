@@ -268,7 +268,7 @@ from uuid import UUID  # noqa: E402  — kept local to this section
 class CustomerDecision(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    mode: Literal["new", "merge"]
+    mode: Literal["new", "merge", "bind_existing"]
     existing_id: UUID | None = None
     final: CustomerExtraction
 
@@ -276,7 +276,7 @@ class CustomerDecision(BaseModel):
 class ContactDecision(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    mode: Literal["new", "merge"]
+    mode: Literal["new", "merge", "bind_existing"]
     existing_id: UUID | None = None
     final: ContactExtraction
 

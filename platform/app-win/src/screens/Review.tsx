@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { GoFn } from "../App";
-import { getReview } from "../api/client";
+import { getReview, listCustomersBasic } from "../api/client";
 import {
   applyDraftEdit,
   archiveBatch,
@@ -9,14 +9,17 @@ import {
   getLastBatch,
   ignoreBatch,
   parseAmountInput,
+  setCustomerOverride,
   setLastBatch,
   type ArchiveResult,
   type Batch,
+  type CustomerDecisionOverride,
 } from "../api/ingest";
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
 import type {
+  CustomerListItem,
   EditableDraftPath,
   EditableFieldMeta,
   Review,
@@ -52,6 +55,10 @@ export function ReviewScreen({ go }: { go: GoFn }) {
   // null = full panel; non-null = single-field editor
   const [singleEditPath, setSingleEditPath] = useState<EditableDraftPath | null>(null);
   const [primaryEntryIndex, setPrimaryEntryIndex] = useState<number>(-1);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [allCustomers, setAllCustomers] = useState<CustomerListItem[] | null>(null);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customersError, setCustomersError] = useState<string | null>(null);
 
   useEffect(() => {
     // Prefer a real ingest batch when the user just came from Upload.
@@ -87,6 +94,62 @@ export function ReviewScreen({ go }: { go: GoFn }) {
     setLastBatch(updated);
     const fresh = batchToReview(updated);
     if (fresh) setReview(fresh);
+  }
+
+  function openPicker() {
+    if (!batch || primaryEntryIndex < 0) return;
+    setPickerOpen(true);
+    if (allCustomers === null && !customersLoading) {
+      setCustomersLoading(true);
+      setCustomersError(null);
+      listCustomersBasic()
+        .then((rows) => setAllCustomers(rows))
+        .catch((e) =>
+          setCustomersError(e instanceof Error ? e.message : "客户列表加载失败"),
+        )
+        .finally(() => setCustomersLoading(false));
+    }
+  }
+
+  function handlePickExisting(c: CustomerListItem) {
+    if (!batch || primaryEntryIndex < 0) return;
+    const override: CustomerDecisionOverride = {
+      kind: "bind_existing",
+      existing_id: c.id,
+      existing_name: c.name,
+      updateMaster: false,
+    };
+    const updated = setCustomerOverride(batch, primaryEntryIndex, override);
+    setBatch(updated);
+    setLastBatch(updated);
+    setPickerOpen(false);
+  }
+
+  function handlePickNew() {
+    if (!batch || primaryEntryIndex < 0) return;
+    const updated = setCustomerOverride(batch, primaryEntryIndex, { kind: "new" });
+    setBatch(updated);
+    setLastBatch(updated);
+    setPickerOpen(false);
+  }
+
+  function handleClearOverride() {
+    if (!batch || primaryEntryIndex < 0) return;
+    const updated = setCustomerOverride(batch, primaryEntryIndex, undefined);
+    setBatch(updated);
+    setLastBatch(updated);
+  }
+
+  function handleToggleUpdateMaster(next: boolean) {
+    if (!batch || primaryEntryIndex < 0) return;
+    const cur = batch.entries[primaryEntryIndex]?.customerDecisionOverride;
+    if (!cur || cur.kind !== "bind_existing") return;
+    const updated = setCustomerOverride(batch, primaryEntryIndex, {
+      ...cur,
+      updateMaster: next,
+    });
+    setBatch(updated);
+    setLastBatch(updated);
   }
 
   async function handleArchive() {
@@ -300,61 +363,147 @@ export function ReviewScreen({ go }: { go: GoFn }) {
           <div>
             {/* Customer match */}
             <Section title="归属客户">
-              <div className="card" style={{ padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
-                <Mono
-                  text={review.customer.name.slice(0, 2)}
-                  color="#1f6c8a"
-                  size={44}
-                  radius={12}
-                  fontSize={14}
-                />
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-900)" }}>
-                      {review.customer.name}
-                    </span>
-                    <span className="pill pill-brand" style={{ fontSize: 10 }}>
-                      {review.customer.isExisting ? "已存在客户" : "新客户"}
-                    </span>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <Mono
+                    text={review.customer.name.slice(0, 2)}
+                    color="#1f6c8a"
+                    size={44}
+                    radius={12}
+                    fontSize={14}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink-900)" }}>
+                        {review.customer.name}
+                      </span>
+                      <span className="pill pill-brand" style={{ fontSize: 10 }}>
+                        {review.customer.isExisting ? "已存在客户" : "新客户"}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--ink-500)",
+                        marginTop: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ color: "var(--ai-500)" }}>{I.spark(11)}</span>
+                      {review.customer.isExisting
+                        ? `AI 在数据库中匹配到 "${review.customer.name}"，请确认是否复用`
+                        : `AI 从 ${review.docType || "上传内容"} 识别到新客户 "${review.customer.name}"`}
+                    </div>
                   </div>
-                  <div
+                  <button
+                    onClick={openPicker}
+                    disabled={!batch}
+                    title={!batch ? "复核数据来自示例，无法编辑" : undefined}
                     style={{
+                      background: "var(--surface-3)",
+                      border: "1px solid var(--ink-100)",
+                      borderRadius: 8,
+                      padding: "6px 10px",
                       fontSize: 12,
-                      color: "var(--ink-500)",
-                      marginTop: 4,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
+                      color: "var(--ink-700)",
+                      fontWeight: 500,
+                      cursor: batch ? "pointer" : "not-allowed",
+                      opacity: batch ? 1 : 0.5,
                     }}
                   >
-                    <span style={{ color: "var(--ai-500)" }}>{I.spark(11)}</span>
-                    {review.customer.isExisting
-                      ? `AI 在数据库中匹配到 "${review.customer.name}"，请确认是否复用`
-                      : `AI 从 ${review.docType || "上传内容"} 识别到新客户 "${review.customer.name}"`}
-                  </div>
+                    更换
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    if (!batch) return;
-                    setSingleEditPath("customer.full_name");
-                    setEditorOpen(true);
-                  }}
-                  disabled={!batch}
-                  title={!batch ? "复核数据来自示例，无法编辑" : undefined}
-                  style={{
-                    background: "var(--surface-3)",
-                    border: "1px solid var(--ink-100)",
-                    borderRadius: 8,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                    color: "var(--ink-700)",
-                    fontWeight: 500,
-                    cursor: batch ? "pointer" : "not-allowed",
-                    opacity: batch ? 1 : 0.5,
-                  }}
-                >
-                  更换
-                </button>
+                {(() => {
+                  const currentOverride =
+                    batch?.entries[primaryEntryIndex]?.customerDecisionOverride;
+                  if (!currentOverride) return null;
+                  if (currentOverride.kind === "bind_existing") {
+                    return (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: "8px 10px",
+                          background: "var(--ai-100)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div style={{ fontSize: 12, color: "var(--ink-700)" }}>
+                          将归档到：<strong>{currentOverride.existing_name}</strong>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4 }}>
+                          手动选择已有客户 · 客户资料：
+                          {currentOverride.updateMaster ? "本次会更新" : "不更新"}
+                        </div>
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginTop: 6,
+                            fontSize: 11,
+                            color: "var(--ink-700)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={currentOverride.updateMaster}
+                            onChange={(e) => handleToggleUpdateMaster(e.target.checked)}
+                          />
+                          用本次提取信息更新客户资料
+                        </label>
+                        <button
+                          onClick={handleClearOverride}
+                          style={{
+                            marginTop: 6,
+                            fontSize: 11,
+                            color: "var(--ink-500)",
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                            textDecoration: "underline",
+                          }}
+                        >
+                          还原 AI 默认匹配
+                        </button>
+                      </div>
+                    );
+                  }
+                  // currentOverride.kind === "new"
+                  return (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: "8px 10px",
+                        background: "var(--ai-100)",
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: "var(--ink-700)" }}>
+                        将创建为新客户
+                      </div>
+                      <button
+                        onClick={handleClearOverride}
+                        style={{
+                          marginTop: 6,
+                          fontSize: 11,
+                          color: "var(--ink-500)",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        还原 AI 默认匹配
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </Section>
 
@@ -641,6 +790,19 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             setSingleEditPath(null);
           }}
           onSave={handleFieldSave}
+        />
+      )}
+
+      {/* Customer picker */}
+      {pickerOpen && (
+        <CustomerPicker
+          customers={allCustomers}
+          loading={customersLoading}
+          error={customersError}
+          onClose={() => setPickerOpen(false)}
+          onPickExisting={handlePickExisting}
+          onPickNew={handlePickNew}
+          isDesktop={isDesktop}
         />
       )}
     </div>
@@ -1182,6 +1344,165 @@ function EditPanel({
           </button>
           <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSave}>
             保存
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function CustomerPicker({
+  customers,
+  loading,
+  error,
+  onClose,
+  onPickExisting,
+  onPickNew,
+  isDesktop,
+}: {
+  customers: CustomerListItem[] | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+  onPickExisting: (c: CustomerListItem) => void;
+  onPickNew: () => void;
+  isDesktop: boolean;
+}) {
+  const [q, setQ] = useState("");
+  const filtered = (customers ?? []).filter((c) => {
+    if (!q.trim()) return true;
+    const haystack = [c.name, c.shortName ?? "", c.taxId ?? "", c.address ?? ""]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(q.toLowerCase());
+  });
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.35)",
+          zIndex: 100,
+        }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          left: isDesktop ? "50%" : 16,
+          top: isDesktop ? "50%" : "auto",
+          bottom: isDesktop ? "auto" : 16,
+          right: isDesktop ? "auto" : 16,
+          transform: isDesktop ? "translate(-50%, -50%)" : undefined,
+          width: isDesktop ? 540 : undefined,
+          maxHeight: "85vh",
+          background: "var(--surface)",
+          border: "1px solid var(--ink-100)",
+          borderRadius: 14,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+          zIndex: 101,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ padding: "14px 18px 10px", borderBottom: "1px solid var(--ink-100)" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
+            选择归属客户
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+            从已有客户里挑选，或创建为新客户。选已有客户后默认只绑定，不会覆盖客户主档。
+          </div>
+        </div>
+
+        <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--ink-100)" }}>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜索客户名称、简称、税号、地址"
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              fontSize: 14,
+              border: "1px solid var(--ink-100)",
+              borderRadius: 8,
+              background: "var(--surface)",
+              color: "var(--ink-900)",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {loading && (
+            <div
+              style={{
+                padding: 24,
+                textAlign: "center",
+                color: "var(--ink-500)",
+                fontSize: 13,
+              }}
+            >
+              正在加载客户…
+            </div>
+          )}
+          {error && (
+            <div style={{ padding: 12, color: "var(--risk-500)", fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
+            <div
+              style={{
+                padding: 24,
+                textAlign: "center",
+                color: "var(--ink-400)",
+                fontSize: 13,
+              }}
+            >
+              {customers && customers.length === 0 ? "暂无客户档案" : "没有匹配的客户"}
+            </div>
+          )}
+          {!loading &&
+            filtered.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onPickExisting(c)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "10px 18px",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: "1px solid var(--ink-100)",
+                  cursor: "pointer",
+                  color: "var(--ink-900)",
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</div>
+                <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 2 }}>
+                  {[c.shortName, c.taxId, c.address].filter(Boolean).join(" · ") || "—"}
+                </div>
+              </button>
+            ))}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            padding: "12px 18px",
+            borderTop: "1px solid var(--ink-100)",
+          }}
+        >
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>
+            取消
+          </button>
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={onPickNew}>
+            + 创建为新客户
           </button>
         </div>
       </div>

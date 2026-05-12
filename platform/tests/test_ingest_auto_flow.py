@@ -1332,6 +1332,194 @@ async def test_commit_auto_extraction_merges_into_existing_customer() -> None:
         await engine.dispose()
 
 
+# ---------- bind_existing customer decision ------------------------------
+
+
+@pytest.mark.asyncio
+async def test_commit_bind_existing_preserves_existing_customer_master_fields() -> None:
+    """bind_existing: order/contract/contacts attach to the existing customer
+    but the customer's master fields (name/address/tax_id) stay untouched
+    even when the AI draft tried to overwrite them with wrong values."""
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            from yinhu_brain.models import (
+                DocumentProcessingStatus,
+                DocumentType,
+            )
+
+            # Seed: a correctly-named customer already in DB.
+            existing = Customer(
+                full_name="正确客户名称有限公司",
+                short_name="正确客户",
+                address="北京市朝阳区",
+                tax_id="91110000XXXXXXX",
+            )
+            session.add(existing)
+            doc = Document(
+                type=DocumentType.contract,
+                file_url="/tmp/bind.pdf",
+                original_filename="bind.pdf",
+                content_type="application/pdf",
+                file_sha256="b" * 64,
+                file_size_bytes=10,
+                ocr_text="...",
+                processing_status=DocumentProcessingStatus.parsed,
+                review_status=DocumentReviewStatus.pending_review,
+            )
+            session.add(doc)
+            await session.commit()
+
+            request = AutoConfirmRequest.model_validate({
+                "customer": {
+                    "mode": "bind_existing",
+                    "existing_id": str(existing.id),
+                    # AI draft has the WRONG name; bind_existing must ignore it
+                    "final": {
+                        "full_name": "OCR 错误客户名",
+                        "short_name": "错的",
+                        "address": "错地址",
+                        "tax_id": "WRONG",
+                    },
+                },
+                "order": {
+                    "amount_total": 50000,
+                    "amount_currency": "CNY",
+                },
+                "contract": {
+                    "contract_no_external": "BIND-001",
+                    "payment_milestones": [],
+                },
+            })
+
+            result = await commit_auto_extraction(
+                session=session, document_id=doc.id, request=request,
+            )
+            await session.commit()
+
+            customers = (await session.execute(select(Customer))).scalars().all()
+            assert len(customers) == 1
+            c = customers[0]
+            # Master fields preserved
+            assert c.full_name == "正确客户名称有限公司"
+            assert c.short_name == "正确客户"
+            assert c.address == "北京市朝阳区"
+            assert c.tax_id == "91110000XXXXXXX"
+            # Order + contract attached to existing customer
+            orders = (await session.execute(select(Order))).scalars().all()
+            assert len(orders) == 1
+            assert orders[0].customer_id == c.id
+            contracts = (await session.execute(select(Contract))).scalars().all()
+            assert len(contracts) == 1
+            assert contracts[0].order_id == orders[0].id
+            assert result.customer_id == c.id
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_commit_bind_existing_accepts_empty_ocr_full_name() -> None:
+    """bind_existing should not require a valid final.full_name — the whole
+    point is the user manually binding because OCR failed."""
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            from yinhu_brain.models import (
+                DocumentProcessingStatus,
+                DocumentType,
+            )
+
+            existing = Customer(full_name="已存在客户")
+            session.add(existing)
+            doc = Document(
+                type=DocumentType.contract,
+                file_url="/tmp/bind2.pdf",
+                original_filename="bind2.pdf",
+                content_type="application/pdf",
+                file_sha256="c" * 64,
+                file_size_bytes=10,
+                ocr_text="...",
+                processing_status=DocumentProcessingStatus.parsed,
+                review_status=DocumentReviewStatus.pending_review,
+            )
+            session.add(doc)
+            await session.commit()
+
+            request = AutoConfirmRequest.model_validate({
+                "customer": {
+                    "mode": "bind_existing",
+                    "existing_id": str(existing.id),
+                    "final": {"full_name": ""},  # empty — OCR failed
+                },
+                "order": {"amount_total": 1000, "amount_currency": "CNY"},
+                "contract": {"contract_no_external": "X-1", "payment_milestones": []},
+            })
+
+            result = await commit_auto_extraction(
+                session=session, document_id=doc.id, request=request,
+            )
+            await session.commit()
+            assert result.customer_id == existing.id
+            assert (await session.execute(select(Customer))).scalars().all()[0].full_name == "已存在客户"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_commit_merge_still_updates_existing_customer_master_fields() -> None:
+    """merge mode must KEEP its old behavior: load existing + apply final
+    field values. This is the regression check so bind_existing doesn't
+    accidentally weaken merge."""
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            from yinhu_brain.models import (
+                DocumentProcessingStatus,
+                DocumentType,
+            )
+
+            existing = Customer(full_name="旧客户名", short_name="旧简称")
+            session.add(existing)
+            doc = Document(
+                type=DocumentType.contract,
+                file_url="/tmp/merge.pdf",
+                original_filename="merge.pdf",
+                content_type="application/pdf",
+                file_sha256="d" * 64,
+                file_size_bytes=10,
+                ocr_text="...",
+                processing_status=DocumentProcessingStatus.parsed,
+                review_status=DocumentReviewStatus.pending_review,
+            )
+            session.add(doc)
+            await session.commit()
+
+            request = AutoConfirmRequest.model_validate({
+                "customer": {
+                    "mode": "merge",
+                    "existing_id": str(existing.id),
+                    "final": {
+                        "full_name": "新客户名",
+                        "short_name": "新简称",
+                        "address": "上海市浦东新区",
+                        "tax_id": "NEWTAX",
+                    },
+                },
+            })
+            await commit_auto_extraction(session=session, document_id=doc.id, request=request)
+            await session.commit()
+
+            customers = (await session.execute(select(Customer))).scalars().all()
+            assert len(customers) == 1
+            c = customers[0]
+            assert c.full_name == "新客户名"
+            assert c.short_name == "新简称"
+            assert c.address == "上海市浦东新区"
+            assert c.tax_id == "NEWTAX"
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
 async def test_commit_auto_extraction_merge_requires_existing_id() -> None:
     """``customer.mode=merge`` without ``existing_id`` → ValueError."""

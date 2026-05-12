@@ -232,13 +232,13 @@ export type AutoCandidates = {
 // ───────────── Confirm payload ─────────────
 
 export type CustomerDecision = {
-  mode: "new" | "merge";
+  mode: "new" | "merge" | "bind_existing";
   existing_id?: string;
   final: IdentityCustomer;
 };
 
 export type ContactDecision = {
-  mode: "new" | "merge";
+  mode: "new" | "merge" | "bind_existing";
   existing_id?: string;
   final: IdentityContact;
 };
@@ -484,9 +484,20 @@ function emptyDraft(): UnifiedDraft {
 
 // ───────────── Batch state shared with Review screen ─────────────
 
+export type CustomerDecisionOverride =
+  | {
+      kind: "bind_existing";
+      existing_id: string;
+      existing_name: string;
+      // when true → use mode=merge to update master fields
+      updateMaster: boolean;
+    }
+  | { kind: "new" };
+
 export type BatchEntry = {
   filename: string;
   result: IngestResult;
+  customerDecisionOverride?: CustomerDecisionOverride;
 };
 
 export type Batch = { entries: BatchEntry[] };
@@ -732,6 +743,28 @@ export function applyDraftEdit(
 }
 
 /**
+ * Immutably set (or clear) the customer-decision override on a batch entry.
+ * Pass `undefined` to revert to AI default (bind_existing for high-conf
+ * candidate, new otherwise).
+ */
+export function setCustomerOverride(
+  batch: Batch,
+  entryIndex: number,
+  override: CustomerDecisionOverride | undefined,
+): Batch {
+  const entries = batch.entries.map((entry, i) => {
+    if (i !== entryIndex) return entry;
+    if (override === undefined) {
+      // Strip the field cleanly.
+      const { customerDecisionOverride: _omit, ...rest } = entry;
+      return rest;
+    }
+    return { ...entry, customerDecisionOverride: override };
+  });
+  return { entries };
+}
+
+/**
  * Parse a user-entered amount string. Returns:
  * - { ok: true, value: null } for empty input
  * - { ok: true, value: <number> } for a valid number
@@ -755,7 +788,10 @@ export function parseAmountInput(
   return { ok: true, value: n };
 }
 
-export function buildAutoConfirmRequest(raw: AutoIngestRaw): AutoConfirmRequest {
+export function buildAutoConfirmRequest(
+  raw: AutoIngestRaw,
+  override?: CustomerDecisionOverride,
+): AutoConfirmRequest {
   const draft = raw.draft;
   const customerCandidate = bestCandidate(raw.candidates?.customer, CUSTOMER_MERGE_THRESHOLD);
 
@@ -764,13 +800,31 @@ export function buildAutoConfirmRequest(raw: AutoIngestRaw): AutoConfirmRequest 
   const hasCustomer = Boolean(
     draft.customer && (draft.customer.full_name || draft.customer.short_name),
   );
-  const customer: CustomerDecision | null = hasCustomer
-    ? {
-        mode: customerCandidate ? "merge" : "new",
-        existing_id: customerCandidate?.id,
-        final: customerWithCandidate(normalizeCustomer(draft.customer), customerCandidate),
-      }
-    : null;
+
+  let customer: CustomerDecision | null = null;
+  if (override) {
+    if (override.kind === "bind_existing") {
+      customer = {
+        mode: override.updateMaster ? "merge" : "bind_existing",
+        existing_id: override.existing_id,
+        final: normalizeCustomer(draft.customer),
+      };
+    } else {
+      // override.kind === "new"
+      customer = {
+        mode: "new",
+        final: normalizeCustomer(draft.customer),
+      };
+    }
+  } else if (hasCustomer) {
+    // No user override — default to bind_existing for high-confidence
+    // matches (was merge before; merge silently overwrote DB master fields).
+    customer = {
+      mode: customerCandidate ? "bind_existing" : "new",
+      existing_id: customerCandidate?.id,
+      final: customerWithCandidate(normalizeCustomer(draft.customer), customerCandidate),
+    };
+  }
 
   const contacts: ContactDecision[] = (draft.contacts ?? []).map((c, i) => {
     const candidate = bestCandidate(raw.candidates?.contacts?.[i], CONTACT_MERGE_THRESHOLD);
@@ -800,11 +854,12 @@ export function buildAutoConfirmRequest(raw: AutoIngestRaw): AutoConfirmRequest 
 export async function confirmAutoDocument(
   documentId: string,
   raw: AutoIngestRaw,
+  override?: CustomerDecisionOverride,
 ): Promise<AutoConfirmResponse> {
   if (!documentId) throw new Error("缺少文档 ID，无法归档");
   return postJSON<AutoConfirmResponse>(
     `/auto/${documentId}/confirm`,
-    buildAutoConfirmRequest(raw),
+    buildAutoConfirmRequest(raw, override),
   );
 }
 
@@ -821,7 +876,11 @@ export async function archiveBatch(batch: Batch): Promise<ArchiveResult> {
   };
   for (const entry of batch.entries) {
     if (!entry.result.ok) continue;
-    const confirmed = await confirmAutoDocument(entry.result.documentId, entry.result.raw);
+    const confirmed = await confirmAutoDocument(
+      entry.result.documentId,
+      entry.result.raw,
+      entry.customerDecisionOverride,
+    );
     result.confirmedDocuments += 1;
     const cid = confirmed.created_entities?.customer_id;
     if (cid) result.customerIds.push(cid);
