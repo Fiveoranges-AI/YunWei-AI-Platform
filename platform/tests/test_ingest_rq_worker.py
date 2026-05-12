@@ -75,6 +75,7 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
     from yinhu_brain.services.ingest.merge import MergeCandidates
     from yinhu_brain.services.ingest.unified_schemas import (
         IngestPlan,
+        PipelineExtractResult,
         PipelineRoutePlan,
         UnifiedDraft,
     )
@@ -112,7 +113,15 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
         return AutoIngestResult(
             document_id=doc.id,
             plan=IngestPlan(),
-            draft=UnifiedDraft(),
+            draft=UnifiedDraft(
+                pipeline_results=[
+                    PipelineExtractResult(
+                        name="identity",
+                        extraction={"customer": {"name": "Acme"}},
+                        extraction_metadata={"provider": "landingai"},
+                    ),
+                ],
+            ),
             candidates=MergeCandidates(),
             route_plan=PipelineRoutePlan(),
         )
@@ -149,6 +158,13 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             assert j.result_json is not None
             assert "draft" in j.result_json
             assert "plan" in j.result_json
+            # WinApp Review reads ``raw.pipeline_results`` directly — the
+            # async job payload must mirror sync ``/auto`` (api/ingest.py)
+            # and surface a top-level ``pipeline_results`` list.
+            assert "pipeline_results" in j.result_json
+            assert any(
+                r["name"] == "identity" for r in j.result_json["pipeline_results"]
+            )
             assert captured_stages == ["called"]
             # Regression for ingest_jobs_document_id_fkey: the Document that
             # auto_ingest insert+flushed (without committing) must survive

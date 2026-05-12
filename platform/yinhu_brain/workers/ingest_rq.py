@@ -269,6 +269,10 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
                 else None
             ),
             "draft": result.draft.model_dump(mode="json"),
+            "pipeline_results": [
+                r.model_dump(mode="json")
+                for r in getattr(result.draft, "pipeline_results", [])
+            ],
             "candidates": {
                 "customer": [
                     _candidate_dict(c) for c in result.candidates.customer_candidates
