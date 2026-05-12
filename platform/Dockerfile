@@ -42,3 +42,21 @@ COPY --from=app-win-build /build/app-win/dist /app/app-win/dist
 # the `command:` override. Default to 80 so plain `docker run` also works.
 EXPOSE 80
 CMD ["sh", "-c", "uvicorn platform_app.main:app --host 0.0.0.0 --port ${PORT:-80} --workers 1"]
+
+# ─────────────── Worker service ───────────────
+# This image is also used by the win-ingest RQ worker (a separate Railway
+# service that shares the same code + env). Override the start command in
+# the worker service settings:
+#
+#     Start Command: yinhu-ingest-worker
+#
+# The web and worker services MUST share:
+#  - DATABASE_URL  — same Postgres
+#  - REDIS_URL     — same Redis (the queue is `win-ingest`)
+#  - DATA_ROOT     — Railway Volume mounted at the same path on both services
+#                    so staged_file_url paths are readable by the worker
+#  - MISTRAL_API_KEY / VISION_AGENT_API_KEY / DOCUMENT_AI_PROVIDER /
+#    ANTHROPIC_API_KEY / model_* — extractor providers
+#
+# See docs/superpowers/runbooks/win-ingest-rq-worker.md for the full
+# rollout checklist.
