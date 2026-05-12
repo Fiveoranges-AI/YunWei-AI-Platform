@@ -2,18 +2,28 @@ import { useEffect, useState } from "react";
 import type { GoFn } from "../App";
 import { getReview } from "../api/client";
 import {
+  applyDraftEdit,
   archiveBatch,
   batchToReview,
   clearLastBatch,
   getLastBatch,
   ignoreBatch,
+  parseAmountInput,
+  setLastBatch,
   type ArchiveResult,
   type Batch,
 } from "../api/ingest";
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
-import type { Review, ReviewExtraction, SchemaSummary, SchemaSummaryItem } from "../data/types";
+import type {
+  EditableDraftPath,
+  EditableFieldMeta,
+  Review,
+  ReviewExtraction,
+  SchemaSummary,
+  SchemaSummaryItem,
+} from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { markCustomersChanged } from "../lib/customerRefresh";
@@ -38,6 +48,10 @@ export function ReviewScreen({ go }: { go: GoFn }) {
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [archiveResult, setArchiveResult] = useState<ArchiveResult | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  // null = full panel; non-null = single-field editor
+  const [singleEditPath, setSingleEditPath] = useState<EditableDraftPath | null>(null);
+  const [primaryEntryIndex, setPrimaryEntryIndex] = useState<number>(-1);
 
   useEffect(() => {
     // Prefer a real ingest batch when the user just came from Upload.
@@ -55,8 +69,29 @@ export function ReviewScreen({ go }: { go: GoFn }) {
       .catch((e) => setReviewError(e instanceof Error ? e.message : "没有可复核的上传批次"));
   }, []);
 
+  // Compute primary entry index whenever batch changes — must match the
+  // "first successful entry" logic that batchToReview uses.
+  useEffect(() => {
+    if (!batch) {
+      setPrimaryEntryIndex(-1);
+      return;
+    }
+    const idx = batch.entries.findIndex((e) => e.result.ok);
+    setPrimaryEntryIndex(idx);
+  }, [batch]);
+
+  function handleFieldSave(path: EditableDraftPath, raw: string | number | null) {
+    if (!batch || primaryEntryIndex < 0) return;
+    const updated = applyDraftEdit(batch, primaryEntryIndex, path, raw);
+    setBatch(updated);
+    setLastBatch(updated);
+    const fresh = batchToReview(updated);
+    if (fresh) setReview(fresh);
+  }
+
   async function handleArchive() {
     if (archiving) return;
+    if (editorOpen) return;
     setArchiving(true);
     setArchiveError(null);
     try {
@@ -299,6 +334,13 @@ export function ReviewScreen({ go }: { go: GoFn }) {
                   </div>
                 </div>
                 <button
+                  onClick={() => {
+                    if (!batch) return;
+                    setSingleEditPath("customer.full_name");
+                    setEditorOpen(true);
+                  }}
+                  disabled={!batch}
+                  title={!batch ? "复核数据来自示例，无法编辑" : undefined}
                   style={{
                     background: "var(--surface-3)",
                     border: "1px solid var(--ink-100)",
@@ -307,7 +349,8 @@ export function ReviewScreen({ go }: { go: GoFn }) {
                     fontSize: 12,
                     color: "var(--ink-700)",
                     fontWeight: 500,
-                    cursor: "pointer",
+                    cursor: batch ? "pointer" : "not-allowed",
+                    opacity: batch ? 1 : 0.5,
                   }}
                 >
                   更换
@@ -318,54 +361,98 @@ export function ReviewScreen({ go }: { go: GoFn }) {
             {/* Identified fields */}
             <Section title="识别信息">
               <div className="card" style={{ padding: "4px 0" }}>
-                {review.fields.map((f, i) => (
-                  <div key={f.key}>
-                    {i > 0 && <div style={{ height: 1, background: "var(--ink-100)", marginLeft: 14 }} />}
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}
-                    >
-                      <div style={{ width: 80, fontSize: 12, color: "var(--ink-500)" }}>{f.key}</div>
-                      <div style={{ flex: 1, fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
-                        {f.value}
+                {review.fields.map((f, i) => {
+                  const clickable = Boolean(f.path && batch);
+                  const handleClick = () => {
+                    if (!f.path || !batch) return;
+                    setSingleEditPath(f.path);
+                    setEditorOpen(true);
+                  };
+                  return (
+                    <div key={f.key}>
+                      {i > 0 && <div style={{ height: 1, background: "var(--ink-100)", marginLeft: 14 }} />}
+                      <div
+                        role={clickable ? "button" : undefined}
+                        tabIndex={clickable ? 0 : undefined}
+                        onClick={clickable ? handleClick : undefined}
+                        onKeyDown={
+                          clickable
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  handleClick();
+                                }
+                              }
+                            : undefined
+                        }
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "12px 14px",
+                          cursor: clickable ? "pointer" : "default",
+                        }}
+                      >
+                        <div style={{ width: 80, fontSize: 12, color: "var(--ink-500)" }}>{f.key}</div>
+                        <div style={{ flex: 1, fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
+                          {f.value}
+                        </div>
+                        {f.conf === "med" && (
+                          <span className="pill pill-warn" style={{ fontSize: 10 }}>
+                            需复核
+                          </span>
+                        )}
+                        <span style={{ color: "var(--ink-400)" }}>{I.chev(13)}</span>
                       </div>
-                      {f.conf === "med" && (
-                        <span className="pill pill-warn" style={{ fontSize: 10 }}>
-                          需复核
-                        </span>
-                      )}
-                      <span style={{ color: "var(--ink-400)" }}>{I.chev(13)}</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Section>
 
             {/* Missing fields */}
-            {review.missing.length > 0 && (
-              <Section title="待补充字段">
-                <div
-                  className="card"
-                  style={{ padding: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
-                >
-                  <span style={{ color: "var(--warn-500)" }}>{I.warn(14)}</span>
-                  <span style={{ fontSize: 12, color: "var(--ink-500)" }}>未识别到：</span>
-                  {review.missing.map((m) => (
-                    <button
-                      key={m}
-                      className="pill pill-warn"
-                      style={{
-                        fontSize: 11,
-                        cursor: "pointer",
-                        border: "1px dashed #e5b873",
-                        background: "#fff7e8",
-                      }}
-                    >
-                      + {m}
-                    </button>
-                  ))}
-                </div>
-              </Section>
-            )}
+            {(() => {
+              const missingItems: { path?: EditableDraftPath; label: string }[] =
+                review.missingFields && review.missingFields.length
+                  ? review.missingFields.map((m) => ({ path: m.path, label: m.label }))
+                  : review.missing.map((m) => ({ label: m }));
+              if (missingItems.length === 0) return null;
+              return (
+                <Section title="待补充字段">
+                  <div
+                    className="card"
+                    style={{ padding: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+                  >
+                    <span style={{ color: "var(--warn-500)" }}>{I.warn(14)}</span>
+                    <span style={{ fontSize: 12, color: "var(--ink-500)" }}>未识别到：</span>
+                    {missingItems.map((item) => {
+                      const clickable = Boolean(item.path && batch);
+                      return (
+                        <button
+                          key={item.label}
+                          className="pill pill-warn"
+                          onClick={() => {
+                            if (!item.path || !batch) return;
+                            setSingleEditPath(item.path);
+                            setEditorOpen(true);
+                          }}
+                          disabled={!clickable}
+                          style={{
+                            fontSize: 11,
+                            cursor: clickable ? "pointer" : "not-allowed",
+                            border: "1px dashed #e5b873",
+                            background: "#fff7e8",
+                            opacity: clickable ? 1 : 0.6,
+                          }}
+                        >
+                          + {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Section>
+              );
+            })()}
 
             {review.schemaSummary && (
               <SchemaSummarySection summary={review.schemaSummary} />
@@ -515,7 +602,16 @@ export function ReviewScreen({ go }: { go: GoFn }) {
           >
             {archiving ? "处理中…" : "忽略"}
           </button>
-          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => go("upload")} disabled={archiving}>
+          <button
+            className="btn btn-secondary"
+            style={{ flex: 1 }}
+            onClick={() => {
+              setSingleEditPath(null);
+              setEditorOpen(true);
+            }}
+            disabled={archiving || done || !batch}
+            title={!batch ? "复核数据来自示例，无法编辑" : undefined}
+          >
             修改
           </button>
           <button className="btn btn-primary" style={{ flex: 1.4 }} onClick={handleArchive} disabled={archiving}>
@@ -530,6 +626,21 @@ export function ReviewScreen({ go }: { go: GoFn }) {
           label={showEvidence}
           onClose={() => setShowEvidence(null)}
           isDesktop={isDesktop}
+        />
+      )}
+
+      {/* Edit panel */}
+      {editorOpen && (
+        <EditPanel
+          batch={batch}
+          entryIndex={primaryEntryIndex}
+          onlyPath={singleEditPath}
+          isDesktop={isDesktop}
+          onClose={() => {
+            setEditorOpen(false);
+            setSingleEditPath(null);
+          }}
+          onSave={handleFieldSave}
         />
       )}
     </div>
@@ -880,6 +991,198 @@ function EvidenceSheet({
             <span style={{ color: "var(--ai-500)" }}>{I.spark(12)}</span>
             高亮内容由 AI 标注，对应"承诺事项"和"风险线索"
           </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Editable fields surfaced by the panel. Order matches the unified draft
+// shape so reviewers see customer → contract → order top-down.
+const ALL_EDITABLE: EditableFieldMeta[] = [
+  { path: "customer.full_name", label: "客户名称", kind: "text" },
+  { path: "customer.short_name", label: "简称", kind: "text" },
+  { path: "customer.address", label: "地址", kind: "text" },
+  { path: "customer.tax_id", label: "税号", kind: "text" },
+  { path: "contract.contract_no_external", label: "合同号", kind: "text" },
+  { path: "contract.signing_date", label: "签订日期", kind: "date" },
+  { path: "contract.effective_date", label: "生效日期", kind: "date" },
+  { path: "contract.expiry_date", label: "到期日期", kind: "date" },
+  { path: "order.amount_total", label: "合同金额", kind: "amount" },
+  { path: "order.amount_currency", label: "币种", kind: "text" },
+  { path: "order.delivery_promised_date", label: "承诺交期", kind: "date" },
+  { path: "order.delivery_address", label: "交付地址", kind: "text" },
+  { path: "order.description", label: "订单描述", kind: "text" },
+];
+
+function readDraftValue(
+  batch: Batch | null,
+  entryIndex: number,
+  path: EditableDraftPath,
+): string {
+  if (!batch || entryIndex < 0) return "";
+  const entry = batch.entries[entryIndex];
+  if (!entry || !entry.result.ok) return "";
+  const draft = entry.result.raw.draft as Record<string, unknown>;
+  const [section, leaf] = path.split(".") as [string, string];
+  const sectionObj = draft[section];
+  if (!sectionObj || typeof sectionObj !== "object") return "";
+  const v = (sectionObj as Record<string, unknown>)[leaf];
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v;
+  return "";
+}
+
+function EditPanel({
+  batch,
+  entryIndex,
+  onlyPath,
+  onClose,
+  onSave,
+  isDesktop,
+}: {
+  batch: Batch | null;
+  entryIndex: number;
+  onlyPath: EditableDraftPath | null;
+  onClose: () => void;
+  onSave: (path: EditableDraftPath, value: string | number | null) => void;
+  isDesktop: boolean;
+}) {
+  const visible = onlyPath
+    ? ALL_EDITABLE.filter((f) => f.path === onlyPath)
+    : ALL_EDITABLE;
+
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const f of visible) {
+      initial[f.path] = readDraftValue(batch, entryIndex, f.path);
+    }
+    return initial;
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function handleSave() {
+    const nextErrors: Record<string, string> = {};
+    const updates: Array<{ path: EditableDraftPath; value: string | number | null }> = [];
+    for (const f of visible) {
+      const raw = (values[f.path] ?? "").trim();
+      if (f.kind === "amount") {
+        const parsed = parseAmountInput(raw);
+        if (!parsed.ok) {
+          nextErrors[f.path] = parsed.error;
+          continue;
+        }
+        updates.push({ path: f.path, value: parsed.value });
+      } else {
+        updates.push({ path: f.path, value: raw === "" ? null : raw });
+      }
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+    setErrors({});
+    for (const u of updates) onSave(u.path, u.value);
+    onClose();
+  }
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.35)",
+          zIndex: 100,
+        }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          left: isDesktop ? "50%" : 16,
+          top: isDesktop ? "50%" : "auto",
+          bottom: isDesktop ? "auto" : 16,
+          right: isDesktop ? "auto" : 16,
+          transform: isDesktop ? "translate(-50%, -50%)" : undefined,
+          width: isDesktop ? 520 : undefined,
+          maxHeight: "85vh",
+          background: "var(--surface)",
+          border: "1px solid var(--ink-100)",
+          borderRadius: 14,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+          zIndex: 101,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ padding: "14px 18px 8px", borderBottom: "1px solid var(--ink-100)" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
+            {onlyPath ? "修改字段" : "修改提取结果"}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+            {onlyPath ? "改完点保存写回当前草稿" : "改完点保存，未填写的字段保持原值"}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px" }}>
+          {visible.map((f) => (
+            <div key={f.path} style={{ marginBottom: 12 }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--ink-500)",
+                  marginBottom: 4,
+                }}
+              >
+                {f.label}
+              </label>
+              <input
+                type={f.kind === "date" ? "date" : "text"}
+                inputMode={f.kind === "amount" ? "decimal" : undefined}
+                value={values[f.path] ?? ""}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [f.path]: e.target.value }))
+                }
+                placeholder={f.kind === "amount" ? "数字，可空" : ""}
+                style={{
+                  width: "100%",
+                  fontSize: 14,
+                  padding: "8px 10px",
+                  border: `1px solid ${errors[f.path] ? "var(--risk-500)" : "var(--ink-100)"}`,
+                  borderRadius: 8,
+                  background: "var(--surface)",
+                  color: "var(--ink-900)",
+                  boxSizing: "border-box",
+                }}
+              />
+              {errors[f.path] && (
+                <div style={{ fontSize: 11, color: "var(--risk-500)", marginTop: 4 }}>
+                  {errors[f.path]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            padding: "12px 18px",
+            borderTop: "1px solid var(--ink-100)",
+          }}
+        >
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>
+            取消
+          </button>
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSave}>
+            保存
+          </button>
         </div>
       </div>
     </>
