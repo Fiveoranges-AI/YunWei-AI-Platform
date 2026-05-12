@@ -103,10 +103,35 @@ export type ReviewExtraction = {
   conf: Confidence;
 };
 
+export type EditableDraftPath =
+  | "customer.full_name"
+  | "customer.short_name"
+  | "customer.address"
+  | "customer.tax_id"
+  | "contract.contract_no_external"
+  | "contract.signing_date"
+  | "contract.effective_date"
+  | "contract.expiry_date"
+  | "order.amount_total"
+  | "order.amount_currency"
+  | "order.delivery_promised_date"
+  | "order.delivery_address"
+  | "order.description";
+
+export type EditableFieldKind = "text" | "amount" | "date";
+
+export type EditableFieldMeta = {
+  path: EditableDraftPath;
+  label: string;
+  kind: EditableFieldKind;
+};
+
 export type ReviewField = {
   key: string;
   value: string;
   conf: Confidence;
+  path?: EditableDraftPath;
+  kind?: EditableFieldKind;
 };
 
 export type ReviewEvidence = {
@@ -155,6 +180,7 @@ export type Review = {
   fields: ReviewField[];
   extractions: ReviewExtraction[];
   missing: string[];
+  missingFields?: EditableFieldMeta[];
   evidence: ReviewEvidence[];
   schemaSummary?: SchemaSummary;
 };
