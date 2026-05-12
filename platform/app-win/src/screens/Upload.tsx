@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
 import {
-  setLastBatch,
-  uploadPastedText,
-  uploadStagedFile,
-  type IngestProgress,
-  type IngestResult,
+  cancelIngestJob,
+  createIngestJobs,
+  listIngestJobs,
+  retryIngestJob,
+  type IngestJob,
+  type IngestJobStage,
+  type IngestJobStatus,
 } from "../api/ingest";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
+import { fmtRelative } from "../lib/format";
 import { markCustomersChanged } from "../lib/customerRefresh";
-
-type StagedStatus = "idle" | "uploading" | "done" | "error" | "unsupported";
 
 type StagedSourceHint = "file" | "camera";
 
@@ -20,26 +21,25 @@ type StagedFile = {
   name: string;
   sourceHint: StagedSourceHint;
   blob: File;
-  status: StagedStatus;
-  error?: string;
-  documentId?: string;
-  progressStage?: string;
-  progressMessage?: string;
   previewUrl?: string; // object URL for image previews; revoked on remove/unmount
 };
 
-type PastedStatus = "idle" | "uploading" | "done" | "error";
+const ACTIVE_POLL_MS = 2500;
+const IDLE_POLL_MS = 6000;
+const ERROR_POLL_MS = 5000;
 
 export function UploadScreen({ go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
   const [pasted, setPasted] = useState("");
-  const [pastedStatus, setPastedStatus] = useState<PastedStatus>("idle");
-  const [pastedProgress, setPastedProgress] = useState<{ stage?: string; message?: string }>({});
-  const [pastedError, setPastedError] = useState<string | null>(null);
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [activeJobs, setActiveJobs] = useState<IngestJob[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyJobs, setHistoryJobs] = useState<IngestJob[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +54,6 @@ export function UploadScreen({ go }: { go: GoFn }) {
         name: blob.name,
         sourceHint,
         blob,
-        status: "idle",
         previewUrl,
       },
     ]);
@@ -66,21 +65,6 @@ export function UploadScreen({ go }: { go: GoFn }) {
       return f.filter((x) => x.id !== id);
     });
   }
-  function applyProgress(id: string, event: IngestProgress) {
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? {
-              ...f,
-              status: "uploading",
-              progressStage: event.stage,
-              progressMessage: event.message,
-              error: undefined,
-            }
-          : f,
-      ),
-    );
-  }
 
   // Free any unrevoked object URLs when the screen unmounts (tab switch, etc.).
   useEffect(() => {
@@ -91,6 +75,52 @@ export function UploadScreen({ go }: { go: GoFn }) {
       });
     };
   }, []);
+
+  // Poll active jobs while mounted. Cadence speeds up while anything is
+  // queued/running and slows when the queue is idle. Stops on unmount.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function tick() {
+      try {
+        const rows = await listIngestJobs("active", 50);
+        if (cancelled) return;
+        setActiveJobs(rows);
+        const hasInFlight = rows.some(
+          (j) => j.status === "queued" || j.status === "running",
+        );
+        timer = window.setTimeout(tick, hasInFlight ? ACTIVE_POLL_MS : IDLE_POLL_MS);
+      } catch {
+        if (cancelled) return;
+        timer = window.setTimeout(tick, ERROR_POLL_MS);
+      }
+    }
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
+  // History is lazy — only fetched once the user opens the panel.
+  useEffect(() => {
+    if (!showHistory) return;
+    let cancelled = false;
+    setHistoryError(null);
+    listIngestJobs("history", 50)
+      .then((rows) => {
+        if (!cancelled) setHistoryJobs(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setHistoryError(e instanceof Error ? e.message : "历史加载失败");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showHistory]);
 
   function handlePicked(e: ChangeEvent<HTMLInputElement>, sourceHint: StagedSourceHint) {
     const list = e.target.files;
@@ -126,119 +156,92 @@ export function UploadScreen({ go }: { go: GoFn }) {
     }
   }
 
+  async function refreshActive() {
+    try {
+      const rows = await listIngestJobs("active", 50);
+      setActiveJobs(rows);
+    } catch {
+      /* swallow — next poll tick will recover */
+    }
+  }
+
+  async function refreshHistory() {
+    if (!showHistory) return;
+    try {
+      const rows = await listIngestJobs("history", 50);
+      setHistoryJobs(rows);
+    } catch {
+      /* swallow */
+    }
+  }
+
   async function handleSubmit() {
     if (submitting) return;
-    const idleFiles = files.filter((f) => f.status === "idle" || f.status === "error");
     const trimmedText = pasted.trim();
-    const hasPending = idleFiles.length > 0 || (trimmedText.length > 0 && pastedStatus !== "done");
-
-    if (!hasPending) {
-      // Nothing left to upload — if anything's already done, just navigate.
-      if (files.some((f) => f.status === "done") || pastedStatus === "done") {
-        go("review");
-      }
-      return;
-    }
+    const hasFiles = files.length > 0;
+    const hasText = trimmedText.length > 0;
+    if (!hasFiles && !hasText) return;
 
     setSubmitting(true);
-    if (idleFiles.length) {
-      setFiles((prev) =>
-        prev.map((f) =>
-          idleFiles.find((x) => x.id === f.id)
-            ? { ...f, status: "uploading", progressStage: "upload", progressMessage: "等待上传", error: undefined }
-            : f,
-        ),
-      );
-    }
-    if (trimmedText && pastedStatus !== "done") {
-      setPastedStatus("uploading");
-      setPastedProgress({ stage: "upload", message: "等待上传" });
-      setPastedError(null);
-    }
+    setSubmitError(null);
+    try {
+      // Source hint is per-batch in the job API. When a camera capture is
+      // mixed in with regular files we still tag the batch as "file" — the
+      // backend uses source_hint loosely for routing/storage.
+      const anyCamera = files.some((f) => f.sourceHint === "camera");
+      const onlyText = !hasFiles && hasText;
+      const sourceHint: "file" | "camera" | "pasted_text" = onlyText
+        ? "pasted_text"
+        : anyCamera && !files.some((f) => f.sourceHint !== "camera")
+          ? "camera"
+          : "file";
 
-    type Outcome = { kind: "file"; id: string; result: IngestResult } | { kind: "text"; result: IngestResult };
+      await createIngestJobs({
+        files: files.map((f) => f.blob),
+        text: hasText ? trimmedText : undefined,
+        sourceHint,
+      });
 
-    const fileTasks: Promise<Outcome>[] = idleFiles.map(async (f) => ({
-      kind: "file" as const,
-      id: f.id,
-      result: await uploadStagedFile(f.blob, f.sourceHint, (event) => applyProgress(f.id, event)),
-    }));
+      // Clear staged inputs — the jobs now live in activeJobs / polling.
+      for (const f of files) if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      setFiles([]);
+      setPasted("");
 
-    const textTask: Promise<Outcome>[] = trimmedText && pastedStatus !== "done"
-      ? [
-          (async () => ({
-            kind: "text" as const,
-            result: await uploadPastedText(trimmedText, (event) => {
-              setPastedProgress({ stage: event.stage, message: event.message });
-            }),
-          }))(),
-        ]
-      : [];
-
-    const outcomes = await Promise.all([...fileTasks, ...textTask]);
-
-    setFiles((prev) =>
-      prev.map((f) => {
-        const r = outcomes.find((o): o is Extract<Outcome, { kind: "file" }> =>
-          o.kind === "file" && o.id === f.id,
-        );
-        if (!r) return f;
-        if (r.result.ok) {
-          return {
-            ...f,
-            status: "done",
-            documentId: r.result.documentId,
-            progressStage: "done",
-            progressMessage: "草稿已生成，等待复核",
-            error: undefined,
-          };
-        }
-        return {
-          ...f,
-          status: r.result.unsupported ? "unsupported" : "error",
-          progressStage: r.result.unsupported ? undefined : f.progressStage ?? "upload",
-          progressMessage: r.result.unsupported ? undefined : r.result.error,
-          error: r.result.error,
-        };
-      }),
-    );
-
-    const textOutcome = outcomes.find((o): o is Extract<Outcome, { kind: "text" }> => o.kind === "text");
-    if (textOutcome) {
-      if (textOutcome.result.ok) {
-        setPastedStatus("done");
-        setPastedProgress({ stage: "done", message: "草稿已生成，等待复核" });
-        setPastedError(null);
-      } else {
-        setPastedStatus("error");
-        setPastedError(textOutcome.result.error);
-      }
-    }
-
-    setSubmitting(false);
-
-    const anySucceeded = outcomes.some((o) => o.result.ok);
-    if (anySucceeded) {
-      // Track customer cache invalidation. For the unified pipeline, the
-      // customer is only persisted on /confirm — but nudging the cache here
-      // means the customer list refreshes after the user finishes the Review
-      // archive flow without an extra round-trip.
+      // Nudge the customer cache so the list refreshes once the user finishes
+      // the Review archive flow without an extra round-trip.
       markCustomersChanged();
 
-      // Hand the real backend payloads off to the Review screen so it can
-      // render the actual unified draft instead of MOCK_REVIEW.
-      const entries: { filename: string; result: IngestResult }[] = [];
-      for (const o of outcomes) {
-        if (o.kind === "file") {
-          const src = idleFiles.find((x) => x.id === o.id);
-          entries.push({ filename: src?.name ?? "", result: o.result });
-        } else {
-          entries.push({ filename: "粘贴文本", result: o.result });
-        }
-      }
-      setLastBatch({ entries });
-      // Brief pause so the success state is visible before transition.
-      window.setTimeout(() => go("review"), 600);
+      // Pull the latest active list immediately so the new cards appear
+      // without waiting for the next poll tick.
+      await refreshActive();
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "上传失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function onJobView(j: IngestJob) {
+    go("review", { jobId: j.id });
+  }
+
+  async function onJobRetry(j: IngestJob) {
+    try {
+      await retryIngestJob(j.id);
+      await refreshActive();
+      await refreshHistory();
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "重试失败");
+    }
+  }
+
+  async function onJobCancel(j: IngestJob) {
+    try {
+      await cancelIngestJob(j.id);
+      await refreshActive();
+      await refreshHistory();
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "取消失败");
     }
   }
 
@@ -418,12 +421,12 @@ export function UploadScreen({ go }: { go: GoFn }) {
         </div>
 
         {/* Staged items — sit between the action buttons (上传/拍照) and the
-            paste area (文字输入) so a freshly captured photo lands right
-            next to the camera button instead of below the textarea. */}
+            paste area (文字输入). After submit they move into the task panel
+            below. */}
         {(files.length > 0 || pasted.trim()) && (
           <div style={{ marginBottom: 12 }}>
             <div className="sec-h">
-              <h3>已上传 {total} 项</h3>
+              <h3>待提交 {total} 项</h3>
             </div>
             {files.map((f) => {
               const icon = iconForFile(f);
@@ -496,32 +499,20 @@ export function UploadScreen({ go }: { go: GoFn }) {
                       }}
                     >
                       <span>{describeSourceHint(f.sourceHint, f.blob)}</span>
-                      <StatusPill file={f} />
+                      <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
+                        {I.spark(9)} 待 AI 整理
+                      </span>
                     </div>
-                    {(f.status === "error" || f.status === "unsupported") && f.error && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: f.status === "error" ? "var(--risk-700)" : "var(--warn-700)",
-                          marginTop: 4,
-                          lineHeight: 1.4,
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {f.error}
-                      </div>
-                    )}
-                    {f.progressStage && f.status !== "unsupported" && <ProgressNodes file={f} />}
                   </div>
                   <button
                     onClick={() => removeFile(f.id)}
-                    disabled={f.status === "uploading"}
+                    disabled={submitting}
                     style={{
                       background: "transparent",
                       border: "none",
-                      cursor: f.status === "uploading" ? "not-allowed" : "pointer",
+                      cursor: submitting ? "not-allowed" : "pointer",
                       color: "var(--ink-400)",
-                      opacity: f.status === "uploading" ? 0.4 : 1,
+                      opacity: submitting ? 0.4 : 1,
                     }}
                   >
                     {I.close(16)}
@@ -561,39 +552,20 @@ export function UploadScreen({ go }: { go: GoFn }) {
                     }}
                   >
                     <span>{pasted.slice(0, 24)}…</span>
-                    <PastedStatusPill status={pastedStatus} error={pastedError} />
+                    <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
+                      {I.spark(9)} 待 AI 整理
+                    </span>
                   </div>
-                  {pastedStatus === "error" && pastedError && (
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--risk-700)",
-                        marginTop: 4,
-                        lineHeight: 1.4,
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      {pastedError}
-                    </div>
-                  )}
-                  {pastedStatus !== "idle" && (
-                    <PastedProgressNodes status={pastedStatus} progress={pastedProgress} />
-                  )}
                 </div>
                 <button
-                  onClick={() => {
-                    setPasted("");
-                    setPastedStatus("idle");
-                    setPastedProgress({});
-                    setPastedError(null);
-                  }}
-                  disabled={pastedStatus === "uploading"}
+                  onClick={() => setPasted("")}
+                  disabled={submitting}
                   style={{
                     background: "transparent",
                     border: "none",
-                    cursor: pastedStatus === "uploading" ? "not-allowed" : "pointer",
+                    cursor: submitting ? "not-allowed" : "pointer",
                     color: "var(--ink-400)",
-                    opacity: pastedStatus === "uploading" ? 0.4 : 1,
+                    opacity: submitting ? 0.4 : 1,
                   }}
                 >
                   {I.close(16)}
@@ -605,6 +577,118 @@ export function UploadScreen({ go }: { go: GoFn }) {
 
         {/* Mobile: paste area below */}
         {!isDesktop && <PasteArea pasted={pasted} setPasted={setPasted} compact={false} />}
+
+        {submitError && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid var(--risk-100)",
+              background: "#fff1f0",
+              color: "var(--risk-500)",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {submitError}
+          </div>
+        )}
+
+        {/* Job list — active + (optional) history */}
+        <div style={{ marginTop: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-700)", margin: 0 }}>
+              正在处理{activeJobs.length > 0 ? ` (${activeJobs.length})` : ""}
+            </h3>
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              style={{
+                fontSize: 11,
+                color: "var(--ink-500)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textDecoration: "underline",
+                padding: 0,
+              }}
+            >
+              {showHistory ? "隐藏历史" : "查看历史"}
+            </button>
+          </div>
+
+          {activeJobs.length === 0 && (
+            <div
+              className="card"
+              style={{
+                padding: 14,
+                fontSize: 12,
+                color: "var(--ink-500)",
+                textAlign: "center",
+              }}
+            >
+              暂无正在处理的任务
+            </div>
+          )}
+          {activeJobs.map((j) => (
+            <JobCard
+              key={j.id}
+              job={j}
+              onView={onJobView}
+              onRetry={onJobRetry}
+              onCancel={onJobCancel}
+            />
+          ))}
+
+          {showHistory && (
+            <div style={{ marginTop: 12 }}>
+              <h3
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--ink-500)",
+                  margin: "0 0 8px",
+                }}
+              >
+                历史任务
+              </h3>
+              {historyError && (
+                <div style={{ fontSize: 11, color: "var(--risk-500)", marginBottom: 8 }}>
+                  {historyError}
+                </div>
+              )}
+              {!historyError && historyJobs.length === 0 && (
+                <div
+                  className="card"
+                  style={{
+                    padding: 14,
+                    fontSize: 12,
+                    color: "var(--ink-500)",
+                    textAlign: "center",
+                  }}
+                >
+                  暂无历史任务
+                </div>
+              )}
+              {historyJobs.map((j) => (
+                <JobCard
+                  key={j.id}
+                  job={j}
+                  onView={onJobView}
+                  onRetry={onJobRetry}
+                  onCancel={onJobCancel}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Bottom CTA */}
@@ -629,7 +713,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
           >
             {I.spark(15, "#fff")}
             <span>
-              {submitting ? "AI 整理中…" : `开始 AI 整理 ${ready ? `（${total} 项）` : ""}`}
+              {submitting ? "提交中…" : `加入处理队列 ${ready ? `（${total} 项）` : ""}`}
             </span>
           </button>
         </div>
@@ -709,279 +793,176 @@ function describeSourceHint(hint: StagedSourceHint, blob: File): string {
   return "文件";
 }
 
-type ProgressNode = {
-  key: string;
-  label: string;
+// ───────────── Job card ─────────────
+
+const STATUS_PILL: Record<
+  IngestJobStatus,
+  { className: string; label: string }
+> = {
+  queued: { className: "pill pill-ai", label: "排队中" },
+  running: { className: "pill pill-ai", label: "处理中" },
+  extracted: { className: "pill pill-ok", label: "草稿就绪" },
+  confirmed: { className: "pill pill-ok", label: "已归档" },
+  failed: { className: "pill pill-risk", label: "失败" },
+  canceled: { className: "pill pill-warn", label: "已取消" },
 };
 
-// Unified pipeline stages — same nodes regardless of document kind.
-// Key matches the backend's emit_progress() stage strings; ``extract`` is a
-// virtual aggregator across identity/commercial/ops_extract.
-const PIPELINE_NODES: ProgressNode[] = [
-  { key: "upload", label: "上传" },
-  { key: "stored", label: "保存" },
-  { key: "ocr", label: "OCR/文本化" },
-  { key: "plan", label: "规划" },
-  { key: "extract", label: "抽取" },
-  { key: "merge", label: "合并" },
-  { key: "done", label: "草稿" },
-];
-
-const STAGE_TO_NODE: Record<string, string> = {
-  upload: "upload",
-  uploading: "upload",
-  received: "stored",
-  evidence: "stored",
-  stored: "stored",
-  ocr: "ocr",
-  plan: "plan",
-  plan_done: "plan",
-  route: "plan",
-  identity_extract: "extract",
-  identity_done: "extract",
-  commercial_extract: "extract",
-  commercial_done: "extract",
-  ops_extract: "extract",
-  ops_done: "extract",
-  extract: "extract",
-  merge: "merge",
-  auto: "stored",
-  auto_done: "done",
-  done: "done",
+const STAGE_LABEL: Record<IngestJobStage, string> = {
+  received: "接收",
+  stored: "保存",
+  ocr: "OCR/文本化",
+  route: "Schema 路由",
+  extract: "字段抽取",
+  merge: "结果合并",
+  draft: "生成草稿",
+  done: "完成",
 };
 
-function nodeIndexForStage(stage: string | undefined): number {
-  if (!stage) return 0;
-  const node = STAGE_TO_NODE[stage] ?? stage;
-  const idx = PIPELINE_NODES.findIndex((n) => n.key === node);
-  return idx >= 0 ? idx : 0;
-}
+function JobCard({
+  job,
+  onView,
+  onRetry,
+  onCancel,
+}: {
+  job: IngestJob;
+  onView: (j: IngestJob) => void;
+  onRetry: (j: IngestJob) => void;
+  onCancel: (j: IngestJob) => void;
+}) {
+  const status = STATUS_PILL[job.status];
+  const isActive = job.status === "queued" || job.status === "running";
+  const canCancel = isActive || job.status === "extracted";
+  const canRetry = job.status === "failed" || job.status === "canceled";
+  const canView = job.status === "extracted" || job.status === "confirmed";
 
-function ProgressNodes({ file }: { file: StagedFile }) {
-  const nodes = PIPELINE_NODES;
-  const rawIndex = nodeIndexForStage(file.progressStage);
-  const activeIndex = file.status === "done" ? nodes.length - 1 : Math.max(rawIndex, 0);
+  const when = job.finished_at ?? job.updated_at ?? job.created_at;
 
   return (
-    <div style={{ marginTop: 9 }}>
-      <ProgressStrip
-        nodes={nodes}
-        activeIndex={activeIndex}
-        status={file.status === "done" ? "done" : file.status === "error" ? "error" : "uploading"}
-      />
-      {file.progressMessage && (
+    <div
+      className="card"
+      style={{ padding: 12, marginBottom: 8, display: "flex", gap: 12, alignItems: "flex-start" }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 10,
+          background: "var(--surface-3)",
+          color: "var(--ink-600)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {job.source_hint === "pasted_text"
+          ? I.chat(16)
+          : job.source_hint === "camera"
+            ? I.camera(16)
+            : I.doc(16)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            marginTop: 6,
-            fontSize: 11,
-            color: file.status === "error" ? "var(--risk-700)" : "var(--ink-500)",
-            lineHeight: 1.4,
-            wordBreak: "break-word",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "var(--ink-900)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
-          {file.progressMessage}
+          {job.original_filename}
         </div>
-      )}
-    </div>
-  );
-}
-
-function PastedProgressNodes({
-  status,
-  progress,
-}: {
-  status: PastedStatus;
-  progress: { stage?: string; message?: string };
-}) {
-  const nodes = PIPELINE_NODES;
-  const rawIndex = nodeIndexForStage(progress.stage);
-  const activeIndex = status === "done" ? nodes.length - 1 : Math.max(rawIndex, 0);
-  const stripStatus: ProgressStripStatus =
-    status === "done" ? "done" : status === "error" ? "error" : status === "uploading" ? "uploading" : "uploading";
-
-  return (
-    <div style={{ marginTop: 9 }}>
-      <ProgressStrip nodes={nodes} activeIndex={activeIndex} status={stripStatus} />
-      {progress.message && status !== "idle" && (
         <div
           style={{
-            marginTop: 6,
             fontSize: 11,
-            color: status === "error" ? "var(--risk-700)" : "var(--ink-500)",
-            lineHeight: 1.4,
-            wordBreak: "break-word",
+            color: "var(--ink-500)",
+            marginTop: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
           }}
         >
-          {progress.message}
-        </div>
-      )}
-    </div>
-  );
-}
-
-type ProgressStripStatus = "uploading" | "done" | "error";
-
-function ProgressStrip({
-  nodes,
-  activeIndex,
-  status,
-}: {
-  nodes: ProgressNode[];
-  activeIndex: number;
-  status: ProgressStripStatus;
-}) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {nodes.map((node, index) => {
-        const isDone = status === "done" || index < activeIndex;
-        const isActive = status === "uploading" && index === activeIndex;
-        const isError = status === "error" && index === activeIndex;
-        const color = isError
-          ? "var(--risk-700)"
-          : isDone
-            ? "var(--ok-700)"
-            : isActive
-              ? "var(--ai-500)"
-              : "var(--ink-400)";
-        const background = isError
-          ? "var(--risk-100)"
-          : isDone
-            ? "var(--ok-100)"
-            : isActive
-              ? "var(--ai-100)"
-              : "var(--surface-3)";
-        return (
-          <span
-            key={node.key}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              minHeight: 22,
-              padding: "2px 7px 2px 5px",
-              borderRadius: 7,
-              background,
-              color,
-              fontSize: 10,
-              fontWeight: 700,
-              lineHeight: 1,
-              whiteSpace: "nowrap",
-            }}
-          >
+          <span className={status.className} style={{ fontSize: 10, padding: "1px 6px" }}>
+            {status.label}
+          </span>
+          {(isActive || job.status === "extracted") && (
             <span
               style={{
-                width: 12,
-                height: 12,
+                fontSize: 10,
+                padding: "1px 6px",
                 borderRadius: 6,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: isDone || isError ? color : "transparent",
-                color: isDone || isError ? "#fff" : color,
-                border: isDone || isError ? "none" : `1px solid ${color}`,
-                flex: "0 0 auto",
+                background: "var(--surface-3)",
+                color: "var(--ink-600)",
               }}
             >
-              {isError ? I.warn(9, "#fff") : isDone ? I.check(9, "#fff") : null}
+              {STAGE_LABEL[job.stage] ?? job.stage}
             </span>
-            {node.label}
-          </span>
-        );
-      })}
+          )}
+          {job.attempts > 1 && (
+            <span style={{ fontSize: 10, color: "var(--ink-500)" }}>第 {job.attempts} 次</span>
+          )}
+          {when && <span style={{ fontSize: 10, color: "var(--ink-400)" }}>{fmtRelative(when)}</span>}
+        </div>
+        {job.progress_message && job.status !== "failed" && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--ink-500)",
+              marginTop: 4,
+              lineHeight: 1.4,
+              wordBreak: "break-word",
+            }}
+          >
+            {job.progress_message}
+          </div>
+        )}
+        {job.error_message && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--risk-700)",
+              marginTop: 4,
+              lineHeight: 1.4,
+              wordBreak: "break-word",
+            }}
+          >
+            {job.error_message}
+          </div>
+        )}
+        <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {canView && (
+            <button
+              onClick={() => onView(job)}
+              className="btn btn-primary"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+            >
+              {job.status === "confirmed" ? "查看" : "查看结果"}
+            </button>
+          )}
+          {canRetry && (
+            <button
+              onClick={() => onRetry(job)}
+              className="btn btn-secondary"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+            >
+              重试
+            </button>
+          )}
+          {canCancel && (
+            <button
+              onClick={() => onCancel(job)}
+              className="btn btn-secondary"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+            >
+              取消
+            </button>
+          )}
+        </div>
+      </div>
     </div>
-  );
-}
-
-function StatusPill({ file }: { file: StagedFile }) {
-  if (file.status === "idle") {
-    return (
-      <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
-        {I.spark(9)} 待 AI 整理
-      </span>
-    );
-  }
-  if (file.status === "uploading") {
-    return (
-      <span
-        className="pill"
-        style={{
-          fontSize: 10,
-          padding: "1px 6px",
-          background: "var(--ai-100)",
-          color: "var(--ai-500)",
-        }}
-      >
-        上传中…
-      </span>
-    );
-  }
-  if (file.status === "done") {
-    return (
-      <span className="pill pill-ok" style={{ fontSize: 10, padding: "1px 6px" }}>
-        ✓ 草稿已生成
-      </span>
-    );
-  }
-  if (file.status === "unsupported") {
-    return (
-      <span
-        className="pill pill-warn"
-        style={{ fontSize: 10, padding: "1px 6px" }}
-        title={file.error}
-      >
-        暂不支持
-      </span>
-    );
-  }
-  return (
-    <span
-      className="pill pill-risk"
-      style={{ fontSize: 10, padding: "1px 6px" }}
-      title={file.error}
-    >
-      上传失败
-    </span>
-  );
-}
-
-function PastedStatusPill({ status, error }: { status: PastedStatus; error: string | null }) {
-  if (status === "idle") {
-    return (
-      <span className="pill pill-ai" style={{ fontSize: 10, padding: "1px 6px" }}>
-        {I.spark(9)} 待 AI 整理
-      </span>
-    );
-  }
-  if (status === "uploading") {
-    return (
-      <span
-        className="pill"
-        style={{
-          fontSize: 10,
-          padding: "1px 6px",
-          background: "var(--ai-100)",
-          color: "var(--ai-500)",
-        }}
-      >
-        上传中…
-      </span>
-    );
-  }
-  if (status === "done") {
-    return (
-      <span className="pill pill-ok" style={{ fontSize: 10, padding: "1px 6px" }}>
-        ✓ 草稿已生成
-      </span>
-    );
-  }
-  return (
-    <span
-      className="pill pill-risk"
-      style={{ fontSize: 10, padding: "1px 6px" }}
-      title={error ?? undefined}
-    >
-      上传失败
-    </span>
   );
 }
 

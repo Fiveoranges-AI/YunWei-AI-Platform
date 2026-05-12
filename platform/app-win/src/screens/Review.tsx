@@ -5,9 +5,13 @@ import {
   applyDraftEdit,
   archiveBatch,
   batchToReview,
+  buildAutoConfirmRequest,
   clearLastBatch,
+  confirmIngestJob,
+  getIngestJob,
   getLastBatch,
   ignoreBatch,
+  jobToBatch,
   parseAmountInput,
   setCustomerOverride,
   setLastBatch,
@@ -41,7 +45,14 @@ const EXTRACTION_STYLE: Record<
   contact: { icon: (s = 15) => I.customers(s), bg: "var(--brand-100)", fg: "var(--brand-600)" },
 };
 
-export function ReviewScreen({ go }: { go: GoFn }) {
+export function ReviewScreen({
+  go,
+  params,
+}: {
+  go: GoFn;
+  params?: Record<string, string>;
+}) {
+  const jobId = params?.jobId;
   const isDesktop = useIsDesktop();
   const [review, setReview] = useState<Review | null>(null);
   const [batch, setBatch] = useState<Batch | null>(null);
@@ -61,20 +72,61 @@ export function ReviewScreen({ go }: { go: GoFn }) {
   const [customersError, setCustomersError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Prefer a real ingest batch when the user just came from Upload.
-    // Fall back to mock only when /review was opened without an upload
-    // (e.g. directly tapping the tab) — keeps the design preview usable.
-    const batch = getLastBatch();
-    const fromBatch = batch ? batchToReview(batch) : null;
-    if (fromBatch) {
-      setBatch(batch);
-      setReview(fromBatch);
-      return;
+    let cancelled = false;
+    async function load() {
+      // 1) Preferred path: a job_id in the URL — survives refresh and is
+      //    how Upload.tsx hands off in job mode.
+      if (jobId) {
+        try {
+          const job = await getIngestJob(jobId);
+          if (cancelled) return;
+          const fromJob = jobToBatch(job);
+          if (!fromJob) {
+            setReviewError(
+              job.status === "failed"
+                ? job.error_message ?? "任务失败"
+                : job.status === "canceled"
+                  ? "任务已取消"
+                  : "任务尚未生成草稿",
+            );
+            return;
+          }
+          setBatch(fromJob);
+          setReview(batchToReview(fromJob));
+          setLastBatch(fromJob);
+          return;
+        } catch (e) {
+          if (cancelled) return;
+          setReviewError(e instanceof Error ? e.message : "任务加载失败");
+          return;
+        }
+      }
+      // 2) Legacy in-memory batch path (set by older flows / future fallback).
+      const inMem = getLastBatch();
+      const fromBatch = inMem ? batchToReview(inMem) : null;
+      if (fromBatch) {
+        if (!cancelled) {
+          setBatch(inMem);
+          setReview(fromBatch);
+        }
+        return;
+      }
+      // 3) Last resort: ask backend for a /review mock so the design preview
+      //    still works when /review is opened cold.
+      try {
+        const r = await getReview("last");
+        if (!cancelled) setReview(r);
+      } catch (e) {
+        if (!cancelled) {
+          setReviewError(e instanceof Error ? e.message : "没有可复核的上传批次");
+        }
+      }
     }
-    getReview("last")
-      .then(setReview)
-      .catch((e) => setReviewError(e instanceof Error ? e.message : "没有可复核的上传批次"));
-  }, []);
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
 
   // Compute primary entry index whenever batch changes — must match the
   // "first successful entry" logic that batchToReview uses.
@@ -159,6 +211,33 @@ export function ReviewScreen({ go }: { go: GoFn }) {
     setArchiveError(null);
     try {
       if (!batch) {
+        setDone(true);
+        return;
+      }
+      // Job-mode single-entry path: use the job-aware confirm so the job
+      // row flips to `confirmed` alongside the document. Multi-entry
+      // batches (legacy /auto flow) keep the per-document archive.
+      if (jobId && batch.entries.length === 1) {
+        const entry = batch.entries[0]!;
+        const customerIds: string[] = [];
+        const warnings: string[] = [];
+        if (entry.result.ok) {
+          const payload = buildAutoConfirmRequest(
+            entry.result.raw,
+            entry.customerDecisionOverride,
+          );
+          const confirmed = await confirmIngestJob(jobId, payload);
+          const cid = confirmed.created_entities?.customer_id;
+          if (cid) customerIds.push(cid);
+          if (confirmed.warnings) warnings.push(...confirmed.warnings);
+        }
+        clearLastBatch();
+        setArchiveResult({
+          confirmedDocuments: entry.result.ok ? 1 : 0,
+          customerIds,
+          warnings,
+        });
+        markCustomersChanged();
         setDone(true);
         return;
       }
