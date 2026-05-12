@@ -36,6 +36,32 @@ export type IngestPlan = {
   review_required: boolean;
 };
 
+// LLM schema router output — multi-label selection of the six canonical
+// pipelines. Surfaced by /auto as `route_plan`. Both LandingAI and Mistral
+// branches populate this; the legacy ``plan.extractors`` is still set for
+// backward compat (Mistral path) but is empty on the LandingAI path.
+export type SchemaPipelineName =
+  | "identity"
+  | "contract_order"
+  | "finance"
+  | "logistics"
+  | "manufacturing_requirement"
+  | "commitment_task_risk";
+
+export type RoutedPipelineSelection = {
+  name: SchemaPipelineName;
+  confidence: number;
+  reason?: string;
+};
+
+export type RoutePlan = {
+  primary_pipeline: SchemaPipelineName | null;
+  selected_pipelines: RoutedPipelineSelection[];
+  rejected_pipelines: RoutedPipelineSelection[];
+  document_summary: string;
+  needs_human_review: boolean;
+};
+
 // CustomerExtraction
 export type IdentityCustomer = {
   full_name: string | null;
@@ -250,6 +276,7 @@ export type AutoConfirmResponse = {
 
 export type AutoIngestRaw = {
   plan: IngestPlan;
+  route_plan?: RoutePlan | null;
   draft: UnifiedDraft;
   candidates: AutoCandidates;
   needs_review_fields: string[];
@@ -357,6 +384,7 @@ async function readNdjsonResult(
     error?: string;
     document_id?: string;
     plan?: IngestPlan;
+    route_plan?: RoutePlan | null;
     draft?: UnifiedDraft;
     candidates?: AutoCandidates;
     needs_review_fields?: string[];
@@ -422,6 +450,7 @@ function finalizeAutoResult(
     documentId: body.document_id,
     raw: {
       plan: body.plan ?? { targets: {}, extractors: [], reason: "", review_required: false },
+      route_plan: body.route_plan ?? null,
       draft: body.draft ?? emptyDraft(),
       candidates: body.candidates ?? { customer: [], contacts: [] },
       needs_review_fields: body.needs_review_fields ?? body.draft?.needs_review_fields ?? [],
@@ -737,25 +766,45 @@ const PATH_LABEL: Record<string, string> = {
   "order.delivery_address": "交货地址",
 };
 
-function planChannel(plan: IngestPlan): { channel: string; docType: string } {
-  const names = new Set(plan.extractors.map((e) => e.name));
-  // identity/commercial/ops are the unified planner's vocabulary; map them to
-  // human-friendly Chinese for the Review banner.
-  const parts: string[] = [];
-  if (names.has("identity")) parts.push("客户档案");
-  if (names.has("commercial")) parts.push("合同/订单");
-  if (names.has("ops")) parts.push("客户记忆");
-  const docType = parts.length ? parts.join(" + ") : "上传";
-  // Channel tag — show the most contract-like dimension first so the banner
-  // reads "合同 PDF" when contract data is present, "名片拍照" for identity-only,
-  // etc.
-  const channel = names.has("commercial")
+function planChannel(
+  plan: IngestPlan,
+  routePlan?: RoutePlan | null,
+): { channel: string; docType: string } {
+  // Prefer the new schema-level route plan when available; fall back to
+  // legacy extractor names for backward compatibility. The LandingAI path
+  // leaves ``plan.extractors`` empty, so without ``route_plan`` the banner
+  // would degrade to a generic "上传" tag.
+  const schemaNames = new Set<string>(
+    routePlan?.selected_pipelines.map((s) => s.name) ?? [],
+  );
+  const legacyNames = new Set<string>(plan.extractors.map((e) => e.name));
+
+  const has = (schemaName: string, legacyName: string): boolean =>
+    schemaNames.has(schemaName) || legacyNames.has(legacyName);
+
+  const docTypeParts: string[] = [];
+  if (has("identity", "identity")) docTypeParts.push("客户档案");
+  if (has("contract_order", "commercial")) docTypeParts.push("合同/订单");
+  if (schemaNames.has("manufacturing_requirement")) docTypeParts.push("生产要求");
+  if (schemaNames.has("finance")) docTypeParts.push("发票/对账");
+  if (schemaNames.has("logistics")) docTypeParts.push("送货/库存");
+  if (has("commitment_task_risk", "ops")) docTypeParts.push("客户记忆");
+  const docType = docTypeParts.length ? docTypeParts.join(" + ") : "上传";
+
+  // Channel tag — most prominent dimension first.
+  const channel = has("contract_order", "commercial")
     ? "合同 / 订单"
-    : names.has("identity")
-      ? "客户 / 名片"
-      : names.has("ops")
-        ? "聊天 / 备注"
-        : "上传";
+    : schemaNames.has("finance")
+      ? "发票 / 回款"
+      : schemaNames.has("logistics")
+        ? "送货 / 库存"
+        : schemaNames.has("manufacturing_requirement")
+          ? "规格 / 验收"
+          : has("identity", "identity")
+            ? "客户 / 名片"
+            : has("commitment_task_risk", "ops")
+              ? "聊天 / 备注"
+              : "上传";
   return { channel, docType };
 }
 
@@ -783,7 +832,7 @@ export function batchToReview(batch: Batch): Review | null {
     typeof draft.confidence_overall === "number" ? draft.confidence_overall : 0.7;
 
   // ── Channel / docType ─────────────────────────────────────
-  const { channel, docType } = planChannel(plan);
+  const { channel, docType } = planChannel(plan, primary.result.raw.route_plan);
 
   // ── Contact (first identified contact, if any) ────────────
   const firstContact = draft.contacts?.[0];

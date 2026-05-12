@@ -63,8 +63,9 @@ from yinhu_brain.services.ingest.unified_schemas import (
     AutoConfirmRequest,
     CommercialDraft,
     IdentityDraft,
-    IngestPlan,
     OpsDraft,
+    PipelineRoutePlan,
+    PipelineSelection,
     UnifiedDraft,
 )
 
@@ -428,22 +429,54 @@ def _stub_extractors(
     monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "ops", fake_ops)
 
 
-def _stub_planner_full_fanout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make plan_extraction return a plan that activates all three dims."""
+def _patch_route_schemas(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    selected: tuple[str, ...] | list[str] = (
+        "identity",
+        "contract_order",
+        "commitment_task_risk",
+    ),
+    needs_review: bool = False,
+    summary: str = "stubbed route",
+) -> None:
+    """Replace ``auto_module.route_schemas`` with a stub returning a
+    deterministic ``PipelineRoutePlan``.
 
-    async def fake_plan(*, session, document_id, ocr_text, modality, source_hint, progress=None):
-        return IngestPlan(
-            targets={"identity": 0.9, "commercial": 0.9, "ops": 0.9},
-            extractors=[
-                {"name": "identity", "confidence": 0.9},
-                {"name": "commercial", "confidence": 0.9},
-                {"name": "ops", "confidence": 0.9},
+    The /auto orchestrator now calls ``route_schemas`` (LLM-driven) instead of
+    the regex pipeline_router / heuristic plan_extraction. Tests that
+    previously stubbed ``plan_extraction`` should use this helper instead.
+    """
+
+    selected_list = list(selected)
+
+    async def fake_route_schemas(**kwargs):
+        return PipelineRoutePlan(
+            primary_pipeline=selected_list[0] if selected_list else None,
+            selected_pipelines=[
+                PipelineSelection(name=name, confidence=0.9, reason="test stub")
+                for name in selected_list
             ],
-            reason="test fan-out",
-            review_required=False,
+            document_summary=summary,
+            needs_human_review=needs_review,
         )
 
-    monkeypatch.setattr(auto_module, "plan_extraction", fake_plan)
+    monkeypatch.setattr(auto_module, "route_schemas", fake_route_schemas)
+
+
+def _stub_planner_full_fanout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ``route_schemas`` select all three Mistral-mapped schemas so the
+    three legacy extractors all fire.
+
+    Retained for backward compatibility with the existing fan-out tests —
+    callers want the same end-state (identity + commercial + ops all run)
+    that the legacy planner used to produce.
+    """
+    _patch_route_schemas(
+        monkeypatch,
+        selected=("identity", "contract_order", "commitment_task_risk"),
+        summary="test fan-out",
+    )
 
 
 @pytest.mark.asyncio
@@ -471,18 +504,23 @@ async def test_auto_ingest_text_path_returns_draft_and_candidates(monkeypatch) -
             assert result.draft.customer.full_name == "测试客户有限公司"
             assert result.draft.order is not None
             assert len(result.draft.events) == 1
-            # Plan exposes all three dims.
+            # Plan exposes all three dims (router → legacy extractor mapping).
             names = sorted(s.name for s in result.plan.extractors)
             assert names == ["commercial", "identity", "ops"]
 
             # Document row landed and carries the merged draft as raw_llm_response.
+            # The Mistral path now stores ``{provider, route_plan, draft}`` so
+            # the audit row captures both routing rationale and the merged
+            # payload — assert the nested shape.
             doc = (
                 await session.execute(select(Document).where(Document.id == result.document_id))
             ).scalar_one()
             assert doc.raw_llm_response is not None
             assert doc.review_status == DocumentReviewStatus.pending_review
             # The stored payload survived a round-trip.
-            assert doc.raw_llm_response["customer"]["full_name"] == "测试客户有限公司"
+            assert doc.raw_llm_response["draft"]["customer"]["full_name"] == "测试客户有限公司"
+            assert "route_plan" in doc.raw_llm_response
+            assert doc.raw_llm_response["route_plan"]["selected_pipelines"]
     finally:
         await engine.dispose()
 
@@ -928,28 +966,27 @@ async def test_auto_cancel_endpoint_409_when_already_confirmed() -> None:
 def _stub_planner_only(
     monkeypatch: pytest.MonkeyPatch, *names: str
 ) -> None:
-    """Make plan_extraction activate ONLY the named extractors.
+    """Make the router activate ONLY the legacy extractor(s) named in
+    ``names`` (``identity`` / ``commercial`` / ``ops``).
 
-    The unselected ones must not be invoked by the orchestrator — this is
-    the planner's whole point. Targets carry a real score so the plan
-    still reads as a deliberate choice, not "everything is 0".
+    The router speaks the canonical schema vocabulary, not the legacy
+    extractor names; this helper does the schema→extractor mapping in
+    reverse so existing callers stay readable. The unselected extractors
+    must not be invoked by the orchestrator — this is the router's whole
+    point. If the router fires every extractor anyway, the gating is dead
+    code.
     """
-
-    selections = [{"name": n, "confidence": 0.9} for n in names]
-
-    async def fake_plan(*, session, document_id, ocr_text, modality, source_hint, progress=None):
-        return IngestPlan(
-            targets={
-                "identity": 0.9 if "identity" in names else 0.2,
-                "commercial": 0.9 if "commercial" in names else 0.2,
-                "ops": 0.9 if "ops" in names else 0.2,
-            },
-            extractors=selections,
-            reason=f"only {','.join(names)}",
-            review_required=False,
-        )
-
-    monkeypatch.setattr(auto_module, "plan_extraction", fake_plan)
+    _legacy_to_schema = {
+        "identity": "identity",
+        "commercial": "contract_order",
+        "ops": "commitment_task_risk",
+    }
+    schema_names = [_legacy_to_schema[n] for n in names]
+    _patch_route_schemas(
+        monkeypatch,
+        selected=tuple(schema_names),
+        summary=f"only {','.join(names)}",
+    )
 
 
 def _counting_extractors(
@@ -1395,10 +1432,10 @@ async def test_auto_ingest_isolated_engines_do_not_leak_customers(monkeypatch) -
 @pytest.mark.asyncio
 async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) -> None:
     """When ``settings.document_ai_provider == 'landingai'``, the orchestrator
-    runs route_pipelines + extract_selected_pipelines + normalize_pipeline_results
-    instead of the legacy planner/extractor fan-out. The synthesized
-    ``UnifiedDraft`` carries the same identity + contract/order fields the
-    legacy path produced, plus the new ``pipeline_results`` audit list."""
+    runs route_schemas + extract_selected_pipelines + normalize_pipeline_results
+    instead of the legacy extractor fan-out. The synthesized ``UnifiedDraft``
+    carries the same identity + contract/order fields the legacy path
+    produced, plus the new ``pipeline_results`` audit list."""
     engine = await _make_engine()
     _patch_storage(monkeypatch)
     monkeypatch.setattr(auto_module.settings, "document_ai_provider", "landingai")
@@ -1433,12 +1470,9 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
             modality="pdf",
         )
 
-    async def fake_route_pipelines(**kwargs):
-        from yinhu_brain.services.ingest.unified_schemas import (
-            PipelineRoutePlan,
-            PipelineSelection,
-        )
-
+    async def fake_route_schemas(**kwargs):
+        # New signature: takes session + document_id alongside the existing
+        # markdown / modality / source_hint kwargs.
         return PipelineRoutePlan(
             primary_pipeline="contract_order",
             selected_pipelines=[
@@ -1466,7 +1500,7 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
         ]
 
     monkeypatch.setattr(auto_module, "collect_evidence", fake_collect_evidence)
-    monkeypatch.setattr(auto_module, "route_pipelines", fake_route_pipelines)
+    monkeypatch.setattr(auto_module, "route_schemas", fake_route_schemas)
     monkeypatch.setattr(
         auto_module, "extract_selected_pipelines", fake_extract_selected_pipelines
     )
@@ -1486,5 +1520,138 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
             assert result.draft.contract is not None
             assert result.draft.contract.contract_no_external == "HT-001"
             assert len(result.draft.pipeline_results) == 2
+    finally:
+        await engine.dispose()
+
+
+# ---------- LLM schema router rewire regressions -------------------------
+#
+# The /auto orchestrator now routes through ``llm_schema_router.route_schemas``
+# for both providers. These tests pin the contract:
+#   1. The legacy ``planner.plan_extraction`` must NOT be invoked from /auto.
+#   2. Schemas the Mistral provider can't handle (finance / logistics /
+#      manufacturing_requirement) surface as warnings, never silently drop.
+#   3. All six schemas pass through the router without a hard cap; the
+#      Mistral branch fires the three mapped extractors and warns about
+#      the rest, while review_required propagates from the router.
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_no_longer_calls_legacy_plan_extraction(monkeypatch) -> None:
+    """The /auto orchestrator must not depend on planner.plan_extraction
+    after the LLM router rewire — it now talks directly to route_schemas.
+    """
+    _patch_storage(monkeypatch)
+    _patch_route_schemas(
+        monkeypatch,
+        selected=("identity", "contract_order"),
+    )
+    _stub_extractors(monkeypatch)
+
+    async def boom_plan(*args, **kwargs):
+        raise AssertionError(
+            "legacy plan_extraction must not be called from /auto"
+        )
+
+    monkeypatch.setattr(planner_module, "plan_extraction", boom_plan)
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="测试合同 甲方 测试客户有限公司",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            # identity + contract_order schemas → identity + commercial
+            # extractors selected.
+            names = sorted(s.name for s in result.plan.extractors)
+            assert names == ["commercial", "identity"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_mistral_path_warns_on_unsupported_schemas(monkeypatch) -> None:
+    """When the router picks finance/logistics/manufacturing_requirement
+    under the Mistral provider, the orchestrator must surface a warning
+    instead of silently dropping them.
+    """
+    _patch_storage(monkeypatch)
+    _patch_route_schemas(
+        monkeypatch,
+        selected=("identity", "finance", "logistics"),
+    )
+    _stub_extractors(monkeypatch)
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="客户 测试有限公司 发票号 12345 送货签收",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            joined = " ".join(result.draft.warnings)
+            assert "finance" in joined
+            assert "logistics" in joined
+            # manufacturing_requirement was NOT selected → no warning.
+            assert "manufacturing_requirement" not in joined
+            # The one mapped schema fired its extractor.
+            names = [s.name for s in result.plan.extractors]
+            assert names == ["identity"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_no_hard_cap_on_selected_schemas(monkeypatch) -> None:
+    """All six schemas should pass through end-to-end without truncation.
+
+    Mistral provider: only identity / contract_order / commitment_task_risk
+    run as legacy extractors; the other three surface as warnings. The
+    router's ``needs_human_review`` flag must also reach ``draft.warnings``.
+    """
+    _patch_storage(monkeypatch)
+    _patch_route_schemas(
+        monkeypatch,
+        selected=(
+            "identity",
+            "contract_order",
+            "commitment_task_risk",
+            "finance",
+            "logistics",
+            "manufacturing_requirement",
+        ),
+        needs_review=True,
+    )
+    _stub_extractors(monkeypatch)
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="混合文档：合同+发票+送货+规格+承诺",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            joined = " ".join(result.draft.warnings)
+            for unsup in ("finance", "logistics", "manufacturing_requirement"):
+                assert unsup in joined, (
+                    f"expected unsupported schema {unsup!r} to warn, "
+                    f"got warnings={result.draft.warnings}"
+                )
+            # Router-requested review propagated.
+            assert any("review" in w for w in result.draft.warnings)
+            # Three legacy extractors fired.
+            names = sorted(s.name for s in result.plan.extractors)
+            assert names == ["commercial", "identity", "ops"]
+            assert result.plan.review_required is True
     finally:
         await engine.dispose()
