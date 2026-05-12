@@ -12,6 +12,8 @@
 
 import type {
   Confidence,
+  EditableDraftPath,
+  EditableFieldMeta,
   Review,
   ReviewEvidence,
   ReviewExtraction,
@@ -667,6 +669,92 @@ function contactWithCandidate(
   };
 }
 
+/**
+ * Immutably apply a single field edit to a batch entry's raw draft.
+ *
+ * - Writes `value` into `raw.draft.<path>`, creating intermediate objects
+ *   as needed.
+ * - Strips `path` from `raw.needs_review_fields` and
+ *   `raw.draft.needs_review_fields` if the new value is non-empty.
+ * - Preserves the rest of the batch unchanged (other entries untouched).
+ *
+ * Returns the new batch. Caller is responsible for updating React state +
+ * calling setLastBatch.
+ */
+export function applyDraftEdit(
+  batch: Batch,
+  entryIndex: number,
+  path: EditableDraftPath,
+  value: string | number | null,
+): Batch {
+  const entries = batch.entries.map((entry, i) => {
+    if (i !== entryIndex) return entry;
+    if (!entry.result.ok) return entry;
+
+    const raw = entry.result.raw;
+    const draft = raw.draft;
+
+    // Apply value to nested path (2 levels: section.field).
+    const [section, leaf] = path.split(".") as [string, string];
+    const oldSection = (draft as Record<string, unknown>)[section];
+    const sectionObj: Record<string, unknown> =
+      oldSection && typeof oldSection === "object"
+        ? { ...(oldSection as Record<string, unknown>) }
+        : {};
+    sectionObj[leaf] = value;
+
+    const newDraft = { ...draft, [section]: sectionObj } as UnifiedDraft;
+
+    // Prune needs_review_fields when the new value is non-empty.
+    const isEmpty =
+      value === null ||
+      value === undefined ||
+      (typeof value === "string" && value.trim() === "");
+    const filterPath = (paths: string[] | undefined): string[] =>
+      isEmpty ? paths ?? [] : (paths ?? []).filter((p) => p !== path);
+
+    const newRaw: AutoIngestRaw = {
+      ...raw,
+      draft: {
+        ...newDraft,
+        needs_review_fields: filterPath(newDraft.needs_review_fields),
+      },
+      needs_review_fields: filterPath(raw.needs_review_fields),
+    };
+
+    return {
+      ...entry,
+      result: { ...entry.result, raw: newRaw },
+    };
+  });
+
+  return { entries };
+}
+
+/**
+ * Parse a user-entered amount string. Returns:
+ * - { ok: true, value: null } for empty input
+ * - { ok: true, value: <number> } for a valid number
+ * - { ok: false, error: "..." } for invalid input
+ *
+ * Strips commas, ¥/￥/RMB prefixes, "元" suffix.
+ */
+export function parseAmountInput(
+  raw: string,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  const stripped = raw
+    .replace(/[,，]/g, "")
+    .replace(/[¥￥]/g, "")
+    .replace(/\bRMB\b/gi, "")
+    .replace(/元/g, "")
+    .trim();
+  if (stripped === "") return { ok: true, value: null };
+  const n = Number(stripped);
+  if (!Number.isFinite(n)) return { ok: false, error: "金额必须是数字" };
+  if (n < 0) return { ok: false, error: "金额不能为负数" };
+  return { ok: true, value: n };
+}
+
 export function buildAutoConfirmRequest(raw: AutoIngestRaw): AutoConfirmRequest {
   const draft = raw.draft;
   const customerCandidate = bestCandidate(raw.candidates?.customer, CUSTOMER_MERGE_THRESHOLD);
@@ -767,6 +855,32 @@ const PATH_LABEL: Record<string, string> = {
   "order.delivery_promised_date": "承诺交期",
   "order.delivery_address": "交货地址",
 };
+
+const EDITABLE_FIELD_META: Record<EditableDraftPath, EditableFieldMeta> = {
+  "customer.full_name":            { path: "customer.full_name",            label: "客户名称", kind: "text" },
+  "customer.short_name":           { path: "customer.short_name",           label: "简称",     kind: "text" },
+  "customer.address":              { path: "customer.address",              label: "地址",     kind: "text" },
+  "customer.tax_id":               { path: "customer.tax_id",               label: "税号",     kind: "text" },
+  "contract.contract_no_external": { path: "contract.contract_no_external", label: "合同号",   kind: "text" },
+  "contract.signing_date":         { path: "contract.signing_date",         label: "签订日期", kind: "date" },
+  "contract.effective_date":       { path: "contract.effective_date",       label: "生效日期", kind: "date" },
+  "contract.expiry_date":          { path: "contract.expiry_date",          label: "到期日期", kind: "date" },
+  "order.amount_total":            { path: "order.amount_total",            label: "合同金额", kind: "amount" },
+  "order.amount_currency":         { path: "order.amount_currency",         label: "币种",     kind: "text" },
+  "order.delivery_promised_date":  { path: "order.delivery_promised_date",  label: "承诺交期", kind: "date" },
+  "order.delivery_address":        { path: "order.delivery_address",        label: "交付地址", kind: "text" },
+  "order.description":             { path: "order.description",             label: "订单描述", kind: "text" },
+};
+
+export const EDITABLE_FIELDS: ReadonlyArray<EditableFieldMeta> =
+  Object.values(EDITABLE_FIELD_META);
+
+// Reverse map: backend needs_review_fields paths → label. Existing
+// PATH_LABEL handles display already; extend so any path with editable
+// metadata uses its EditableFieldMeta label.
+function metaForPath(path: string): EditableFieldMeta | null {
+  return (EDITABLE_FIELD_META as Record<string, EditableFieldMeta | undefined>)[path] ?? null;
+}
 
 function planChannel(
   plan: IngestPlan,
@@ -1068,22 +1182,58 @@ export function batchToReview(batch: Batch): Review | null {
   // ── Fields from unified draft ─────────────────────────────
   const fields: ReviewField[] = [];
   const c = draft.customer;
-  if (c?.full_name) fields.push({ key: "客户名称", value: c.full_name, conf: isLow("customer.full_name") });
-  if (c?.short_name) fields.push({ key: "简称", value: c.short_name, conf: isLow("customer.short_name") });
-  if (c?.address) fields.push({ key: "地址", value: c.address, conf: isLow("customer.address") });
-  if (c?.tax_id) fields.push({ key: "税号", value: c.tax_id, conf: isLow("customer.tax_id") });
+  if (c?.full_name)
+    fields.push({
+      key: "客户名称", value: c.full_name,
+      conf: isLow("customer.full_name"),
+      path: "customer.full_name", kind: "text",
+    });
+  if (c?.short_name)
+    fields.push({
+      key: "简称", value: c.short_name,
+      conf: isLow("customer.short_name"),
+      path: "customer.short_name", kind: "text",
+    });
+  if (c?.address)
+    fields.push({
+      key: "地址", value: c.address,
+      conf: isLow("customer.address"),
+      path: "customer.address", kind: "text",
+    });
+  if (c?.tax_id)
+    fields.push({
+      key: "税号", value: c.tax_id,
+      conf: isLow("customer.tax_id"),
+      path: "customer.tax_id", kind: "text",
+    });
   const co = draft.contract;
   if (co?.contract_no_external)
-    fields.push({ key: "合同号", value: co.contract_no_external, conf: isLow("contract.contract_no_external") });
+    fields.push({
+      key: "合同号", value: co.contract_no_external,
+      conf: isLow("contract.contract_no_external"),
+      path: "contract.contract_no_external", kind: "text",
+    });
   if (co?.signing_date)
-    fields.push({ key: "签订日期", value: co.signing_date, conf: isLow("contract.signing_date") });
+    fields.push({
+      key: "签订日期", value: co.signing_date,
+      conf: isLow("contract.signing_date"),
+      path: "contract.signing_date", kind: "date",
+    });
   const o = draft.order;
   if (o?.amount_total != null) {
     const v = `${o.amount_total} ${o.amount_currency ?? ""}`.trim();
-    fields.push({ key: "合同金额", value: v, conf: isLow("order.amount_total") });
+    fields.push({
+      key: "合同金额", value: v,
+      conf: isLow("order.amount_total"),
+      path: "order.amount_total", kind: "amount",
+    });
   }
   if (o?.delivery_promised_date)
-    fields.push({ key: "承诺交期", value: o.delivery_promised_date, conf: isLow("order.delivery_promised_date") });
+    fields.push({
+      key: "承诺交期", value: o.delivery_promised_date,
+      conf: isLow("order.delivery_promised_date"),
+      path: "order.delivery_promised_date", kind: "date",
+    });
 
   if (!fields.length) {
     successes.forEach((e, i) =>
@@ -1173,6 +1323,17 @@ export function batchToReview(batch: Batch): Review | null {
     .filter((label) => !fieldKeys.has(label))
     .slice(0, 8);
 
+  // Build structured missingFields with stable paths so the editor can
+  // open the right input. Falls back to plain string `missing` for paths
+  // without editable metadata.
+  const missingFields: EditableFieldMeta[] = [];
+  for (const path of needsReview) {
+    const m = metaForPath(path);
+    if (!m) continue;
+    if (fieldKeys.has(m.label)) continue;
+    missingFields.push(m);
+  }
+
   // ── Evidence — original filenames + warning previews ─────
   const warnings = draft.warnings ?? [];
   const evidence: ReviewEvidence[] = successes.map((e, i) => {
@@ -1199,6 +1360,7 @@ export function batchToReview(batch: Batch): Review | null {
     fields,
     extractions,
     missing,
+    missingFields,
     evidence,
     schemaSummary: buildSchemaSummary(primary.result.raw),
   };
