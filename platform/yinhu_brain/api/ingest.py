@@ -393,6 +393,11 @@ async def upload_auto(
         return {
             "document_id": str(result.document_id),
             "plan": result.plan.model_dump(mode="json"),
+            "route_plan": (
+                result.route_plan.model_dump(mode="json")
+                if result.route_plan
+                else None
+            ),
             "draft": result.draft.model_dump(mode="json"),
             "pipeline_results": [
                 r.model_dump(mode="json")

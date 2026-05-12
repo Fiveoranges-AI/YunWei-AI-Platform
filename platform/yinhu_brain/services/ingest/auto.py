@@ -67,6 +67,7 @@ from yinhu_brain.services.ingest.unified_schemas import (
     IdentityDraft,
     IngestPlan,
     OpsDraft,
+    PipelineRoutePlan,
     UnifiedDraft,
 )
 
@@ -117,6 +118,7 @@ class AutoIngestResult:
     plan: IngestPlan
     draft: UnifiedDraft
     candidates: MergeCandidates
+    route_plan: PipelineRoutePlan | None = None
 
 
 # ---------- per-extractor isolation --------------------------------------
@@ -286,6 +288,7 @@ async def auto_ingest(
             plan=legacy_plan,
             draft=draft,
             candidates=candidates,
+            route_plan=route_plan,
         )
 
     # ----- 3b. Mistral branch: schema → legacy extractor mapping -----
@@ -442,4 +445,5 @@ async def auto_ingest(
         plan=synthesized_plan,
         draft=draft,
         candidates=candidates,
+        route_plan=route_plan,
     )
