@@ -27,6 +27,7 @@ dependencies = [
     "pypdf>=5.1",
     "tenacity>=9.0",
     "landingai-ade>=0.1.0",
+    "rq>=2.0",
 ]
 
 [project.optional-dependencies]
