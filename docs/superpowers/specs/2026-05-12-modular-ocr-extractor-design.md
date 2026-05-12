@@ -166,6 +166,7 @@ Core contract:
 @dataclass
 class ExtractionInput:
     document_id: uuid.UUID
+    session: AsyncSession
     markdown: str
     selections: list[PipelineSelection]
 
@@ -189,6 +190,11 @@ PipelineExtractResult(
     warnings=<provider/schema warnings>,
 )
 ```
+
+`session` is explicit because DeepSeek and the legacy extractors call
+`call_claude`, which persists `llm_calls` audit rows. LandingAI currently does
+not need DB access, but accepting the same input keeps the orchestrator simple
+without hiding DB writes in globals.
 
 ### LandingAI Extractor Provider
 
