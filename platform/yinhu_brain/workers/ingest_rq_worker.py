@@ -6,8 +6,12 @@ Usage::
 
 Environment::
 
-    REDIS_URL   redis connection string (default ``redis://localhost:6379/0``)
-    LOG_LEVEL   stdlib log level (default INFO)
+    REDIS_URL        redis connection string (default ``redis://localhost:6379/0``)
+    LOG_LEVEL        stdlib log level (default INFO)
+    WORKER_MAX_JOBS  process this many jobs then exit so the supervisor
+                     restarts us (default 100). Prevents memory growth
+                     from LandingAI / httpx pool churn. Set to 0 or empty
+                     to disable.
 """
 
 from __future__ import annotations
@@ -29,7 +33,14 @@ def main() -> int:
     conn = Redis.from_url(url)
     queue = Queue(INGEST_QUEUE_NAME, connection=conn, serializer=JSONSerializer)
     worker = Worker([queue], connection=conn, serializer=JSONSerializer)
-    worker.work(with_scheduler=False)
+    max_jobs_raw = os.environ.get("WORKER_MAX_JOBS", "100")
+    try:
+        max_jobs = int(max_jobs_raw) if max_jobs_raw else None
+    except ValueError:
+        max_jobs = 100
+    if max_jobs is not None and max_jobs <= 0:
+        max_jobs = None
+    worker.work(with_scheduler=False, max_jobs=max_jobs)
     return 0
 
 

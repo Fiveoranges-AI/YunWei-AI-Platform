@@ -44,7 +44,11 @@ from yinhu_brain.services.mistral_ocr_client import (
     parse_image_to_markdown,
     parse_pdf_to_markdown,
 )
-from yinhu_brain.services.storage import store_upload
+from yinhu_brain.services.storage import (
+    materialize_to_local,
+    open_for_read,
+    store_upload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +274,7 @@ async def collect_evidence(
             payload_bytes = file_bytes
         elif needs_bytes:
             try:
-                payload_bytes = Path(pre_stored.path).read_bytes()
+                payload_bytes = open_for_read(pre_stored.path)
             except FileNotFoundError as exc:
                 raise ValueError(
                     f"pre_stored file not found: {pre_stored.path}"
@@ -330,7 +334,8 @@ async def collect_evidence(
         # double-OCR'ing is slow and can paper over native text with model
         # transcription errors.
         await emit_progress(progress, "ocr", "正在读取 PDF 文本")
-        pages = pdf_utils.extract_text_with_pages(stored_path)
+        local_pdf = materialize_to_local(stored_path)
+        pages = pdf_utils.extract_text_with_pages(str(local_pdf))
         native_text = pdf_utils.joined_text(pages)
         if native_text.strip():
             ocr_text = native_text
@@ -342,7 +347,7 @@ async def collect_evidence(
             ocr_bytes = payload_bytes
             if not ocr_bytes and stored_path:
                 try:
-                    ocr_bytes = Path(stored_path).read_bytes()
+                    ocr_bytes = open_for_read(stored_path)
                 except FileNotFoundError as exc:
                     warnings.append(f"pre_stored pdf missing on fallback: {exc!s}")
                     ocr_bytes = b""

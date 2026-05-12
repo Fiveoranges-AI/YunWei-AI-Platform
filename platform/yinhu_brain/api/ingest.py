@@ -51,7 +51,7 @@ from yinhu_brain.models import (
 from yinhu_brain.services.ingest.job_queue import (
     enqueue_ingest_job,
     get_ingest_queue,
-    remember_enterprise_for_job,
+    reset_stale_running_jobs,
 )
 from yinhu_brain.services.storage import store_upload
 from yinhu_brain.services.ingest.auto import auto_ingest
@@ -659,8 +659,9 @@ async def create_ingest_jobs(
     for j in jobs:
         try:
             j.attempts = 1
-            remember_enterprise_for_job(str(j.id), enterprise_id)
-            j.rq_job_id = enqueue_ingest_job(str(j.id), attempt=1)
+            j.rq_job_id = enqueue_ingest_job(
+                str(j.id), attempt=1, enterprise_id=enterprise_id,
+            )
         except Exception as exc:
             logger.exception("enqueue failed for job %s", j.id)
             j.status = IngestJobStatus.failed
@@ -695,6 +696,27 @@ async def list_ingest_jobs(
 ) -> list[dict]:
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
+
+    # Opportunistic watchdog: any job stuck in ``running`` past the
+    # staleness threshold gets reset to ``queued`` and re-enqueued so the
+    # UI doesn't keep showing "正在处理" forever when the worker died.
+    reset_ids = await reset_stale_running_jobs(session)
+    for jid in reset_ids:
+        j = (
+            await session.execute(select(IngestJob).where(IngestJob.id == jid))
+        ).scalar_one()
+        try:
+            j.attempts = (j.attempts or 0) + 1
+            j.rq_job_id = enqueue_ingest_job(
+                str(j.id), attempt=j.attempts, enterprise_id=j.enterprise_id,
+            )
+        except Exception as exc:
+            j.status = IngestJobStatus.failed
+            j.error_message = f"watchdog re-enqueue failed: {exc!s}"
+            j.finished_at = datetime.now(timezone.utc)
+    if reset_ids:
+        await session.commit()
+
     stmt = select(IngestJob).where(IngestJob.enterprise_id == enterprise_id)
     if status == "active":
         stmt = stmt.where(IngestJob.status.in_(_ACTIVE_STATUSES))
@@ -756,8 +778,9 @@ async def retry_ingest_job(
     j.finished_at = None
     j.progress_message = None
     try:
-        remember_enterprise_for_job(str(j.id), enterprise_id)
-        j.rq_job_id = enqueue_ingest_job(str(j.id), attempt=j.attempts)
+        j.rq_job_id = enqueue_ingest_job(
+            str(j.id), attempt=j.attempts, enterprise_id=enterprise_id,
+        )
     except Exception as exc:
         logger.exception("retry enqueue failed for job %s", j.id)
         j.status = IngestJobStatus.failed

@@ -2,9 +2,10 @@
 ``queued -> running -> extracted``, with progress callbacks updating stage.
 
 We stub ``auto_ingest`` (the heavy auto-flow already has full coverage in
-``test_ingest_auto_flow.py``) and stub the Redis-backed enterprise lookup
-helper. The real exercise here is the state-machine transitions on the
-``IngestJob`` row plus the cancel and failure paths.
+``test_ingest_auto_flow.py``). ``enterprise_id`` is now a required arg
+to the worker (no Redis side-channel), so each test passes
+``"tenant_test"`` explicitly. The real exercise here is the state-machine
+transitions on the ``IngestJob`` row plus the cancel and failure paths.
 """
 
 from __future__ import annotations
@@ -46,8 +47,8 @@ async def _make_engine():
 
 
 def _patch_engine_routing(monkeypatch, engine):
-    """Make ``get_engine_for`` return our SQLite engine and stub the
-    Redis-backed enterprise lookup so tests don't need a running Redis."""
+    """Make ``get_engine_for`` return our SQLite engine so tests don't
+    need a real Postgres connection."""
 
     async def fake_get_engine_for(_enterprise_id):
         return engine
@@ -55,14 +56,10 @@ def _patch_engine_routing(monkeypatch, engine):
     async def fake_ensure_tables(_engine):
         return None
 
-    def fake_lookup(_job_id):
-        return "tenant_test"
-
     monkeypatch.setattr(worker_module, "get_engine_for", fake_get_engine_for)
     monkeypatch.setattr(
         worker_module, "ensure_ingest_job_tables", fake_ensure_tables
     )
-    monkeypatch.setattr(worker_module, "lookup_enterprise_for", fake_lookup)
 
 
 # ---------- happy path ----------------------------------------------------
@@ -137,7 +134,7 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             await session.commit()
             job_id = str(job.id)
 
-        await worker_module.process_ingest_job(job_id)
+        await worker_module.process_ingest_job(job_id, "tenant_test")
 
         async with AsyncSession(engine, expire_on_commit=False) as session:
             j = (await session.execute(select(IngestJob))).scalar_one()
@@ -184,7 +181,7 @@ async def test_worker_records_failure_on_exception(monkeypatch):
             await session.commit()
             job_id = str(job.id)
 
-        await worker_module.process_ingest_job(job_id)
+        await worker_module.process_ingest_job(job_id, "tenant_test")
 
         async with AsyncSession(engine, expire_on_commit=False) as session:
             j = (await session.execute(select(IngestJob))).scalar_one()
@@ -230,7 +227,7 @@ async def test_worker_skips_canceled_job(monkeypatch):
             await session.commit()
             job_id = str(job.id)
 
-        await worker_module.process_ingest_job(job_id)
+        await worker_module.process_ingest_job(job_id, "tenant_test")
 
         assert called["n"] == 0
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -289,7 +286,7 @@ async def test_worker_honors_mid_flight_cancel(monkeypatch):
             session.add(job)
             await session.commit()
 
-        await worker_module.process_ingest_job(str(job.id))
+        await worker_module.process_ingest_job(str(job.id), "tenant_test")
 
         async with AsyncSession(engine, expire_on_commit=False) as session:
             j = (await session.execute(select(IngestJob))).scalar_one()
@@ -299,23 +296,53 @@ async def test_worker_honors_mid_flight_cancel(monkeypatch):
         await engine.dispose()
 
 
-# ---------- no enterprise mapping ----------------------------------------
+# ---------- enterprise_id arg ---------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_worker_aborts_when_no_enterprise_mapping(monkeypatch):
+async def test_worker_uses_supplied_enterprise_id(monkeypatch):
+    """The worker now receives ``enterprise_id`` as an arg (no Redis
+    hash) and forwards it to ``get_engine_for``. Asserts the value
+    propagates so a missing/wrong enterprise can't silently route to the
+    default tenant."""
     engine = await _make_engine()
 
-    async def fake_get_engine_for(_eid):  # pragma: no cover — must not run
-        raise AssertionError("get_engine_for should not be called")
+    seen: dict[str, str] = {}
+
+    async def fake_get_engine_for(eid):
+        seen["eid"] = eid
+        return engine
+
+    async def fake_ensure_tables(_engine):
+        return None
 
     monkeypatch.setattr(worker_module, "get_engine_for", fake_get_engine_for)
-    monkeypatch.setattr(worker_module, "lookup_enterprise_for", lambda _job_id: None)
+    monkeypatch.setattr(
+        worker_module, "ensure_ingest_job_tables", fake_ensure_tables
+    )
 
     try:
-        # The function should return early without raising.
-        await worker_module.process_ingest_job(
-            "00000000-0000-0000-0000-000000000001"
-        )
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            batch = IngestBatch(enterprise_id="tenant_alpha", total_jobs=1)
+            session.add(batch)
+            await session.flush()
+            job = IngestJob(
+                batch_id=batch.id,
+                enterprise_id="tenant_alpha",
+                original_filename="x.pdf",
+                source_hint="pasted_text",
+                text_content="t",
+                # Already canceled so we exit early without needing
+                # auto_ingest stubbed — we just want to assert the
+                # enterprise_id flows through to get_engine_for.
+                status=IngestJobStatus.canceled,
+            )
+            session.add(job)
+            await session.commit()
+            job_id = str(job.id)
+
+        await worker_module.process_ingest_job(job_id, "tenant_alpha")
+
+        assert seen["eid"] == "tenant_alpha"
     finally:
         await engine.dispose()
