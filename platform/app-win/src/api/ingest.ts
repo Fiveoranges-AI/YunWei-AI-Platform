@@ -16,6 +16,8 @@ import type {
   ReviewEvidence,
   ReviewExtraction,
   ReviewField,
+  SchemaSummary,
+  SchemaSummaryItem,
 } from "../data/types";
 
 const API_BASE = "/win/api/ingest";
@@ -808,6 +810,225 @@ function planChannel(
   return { channel, docType };
 }
 
+// ───────────── Schema route + extract summary ─────────────
+
+const SCHEMA_LABEL: Record<string, string> = {
+  identity: "客户身份",
+  contract_order: "合同/订单",
+  finance: "发票/对账",
+  logistics: "送货/库存",
+  manufacturing_requirement: "规格/验收",
+  commitment_task_risk: "客户记忆",
+};
+
+// Per-schema "key fields the reviewer cares about". Stored as
+// (path, human label) tuples. `path` is a dot/array path applied to the
+// raw extraction.* object via pickExtractionValue.
+type FieldSpec = readonly [path: string, label: string];
+
+const SCHEMA_KEY_FIELDS: Record<string, readonly FieldSpec[]> = {
+  identity: [
+    ["customer", "客户公司"],
+    ["customer.full_name", "客户名称"],
+    ["customer.tax_id", "税号"],
+    ["contacts", "联系人列表"],
+  ],
+  contract_order: [
+    ["customer", "客户公司"],
+    ["contacts", "买方联系人"],
+    ["contract", "合同信息"],
+    ["order", "订单信息"],
+    ["order.total_amount", "订单金额"],
+    ["order.delivery_promised_date", "承诺交期"],
+    ["payment_milestones", "付款节点"],
+    ["items", "商品明细"],
+  ],
+  finance: [
+    ["invoice", "发票信息"],
+    ["invoice.invoice_number", "发票号码"],
+    ["invoice.amount_total", "发票金额"],
+    ["payment", "回款记录"],
+    ["items", "明细行"],
+  ],
+  logistics: [
+    ["shipment", "发货单"],
+    ["shipment.shipment_number", "发货单号"],
+    ["shipment.receiver_name", "收货人"],
+    ["items", "发货明细"],
+  ],
+  manufacturing_requirement: [
+    ["product", "产品"],
+    ["spec", "规格参数"],
+    ["customer_requirement", "客户要求"],
+    ["safety_stock_rule", "安全库存"],
+  ],
+  commitment_task_risk: [
+    ["events", "事件"],
+    ["commitments", "承诺"],
+    ["tasks", "待办"],
+    ["risk_signals", "风险"],
+    ["memory_items", "客户记忆"],
+  ],
+};
+
+function pickExtractionValue(
+  extraction: Record<string, unknown>,
+  path: string,
+): unknown {
+  if (!path) return undefined;
+  const parts = path.split(".");
+  let cur: unknown = extraction;
+  for (const p of parts) {
+    if (cur === null || cur === undefined) return undefined;
+    if (typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
+}
+
+function isPresent(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value as object).length > 0;
+  return true;
+}
+
+function summarizePipeline(
+  schemaName: string,
+  confidence: number,
+  reason: string,
+  pipeline: PipelineExtractResult | undefined,
+): SchemaSummaryItem {
+  const label = SCHEMA_LABEL[schemaName] ?? schemaName;
+  if (!pipeline) {
+    return {
+      schemaName,
+      schemaLabel: label,
+      confidence,
+      reason,
+      extracted: [],
+      missing: [],
+      warnings: [],
+      pipelineResultMissing: true,
+    };
+  }
+
+  const extraction = (pipeline.extraction ?? {}) as Record<string, unknown>;
+  const keyFields = SCHEMA_KEY_FIELDS[schemaName];
+  const extracted: string[] = [];
+  const missing: string[] = [];
+
+  if (keyFields) {
+    for (const [path, fieldLabel] of keyFields) {
+      const value = pickExtractionValue(extraction, path);
+      if (isPresent(value)) extracted.push(fieldLabel);
+      else missing.push(fieldLabel);
+    }
+  } else {
+    // Fallback: any non-empty top-level key counts as "extracted"
+    for (const [key, value] of Object.entries(extraction)) {
+      if (key === "extraction_warnings") continue;
+      if (isPresent(value)) extracted.push(key);
+    }
+  }
+
+  const schemaWarnings: string[] = [];
+  for (const w of pipeline.warnings ?? []) {
+    if (typeof w === "string" && w.trim().length > 0) schemaWarnings.push(w);
+  }
+  const inlineWarnings = extraction["extraction_warnings"];
+  if (Array.isArray(inlineWarnings)) {
+    for (const w of inlineWarnings) {
+      if (typeof w === "string" && w.trim().length > 0) schemaWarnings.push(w);
+    }
+  }
+
+  return {
+    schemaName,
+    schemaLabel: label,
+    confidence,
+    reason,
+    extracted,
+    missing,
+    warnings: schemaWarnings,
+    pipelineResultMissing: false,
+  };
+}
+
+/**
+ * Build the schema route + extraction summary block shown on the Review page.
+ *
+ * Pure function (no DOM, no fetch). Tolerates missing route_plan or
+ * pipeline_results so the Review page can degrade gracefully when the
+ * backend returns a partial response.
+ */
+export function buildSchemaSummary(raw: AutoIngestRaw): SchemaSummary {
+  const routePlan = raw.route_plan ?? null;
+  const pipelineResults = raw.pipeline_results ?? [];
+
+  const byName = new Map<string, PipelineExtractResult>();
+  for (const r of pipelineResults) {
+    if (typeof r?.name === "string") byName.set(r.name, r);
+  }
+
+  const selectedSchemas: SchemaSummaryItem[] = [];
+  if (routePlan?.selected_pipelines?.length) {
+    for (const sel of routePlan.selected_pipelines) {
+      selectedSchemas.push(
+        summarizePipeline(
+          sel.name,
+          typeof sel.confidence === "number" ? sel.confidence : 0,
+          sel.reason ?? "",
+          byName.get(sel.name),
+        ),
+      );
+    }
+  }
+
+  // Schemas that returned pipeline_results but weren't in route_plan
+  // (shouldn't happen in normal flow, but surface for debugging).
+  for (const r of pipelineResults) {
+    if (!routePlan?.selected_pipelines?.some((s) => s.name === r.name)) {
+      selectedSchemas.push(summarizePipeline(r.name, 0, "(未在路由计划内)", r));
+    }
+  }
+
+  const draft = raw.draft;
+  const finalDraftStatus = {
+    hasCustomer: !!draft?.customer && isPresent(draft.customer),
+    hasContacts: Array.isArray(draft?.contacts) && draft.contacts.length > 0,
+    hasContract: !!draft?.contract && isPresent(draft.contract),
+    hasOrder: !!draft?.order && isPresent(draft.order),
+    hasOrderAmount:
+      !!draft?.order &&
+      typeof (draft.order as { amount_total?: unknown }).amount_total ===
+        "number",
+    hasPaymentMilestones:
+      Array.isArray(
+        (draft?.contract as { payment_milestones?: unknown[] } | undefined)
+          ?.payment_milestones,
+      ) &&
+      ((draft?.contract as { payment_milestones?: unknown[] } | undefined)
+        ?.payment_milestones?.length ?? 0) > 0,
+  };
+
+  const generalWarnings: string[] = [];
+  for (const w of draft?.warnings ?? []) {
+    if (typeof w === "string" && w.trim().length > 0) generalWarnings.push(w);
+  }
+
+  return {
+    selectedSchemas,
+    routePlanMissing: routePlan === null || routePlan === undefined,
+    pipelineResultsMissing: pipelineResults.length === 0,
+    finalDraftStatus,
+    generalWarnings,
+  };
+}
+
 export function batchToReview(batch: Batch): Review | null {
   const successes = batch.entries.filter(
     (e): e is BatchEntry & { result: AutoIngestSuccess } => e.result.ok,
@@ -979,5 +1200,6 @@ export function batchToReview(batch: Batch): Review | null {
     extractions,
     missing,
     evidence,
+    schemaSummary: buildSchemaSummary(primary.result.raw),
   };
 }

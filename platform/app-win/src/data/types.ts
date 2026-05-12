@@ -116,6 +116,36 @@ export type ReviewEvidence = {
   preview: string;
 };
 
+export type SchemaSummaryItem = {
+  schemaName: string;        // raw backend name, e.g. "contract_order"
+  schemaLabel: string;       // Chinese display label, e.g. "合同/订单"
+  confidence: number;        // 0-1 from router
+  reason: string;            // why the router picked it
+  extracted: string[];       // human-readable fields with values
+  missing: string[];         // human-readable required fields without values
+  warnings: string[];        // schema-level warnings (extract failures + extraction_warnings)
+  pipelineResultMissing: boolean; // router selected it but pipeline_results didn't include it
+};
+
+export type SchemaSummary = {
+  selectedSchemas: SchemaSummaryItem[];
+  routePlanMissing: boolean;        // backend didn't return route_plan
+  pipelineResultsMissing: boolean;  // backend didn't return pipeline_results
+  // Final state on the merged UnifiedDraft after normalize.
+  // Lets reviewers see whether contract_order's order actually survived
+  // into draft.order — independent of what the schema extracted.
+  finalDraftStatus: {
+    hasCustomer: boolean;
+    hasContacts: boolean;
+    hasContract: boolean;
+    hasOrder: boolean;
+    hasOrderAmount: boolean;
+    hasPaymentMilestones: boolean;
+  };
+  // Document-level warnings that aren't tied to a single schema.
+  generalWarnings: string[];
+};
+
 export type Review = {
   customer: { name: string; isExisting: boolean; confidence: number };
   channel: string;
@@ -126,6 +156,7 @@ export type Review = {
   extractions: ReviewExtraction[];
   missing: string[];
   evidence: ReviewEvidence[];
+  schemaSummary?: SchemaSummary;
 };
 
 export type AskMessage =
