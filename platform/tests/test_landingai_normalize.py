@@ -33,3 +33,63 @@ def test_normalize_identity_and_contract_order_into_unified_draft():
     assert draft.order is not None
     assert draft.order.amount_total == 120000
     assert len(draft.pipeline_results) == 2
+
+
+def test_normalize_handles_empty_trigger_offset_days():
+    """LandingAI declares trigger_offset_days as string in its schema; on
+    real PDFs it occasionally returns ``""``. PaymentMilestone's int field
+    must NOT explode the whole ingest. WHHX250922合同.pdf regression."""
+    draft = normalize_pipeline_results(
+        [
+            PipelineExtractResult(
+                name="contract_order",
+                extraction={
+                    "payment_milestones": [
+                        {
+                            "name": "预付款",
+                            "ratio": 0.3,
+                            "trigger_event": "contract_signed",
+                            "trigger_offset_days": "",
+                        },
+                    ],
+                },
+            ),
+        ]
+    )
+    assert draft.contract is not None
+    assert len(draft.contract.payment_milestones) == 1
+    assert draft.contract.payment_milestones[0].trigger_offset_days is None
+
+
+def test_normalize_parses_numeric_string_offset():
+    draft = normalize_pipeline_results(
+        [
+            PipelineExtractResult(
+                name="contract_order",
+                extraction={
+                    "payment_milestones": [
+                        {"name": "尾款", "ratio": 0.7, "trigger_event": "invoice_issued", "trigger_offset_days": "90"},
+                    ],
+                },
+            ),
+        ]
+    )
+    assert draft.contract is not None
+    assert draft.contract.payment_milestones[0].trigger_offset_days == 90
+
+
+def test_normalize_parses_chinese_unit_offset():
+    draft = normalize_pipeline_results(
+        [
+            PipelineExtractResult(
+                name="contract_order",
+                extraction={
+                    "payment_milestones": [
+                        {"name": "尾款", "ratio": 0.7, "trigger_event": "invoice_issued", "trigger_offset_days": "90 天"},
+                    ],
+                },
+            ),
+        ]
+    )
+    assert draft.contract is not None
+    assert draft.contract.payment_milestones[0].trigger_offset_days == 90
