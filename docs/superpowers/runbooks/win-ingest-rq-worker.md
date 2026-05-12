@@ -45,6 +45,11 @@ Same image as `platform-app`. In Railway:
    - `WORKER_MAX_JOBS` (optional; default `100`) — worker processes this
      many jobs then exits so Railway restarts it, capping memory growth
      from LandingAI/httpx pools. Set to `0` (or empty) to disable.
+   - `STORAGE_BACKEND` (optional; default `local`) — set to `s3` to write
+     uploads to an S3-compatible bucket instead of the shared Volume.
+   - `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` /
+     `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` — required when
+     `STORAGE_BACKEND=s3`. See the storage-backend section below.
 
 5. Settings → Volumes: attach the **same Railway Volume** the web service
    uses, mounted at the same path (e.g. `/data`). The volume holds the
@@ -74,6 +79,34 @@ EXISTS). No migration script needs to run.
    reappear (it was loaded from Postgres, not memory).
 6. Confirm归档 → job status flips to `confirmed` and the card moves to
    "查看历史".
+
+## Storage backend (local Volume vs S3-compatible)
+
+By default `STORAGE_BACKEND=local` and both services share a Railway
+Volume mounted at the same `DATA_ROOT` path. This is the path of least
+resistance for the first deploy but couples the two services to a single
+disk.
+
+For multi-region, multi-worker, or just less coupling, switch to an
+S3-compatible backend (AWS S3, Cloudflare R2 — recommended, free at our
+volume — or self-hosted MinIO). On **both** services set:
+
+```env
+STORAGE_BACKEND=s3
+S3_BUCKET=your-bucket-name
+S3_ENDPOINT_URL=https://<accountid>.r2.cloudflarestorage.com   # R2 example
+S3_REGION=auto
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+```
+
+When the S3 backend is active, `staged_file_url` rows look like
+`s3://your-bucket-name/files/<uuid>.pdf`. The Volume mount is no longer
+required.
+
+Migration path: existing `file://...` URLs continue to work alongside
+new `s3://...` URLs because `open_for_read` / `materialize_to_local`
+dispatch on the URL scheme.
 
 ## Failure modes
 
