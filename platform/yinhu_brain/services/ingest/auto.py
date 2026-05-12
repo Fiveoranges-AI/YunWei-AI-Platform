@@ -47,7 +47,7 @@ from typing import Awaitable, Callable, Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yinhu_brain.config import settings
-from yinhu_brain.services.ingest.evidence import Evidence, collect_evidence
+from yinhu_brain.services.ingest.evidence import Evidence, PreStoredFile, collect_evidence
 from yinhu_brain.services.ingest.extractors.commercial import extract_commercial
 from yinhu_brain.services.ingest.extractors.identity import extract_identity
 from yinhu_brain.services.ingest.extractors.ops import extract_ops
@@ -173,6 +173,7 @@ async def auto_ingest(
     source_hint: Literal["file", "camera", "pasted_text"],
     uploader: str | None = None,
     progress: ProgressCallback | None = None,
+    pre_stored: PreStoredFile | None = None,
 ) -> AutoIngestResult:
     """End-to-end pipeline: bytes/text in → ``AutoIngestResult`` out.
 
@@ -212,6 +213,7 @@ async def auto_ingest(
         source_hint=source_hint,
         uploader=uploader,
         progress=progress,
+        pre_stored=pre_stored,
     )
 
     # ----- 2. LLM schema router (unified across providers) -----------

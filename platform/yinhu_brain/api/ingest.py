@@ -48,7 +48,11 @@ from yinhu_brain.models import (
     IngestJobStage,
     IngestJobStatus,
 )
-from yinhu_brain.services.ingest.job_queue import enqueue_ingest_job, get_ingest_queue
+from yinhu_brain.services.ingest.job_queue import (
+    enqueue_ingest_job,
+    get_ingest_queue,
+    remember_enterprise_for_job,
+)
 from yinhu_brain.services.storage import store_upload
 from yinhu_brain.services.ingest.auto import auto_ingest
 from yinhu_brain.services.ingest.auto_confirm import (
@@ -655,6 +659,7 @@ async def create_ingest_jobs(
     for j in jobs:
         try:
             j.attempts = 1
+            remember_enterprise_for_job(str(j.id), enterprise_id)
             j.rq_job_id = enqueue_ingest_job(str(j.id), attempt=1)
         except Exception as exc:
             logger.exception("enqueue failed for job %s", j.id)
@@ -751,6 +756,7 @@ async def retry_ingest_job(
     j.finished_at = None
     j.progress_message = None
     try:
+        remember_enterprise_for_job(str(j.id), enterprise_id)
         j.rq_job_id = enqueue_ingest_job(str(j.id), attempt=j.attempts)
     except Exception as exc:
         logger.exception("retry enqueue failed for job %s", j.id)

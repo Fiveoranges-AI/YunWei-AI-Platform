@@ -72,6 +72,23 @@ class Evidence:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass
+class PreStoredFile:
+    """Descriptor for an upload the caller already persisted to storage.
+
+    The async ``/jobs`` API stages files via ``store_upload`` before
+    enqueueing the worker. Passing the resulting descriptor here skips the
+    duplicate ``store_upload`` call inside ``collect_evidence`` while
+    keeping the Document row in sync with whatever the API wrote.
+    """
+
+    path: str
+    sha256: str
+    size: int
+    original_filename: str
+    content_type: str | None = None
+
+
 # ---------- modality detection -------------------------------------------
 
 
@@ -177,20 +194,36 @@ async def collect_evidence(
     source_hint: SourceHint,
     uploader: str | None = None,
     progress: ProgressCallback | None = None,
+    pre_stored: PreStoredFile | None = None,
 ) -> Evidence:
     """Collect evidence: store original, run OCR (or take text), insert Document.
 
-    Exactly one of ``file_bytes`` or ``text_content`` must be supplied (text
-    takes precedence if both arrive). Empty input on both raises ValueError —
-    everything else returns an Evidence with a possibly-empty ``ocr_text``
-    plus warnings explaining what went wrong.
+    Exactly one of ``file_bytes`` / ``text_content`` / ``pre_stored`` must be
+    supplied (text takes precedence if both arrive). ``pre_stored`` indicates
+    the caller already persisted the bytes via ``store_upload`` and only wants
+    the OCR / Document steps to run. Empty input on all paths raises
+    ValueError — everything else returns an Evidence with a possibly-empty
+    ``ocr_text`` plus warnings explaining what went wrong.
     """
     # ----- 1. Validate input -----------------------------------------
     has_text = text_content is not None and text_content.strip()
     has_file = file_bytes is not None and len(file_bytes) > 0
+    has_pre = pre_stored is not None
 
-    if not has_text and not has_file:
-        raise ValueError("no input: must supply non-empty text_content or file_bytes")
+    if not has_text and not has_file and not has_pre:
+        raise ValueError(
+            "no input: must supply non-empty text_content, file_bytes, or pre_stored"
+        )
+
+    # If the caller pre-stored the file, surface the descriptor's metadata
+    # into the local vars so modality detection and the Document row see
+    # the same filename / content_type the original upload had.
+    effective_filename = original_filename
+    effective_content_type = content_type
+    if has_pre:
+        assert pre_stored is not None
+        effective_filename = effective_filename or pre_stored.original_filename
+        effective_content_type = effective_content_type or pre_stored.content_type
 
     # ----- 2. Decide modality ----------------------------------------
     modality = _detect_modality(
@@ -198,8 +231,8 @@ async def collect_evidence(
         # We keep the literal None vs "" distinction so a deliberate empty-string
         # text_content still routes here rather than trying to OCR file bytes.
         text_content=text_content if has_text else None,
-        content_type=content_type,
-        filename=original_filename,
+        content_type=effective_content_type,
+        filename=effective_filename,
         source_hint=source_hint,
     )
 
@@ -207,28 +240,69 @@ async def collect_evidence(
 
     # ----- 3. Persist original bytes (text included) ------------------
     # We always store *something* so audit / replay can find the original
-    # exactly as received.
+    # exactly as received. Pre-stored callers (e.g. the /jobs worker) skip
+    # the store_upload round-trip but still need ``payload_bytes`` for OCR
+    # paths that take raw bytes (image / office / scanned PDF).
     if modality == "text":
         # text path: encode to UTF-8 and store under .txt
         assert text_content is not None  # narrowed above via has_text
         payload_bytes = text_content.encode("utf-8")
-        filename_for_store = original_filename or _default_filename(modality, source_hint)
+        filename_for_store = effective_filename or _default_filename(modality, source_hint)
         ext_default = _default_ext(modality, source_hint)
-        ct_for_doc = content_type or _default_content_type(modality, source_hint)
+        ct_for_doc = effective_content_type or _default_content_type(modality, source_hint)
+        stored_path = None
+        stored_sha = None
+        stored_size = None
+    elif has_pre:
+        # pre-stored path: file already on disk; rehydrate bytes only if the
+        # modality's OCR step needs them.
+        assert pre_stored is not None
+        filename_for_store = effective_filename or _default_filename(modality, source_hint)
+        ext_default = _default_ext(modality, source_hint)
+        ct_for_doc = effective_content_type or _default_content_type(modality, source_hint)
+        stored_path = pre_stored.path
+        stored_sha = pre_stored.sha256
+        stored_size = pre_stored.size
+        needs_bytes = modality in ("image", "office") or (
+            modality == "pdf" and not file_bytes
+        )
+        if file_bytes:
+            payload_bytes = file_bytes
+        elif needs_bytes:
+            try:
+                payload_bytes = Path(pre_stored.path).read_bytes()
+            except FileNotFoundError as exc:
+                raise ValueError(
+                    f"pre_stored file not found: {pre_stored.path}"
+                ) from exc
+        else:
+            # PDF native-text path reads the file directly via pypdf; no need
+            # to load bytes here.
+            payload_bytes = b""
     else:
         # file path
         assert file_bytes is not None  # narrowed above via has_file
         payload_bytes = file_bytes
-        filename_for_store = original_filename or _default_filename(modality, source_hint)
+        filename_for_store = effective_filename or _default_filename(modality, source_hint)
         ext_default = _default_ext(modality, source_hint)
-        ct_for_doc = content_type or _default_content_type(modality, source_hint)
+        ct_for_doc = effective_content_type or _default_content_type(modality, source_hint)
+        stored_path = None
+        stored_sha = None
+        stored_size = None
 
-    stored = store_upload(
-        payload_bytes,
-        filename_for_store,
-        default_ext=ext_default,
-    )
-    await emit_progress(progress, "stored", "原始内容已保存，开始读取文本")
+    if has_pre and modality != "text":
+        # No store_upload needed — the API already wrote the file.
+        await emit_progress(progress, "stored", "复用已上传文件，开始读取文本")
+    else:
+        stored = store_upload(
+            payload_bytes,
+            filename_for_store,
+            default_ext=ext_default,
+        )
+        stored_path = stored.path
+        stored_sha = stored.sha256
+        stored_size = stored.size
+        await emit_progress(progress, "stored", "原始内容已保存，开始读取文本")
 
     # ----- 4. Compute ocr_text ---------------------------------------
     ocr_text = ""
@@ -256,14 +330,24 @@ async def collect_evidence(
         # double-OCR'ing is slow and can paper over native text with model
         # transcription errors.
         await emit_progress(progress, "ocr", "正在读取 PDF 文本")
-        pages = pdf_utils.extract_text_with_pages(stored.path)
+        pages = pdf_utils.extract_text_with_pages(stored_path)
         native_text = pdf_utils.joined_text(pages)
         if native_text.strip():
             ocr_text = native_text
         else:
             await emit_progress(progress, "ocr", "扫描件无文本层，正在调用 Mistral OCR")
+            # Pre-stored callers may have skipped the byte-load when the native
+            # text path was expected to succeed; load on demand for the OCR
+            # fallback so we don't penalize the happy path.
+            ocr_bytes = payload_bytes
+            if not ocr_bytes and stored_path:
+                try:
+                    ocr_bytes = Path(stored_path).read_bytes()
+                except FileNotFoundError as exc:
+                    warnings.append(f"pre_stored pdf missing on fallback: {exc!s}")
+                    ocr_bytes = b""
             try:
-                md = await parse_pdf_to_markdown(payload_bytes, filename_for_store)
+                md = await parse_pdf_to_markdown(ocr_bytes, filename_for_store)
                 if md.strip():
                     ocr_text = md
             except MistralOCRUnavailable as exc:
@@ -296,11 +380,11 @@ async def collect_evidence(
     # ----- 6. Insert Document row ------------------------------------
     doc = Document(
         type=_document_type_for(modality),
-        file_url=stored.path,
+        file_url=stored_path,
         original_filename=filename_for_store,
         content_type=ct_for_doc,
-        file_sha256=stored.sha256,
-        file_size_bytes=stored.size,
+        file_sha256=stored_sha,
+        file_size_bytes=stored_size,
         ocr_text=ocr_text,
         uploader=uploader,
         processing_status=DocumentProcessingStatus.parsed,
