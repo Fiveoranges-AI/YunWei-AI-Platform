@@ -234,9 +234,21 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
             logger.info("worker: job %s canceled mid-flight", job_uuid)
             return
 
-    # Persist result on a fresh session. ``auto_ingest`` commits the main
-    # session before its extractor fan-out, which expires the cached job
-    # row; opening a new session avoids stale-state surprises.
+        # ``auto_ingest`` itself does not always commit — the Mistral path
+        # commits before its extractor fan-out, but the LandingAI path only
+        # ``flush()``-es Document inserts and the raw_llm_response update.
+        # The web /auto endpoint commits in its surrounding NDJSON stream
+        # wrapper; the worker has no such wrapper. Without an explicit
+        # commit here the ``async with`` exits and rolls back the Document
+        # INSERT → the follow-up session's UPDATE on IngestJob.document_id
+        # then violates the documents FK. This was the root cause of
+        # ``ForeignKeyViolationError: ingest_jobs_document_id_fkey`` on the
+        # SCYN250620 / LandingAI deploy.
+        await session.commit()
+
+    # Persist result on a fresh session. The earlier commit above made the
+    # Document + raw_llm_response durable; this second session writes the
+    # IngestJob.document_id + result_json against committed data.
     async with AsyncSession(engine, expire_on_commit=False) as session:
         j = (
             await session.execute(
