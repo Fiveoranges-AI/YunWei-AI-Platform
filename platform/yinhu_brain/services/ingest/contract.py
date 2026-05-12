@@ -63,9 +63,9 @@ from yinhu_brain.services.llm import call_claude, extract_tool_use_input
 logger = logging.getLogger(__name__)
 
 
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[3] / "prompts" / "contract_extraction.md"
-)
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("contract_extraction.md")
 
 
 @dataclass

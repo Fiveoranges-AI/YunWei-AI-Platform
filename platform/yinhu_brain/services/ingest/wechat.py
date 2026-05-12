@@ -33,9 +33,9 @@ from yinhu_brain.services.storage import store_upload
 
 logger = logging.getLogger(__name__)
 
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[3] / "prompts" / "wechat_screenshot_extraction.md"
-)
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("wechat_screenshot_extraction.md")
 
 
 @dataclass

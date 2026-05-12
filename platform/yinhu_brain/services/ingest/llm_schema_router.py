@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_ROUTE_TOOL_NAME = "submit_schema_route_plan"
 
-_PROMPT_PATH = Path(__file__).resolve().parents[3] / "prompts" / "schema_route.md"
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("schema_route.md")
 
 _OCR_LIMIT = 8000  # leave room for the prompt prefix
 

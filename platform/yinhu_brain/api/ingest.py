@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yinhu_brain.db import ensure_ingest_job_tables_for, get_session
@@ -834,6 +834,54 @@ async def cancel_ingest_job(
     j.finished_at = datetime.now(timezone.utc)
     await session.commit()
     return _job_dict(j)
+
+
+@router.delete("/jobs/history")
+async def clear_ingest_history(
+    request: Request,
+    status: Literal["failed", "canceled", "confirmed", "all"] = Query(default="failed"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Bulk-delete completed jobs from the history list.
+
+    Default deletes only ``failed`` jobs — the most common case (the user
+    wants to clear out crashed/aborted entries while keeping audit rows
+    for things that succeeded). Pass ``status=all`` to also wipe
+    ``canceled`` and ``confirmed`` rows.
+
+    The underlying ``documents`` rows are NOT touched — they stay for
+    audit. Only the IngestJob row itself goes away.
+    """
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+
+    if status == "failed":
+        target = (IngestJobStatus.failed,)
+    elif status == "canceled":
+        target = (IngestJobStatus.canceled,)
+    elif status == "confirmed":
+        target = (IngestJobStatus.confirmed,)
+    else:  # "all"
+        target = _HISTORY_STATUSES
+
+    # Use SELECT + DELETE rather than bulk delete so we can return the
+    # count + give the worker a chance to short-circuit on counts in
+    # tests. With per-tenant DBs the count is always small.
+    stmt = select(IngestJob).where(
+        IngestJob.enterprise_id == enterprise_id,
+        IngestJob.status.in_(target),
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    deleted = len(rows)
+    if deleted:
+        await session.execute(
+            delete(IngestJob).where(
+                IngestJob.enterprise_id == enterprise_id,
+                IngestJob.status.in_(target),
+            )
+        )
+        await session.commit()
+    return {"deleted": deleted, "status_filter": status}
 
 
 @router.post("/jobs/{job_id}/confirm")

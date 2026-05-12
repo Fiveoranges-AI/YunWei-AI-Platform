@@ -47,9 +47,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[3] / "prompts" / "customer_ask.md"
-)
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("customer_ask.md")
 _TOOL_NAME = "submit_customer_ask_answer"
 _KB_CHAR_BUDGET = 30_000
 
