@@ -8,7 +8,7 @@ stable while operators can choose:
 
 ```text
 OCR_PROVIDER=mistral|mineru
-EXTRACTOR_PROVIDER=landingai|deepseek|legacy
+EXTRACTOR_PROVIDER=landingai|deepseek
 ```
 
 The first implementation should preserve the current `/win/api/ingest/auto`
@@ -29,9 +29,9 @@ This coupling makes two things harder than they need to be:
 - Replacing LandingAI Extract with DeepSeek JSON/schema extraction while
   preserving the same six business schemas.
 
-`legacy` is a migration-only extractor provider that wraps the existing
-identity/commercial/ops DeepSeek/Claude extractors. The target extractor
-providers are `landingai` and schema-routed `deepseek`.
+The new provider surface does not expose the legacy identity/commercial/ops
+extractors as a provider. The supported extractor providers are `landingai`
+and schema-routed `deepseek`.
 
 ## Design Principles
 
@@ -191,10 +191,10 @@ PipelineExtractResult(
 )
 ```
 
-`session` is explicit because DeepSeek and the legacy extractors call
-`call_claude`, which persists `llm_calls` audit rows. LandingAI currently does
-not need DB access, but accepting the same input keeps the orchestrator simple
-without hiding DB writes in globals.
+`session` is explicit because the DeepSeek provider calls `call_claude`, which
+persists `llm_calls` audit rows. LandingAI currently does not need DB access,
+but accepting the same input keeps the orchestrator simple without hiding DB
+writes in globals.
 
 ### LandingAI Extractor Provider
 
@@ -256,9 +256,8 @@ extractor = get_extractor_provider(settings.extractor_provider)
 - build merge candidates
 - persist `raw_llm_response`
 
-The legacy extractor mapping remains available only as a rollback provider
-if needed. It should not be the default abstraction for DeepSeek schema
-extraction because it only covers three of six schemas.
+The legacy identity/commercial/ops extractor mapping is not part of the new
+provider abstraction because it only covers three of six schemas.
 
 ## API And UI Compatibility
 
@@ -294,7 +293,7 @@ Add focused tests before implementation:
   - downloads a zip and extracts `full.md`
   - raises `OcrUnavailable` on failed state, non-zero code, timeout, and
     missing `full.md`
-- Extractor provider factory selects LandingAI, DeepSeek, or legacy.
+- Extractor provider factory selects LandingAI or DeepSeek.
 - LandingAI provider preserves existing `PipelineExtractResult` shape.
 - DeepSeek schema extractor:
   - runs one call per selected schema
@@ -315,16 +314,14 @@ All provider HTTP/model calls are monkeypatched.
 4. Rewire `collect_evidence` and `auto_ingest` with provider factories.
 5. Add `MineruPreciseOcrProvider`.
 6. Add `DeepSeekSchemaExtractorProvider`.
-7. Keep defaults equivalent to current production behavior:
+7. Keep explicit provider defaults:
 
 ```text
 OCR_PROVIDER=mistral
-EXTRACTOR_PROVIDER=landingai when old DOCUMENT_AI_PROVIDER=landingai
-EXTRACTOR_PROVIDER=legacy when old DOCUMENT_AI_PROVIDER=mistral
+EXTRACTOR_PROVIDER=landingai
 ```
 
-After the refactor is stable, remove or deprecate `DOCUMENT_AI_PROVIDER` in a
-separate cleanup.
+`DOCUMENT_AI_PROVIDER` should no longer drive the new provider selection.
 
 ## Open Decisions Resolved
 

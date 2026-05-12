@@ -8,12 +8,12 @@ once per input regardless of how many extractors fire later.
 This module deliberately does *not* call any LLM and does *not* make
 extraction decisions — those are Planner's and the extractors' jobs.
 
-Modality detection lives here because each modality has a different OCR
-path:
-- ``text``   → no OCR; the caller-supplied string is the text
-- ``image``  → Mistral OCR ``parse_image_to_markdown``
-- ``pdf``    → pypdf per-page text first; Mistral OCR fallback for scans
-- ``office`` → Mistral OCR ``parse_document_to_markdown``
+Modality detection lives here so the orchestrator can choose between
+the text bypass and the configured OCR provider:
+- ``text``   → no OCR; the caller-supplied string is the ``ocr_text``
+- ``image`` / ``pdf`` / ``office`` → ``get_ocr_provider().parse(OcrInput(...))``;
+  the provider owns modality-specific branching (native PDF text, scanned
+  fallback, document_url, etc.)
 
 The Document row is created with ``processing_status=parsed`` and
 ``review_status=pending_review`` so a downstream orchestrator can decide
@@ -22,7 +22,6 @@ whether confirm needs human review.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,21 +35,12 @@ from yinhu_brain.models import (
     DocumentReviewStatus,
     DocumentType,
 )
-from yinhu_brain.services import pdf as pdf_utils
 from yinhu_brain.services.ingest.progress import ProgressCallback, emit_progress
-from yinhu_brain.services.mistral_ocr_client import (
-    MistralOCRUnavailable,
-    parse_document_to_markdown,
-    parse_image_to_markdown,
-    parse_pdf_to_markdown,
-)
+from yinhu_brain.services.ocr import OcrInput, OcrResult, get_ocr_provider
 from yinhu_brain.services.storage import (
-    materialize_to_local,
     open_for_read,
     store_upload,
 )
-
-logger = logging.getLogger(__name__)
 
 
 Modality = Literal["image", "pdf", "office", "text"]
@@ -312,67 +302,34 @@ async def collect_evidence(
     ocr_text = ""
 
     if modality == "text":
+        # Text bypass: no OCR provider is invoked. The pasted string IS the
+        # ``ocr_text`` (stripped) — downstream extractors read the same field
+        # regardless of input modality.
         assert text_content is not None
         ocr_text = text_content.strip()
-
-    elif modality == "image":
-        await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别图片")
-        try:
-            ocr_text = await parse_image_to_markdown(
-                payload_bytes,
-                filename_for_store,
-                ct_for_doc,
-            )
-        except MistralOCRUnavailable as exc:
-            msg = f"Mistral OCR unavailable: {exc!s}"
-            warnings.append(msg)
-            logger.warning("evidence image OCR failed for %s: %s", filename_for_store, exc)
-
-    elif modality == "pdf":
-        # Native text first; only fall back to Mistral OCR when pypdf came
-        # up empty (scanned PDF). If the text layer exists we trust it —
-        # double-OCR'ing is slow and can paper over native text with model
-        # transcription errors.
-        await emit_progress(progress, "ocr", "正在读取 PDF 文本")
-        local_pdf = materialize_to_local(stored_path)
-        pages = pdf_utils.extract_text_with_pages(str(local_pdf))
-        native_text = pdf_utils.joined_text(pages)
-        if native_text.strip():
-            ocr_text = native_text
+    else:
+        if modality == "image":
+            await emit_progress(progress, "ocr", "正在识别图片文本")
+        elif modality == "pdf":
+            await emit_progress(progress, "ocr", "正在读取 PDF 文本")
         else:
-            await emit_progress(progress, "ocr", "扫描件无文本层，正在调用 Mistral OCR")
-            # Pre-stored callers may have skipped the byte-load when the native
-            # text path was expected to succeed; load on demand for the OCR
-            # fallback so we don't penalize the happy path.
-            ocr_bytes = payload_bytes
-            if not ocr_bytes and stored_path:
-                try:
-                    ocr_bytes = open_for_read(stored_path)
-                except FileNotFoundError as exc:
-                    warnings.append(f"pre_stored pdf missing on fallback: {exc!s}")
-                    ocr_bytes = b""
-            try:
-                md = await parse_pdf_to_markdown(ocr_bytes, filename_for_store)
-                if md.strip():
-                    ocr_text = md
-            except MistralOCRUnavailable as exc:
-                msg = f"Mistral OCR unavailable: {exc!s}"
-                warnings.append(msg)
-                logger.warning("evidence pdf OCR failed for %s: %s", filename_for_store, exc)
+            await emit_progress(progress, "ocr", "正在识别文档文本")
 
-    else:  # office (and the unknown-fallback bucket)
-        await emit_progress(progress, "ocr", "正在调用 Mistral OCR 识别文档")
-        try:
-            md = await parse_document_to_markdown(
-                payload_bytes,
-                filename_for_store,
-                ct_for_doc,
+        # ``source_hint`` in ``OcrInput`` is narrower than the orchestrator's
+        # ("pasted_text" is impossible here because we already bypassed text).
+        provider_hint = "camera" if source_hint == "camera" else "file"
+        ocr_result: OcrResult = await get_ocr_provider().parse(
+            OcrInput(
+                file_bytes=payload_bytes,
+                stored_path=stored_path,
+                filename=filename_for_store,
+                content_type=ct_for_doc,
+                modality=modality,
+                source_hint=provider_hint,
             )
-            ocr_text = md or ""
-        except MistralOCRUnavailable as exc:
-            msg = f"Mistral OCR unavailable: {exc!s}"
-            warnings.append(msg)
-            logger.warning("evidence office OCR failed for %s: %s", filename_for_store, exc)
+        )
+        ocr_text = ocr_result.markdown or ""
+        warnings.extend(ocr_result.warnings)
 
     # ----- 5. Soft warning when text is too short --------------------
     stripped_len = len(ocr_text.strip())

@@ -82,8 +82,12 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
     captured_stages: list[str] = []
 
     async def fake_auto_ingest(**kwargs):
-        # Insert a real Document row so the FK on IngestJob.document_id is
-        # satisfied when the worker writes the result back.
+        # Insert a real Document row + ``flush`` (no commit). The
+        # LandingAI branch of real auto_ingest behaves this way — relies
+        # on the caller to commit. Without the worker's commit-after-call
+        # fix this Document would roll back when the session context
+        # exits, and the follow-up UPDATE on IngestJob.document_id would
+        # fail with the ingest_jobs_document_id_fkey FK violation.
         sess: AsyncSession = kwargs["session"]
         doc = Document(
             type=DocumentType.text_note,
@@ -102,9 +106,9 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             await progress("merge", "merge")
             await progress("auto_done", "done")
             captured_stages.append("called")
-        # auto_ingest commits the main session before its fan-out; mirror that
-        # here so the Document row is visible to the worker's follow-up session.
-        await sess.commit()
+        # NOTE: deliberately NOT committing here. The worker is expected to
+        # commit after the auto_ingest call returns; this fake matches the
+        # LandingAI-branch contract that triggered the production FK bug.
         return AutoIngestResult(
             document_id=doc.id,
             plan=IngestPlan(),
@@ -146,6 +150,21 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             assert "draft" in j.result_json
             assert "plan" in j.result_json
             assert captured_stages == ["called"]
+            # Regression for ingest_jobs_document_id_fkey: the Document that
+            # auto_ingest insert+flushed (without committing) must survive
+            # the worker's session.commit() and be visible from a fresh
+            # session. Without the commit-after-auto_ingest fix this row
+            # would have rolled back and the FK violation would have
+            # blown up before we got here.
+            assert j.document_id is not None
+            doc = (
+                await session.execute(
+                    select(Document).where(Document.id == j.document_id)
+                )
+            ).scalar_one_or_none()
+            assert doc is not None, (
+                "Document was rolled back — worker forgot to commit after auto_ingest"
+            )
     finally:
         await engine.dispose()
 

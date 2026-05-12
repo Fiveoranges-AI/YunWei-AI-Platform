@@ -391,42 +391,154 @@ async def test_merge_drafts_finds_existing_customer_candidate() -> None:
 # ---------- auto_ingest orchestrator -------------------------------------
 
 
+def _landingai_shaped_extraction(name: str) -> dict:
+    """Return a LandingAI-shape extraction payload for the given schema name.
+
+    ``normalize_pipeline_results`` reads LandingAI's vocabulary
+    (``contract_number`` / ``total_amount`` / role enum). The fake provider
+    used in tests must emit that vocabulary so the merged ``UnifiedDraft``
+    looks like a real ingest.
+    """
+
+    if name == "identity":
+        return {
+            "customer": _identity_payload()["customer"],
+            "contacts": [
+                {
+                    "name": "王经理",
+                    "title": "销售总监",
+                    "phone": None,
+                    "mobile": "13800000000",
+                    "email": "wang@test.com",
+                    # role enum is buyer-collapsed by _normalize_role
+                    "role": "buyer",
+                    "address": None,
+                },
+            ],
+        }
+    if name == "contract_order":
+        cp = _commercial_payload()
+        return {
+            "customer": _identity_payload()["customer"],
+            "contacts": [],
+            "contract": {
+                "contract_number": cp["contract"]["contract_no_external"],
+                "delivery_terms": cp["contract"]["delivery_terms"],
+                "penalty_terms": cp["contract"]["penalty_terms"],
+                "signing_date": cp["contract"]["signing_date"],
+                "effective_date": cp["contract"]["effective_date"],
+                "expiry_date": cp["contract"]["expiry_date"],
+            },
+            "order": {
+                "total_amount": cp["order"]["amount_total"],
+                "currency": cp["order"]["amount_currency"],
+                "delivery_promised_date": cp["order"]["delivery_promised_date"],
+                "delivery_address": cp["order"]["delivery_address"],
+                "summary": cp["order"]["description"],
+            },
+            "payment_milestones": cp["contract"]["payment_milestones"],
+        }
+    if name == "commitment_task_risk":
+        op = _ops_payload()
+        return {
+            "summary": op["summary"],
+            "events": op["events"],
+            "commitments": op["commitments"],
+            "tasks": op["tasks"],
+            "risk_signals": op["risk_signals"],
+            "memory_items": op["memory_items"],
+        }
+    # finance / logistics / manufacturing_requirement: empty but not crashing.
+    return {}
+
+
+def _stub_extractor_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    raise_on: str | None = None,
+    call_log: list[str] | None = None,
+    provider_name: str = "landingai",
+) -> None:
+    """Replace ``get_extractor_provider`` with a fake that returns canned
+    ``PipelineExtractResult`` objects.
+
+    ``raise_on`` simulates a per-schema soft failure — the provider records
+    a warning instead of throwing (mirrors the real providers' behaviour).
+    ``call_log`` collects the schema names the orchestrator dispatched, so
+    tests can assert gating worked.
+    ``provider_name`` stamps ``extraction_metadata.provider`` so tests can
+    distinguish LandingAI vs DeepSeek without inspecting code paths.
+    """
+
+    from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
+
+    class _FakeProvider:
+        async def extract_selected(self, input, progress=None):
+            results: list[PipelineExtractResult] = []
+            for selection in input.selections:
+                name = selection.name
+                if call_log is not None:
+                    call_log.append(name)
+                if progress is not None:
+                    await progress("pipeline_started", {"name": name})
+                if raise_on == name:
+                    results.append(
+                        PipelineExtractResult(
+                            name=name,
+                            extraction={},
+                            extraction_metadata={"provider": provider_name},
+                            warnings=[
+                                f"extractor {name!r} failed: synthetic failure"
+                            ],
+                        )
+                    )
+                    if progress is not None:
+                        await progress("pipeline_done", {"name": name, "ok": False})
+                    continue
+                results.append(
+                    PipelineExtractResult(
+                        name=name,
+                        extraction=_landingai_shaped_extraction(name),
+                        extraction_metadata={"provider": provider_name},
+                        warnings=[],
+                    )
+                )
+                if progress is not None:
+                    await progress("pipeline_done", {"name": name, "ok": True})
+            return results
+
+    monkeypatch.setattr(auto_module, "get_extractor_provider", lambda: _FakeProvider())
+
+
+# Back-compat alias for the legacy helper name; behaviour now bridges through
+# the provider factory rather than the per-extractor function dict.
 def _stub_extractors(
     monkeypatch: pytest.MonkeyPatch,
     *,
-    session_counter: list[AsyncSession] | None = None,
+    session_counter: list[AsyncSession] | None = None,  # noqa: ARG001 — kept for API parity
     raise_on: str | None = None,
 ) -> None:
-    """Replace the three extractor functions with stubs that return canned
-    drafts. If ``session_counter`` is given, each call appends its received
-    session to the list so we can assert per-extractor isolation. If
-    ``raise_on`` matches an extractor name, that one raises mid-flight.
+    """Legacy helper name retained so existing tests stay readable.
+
+    The ``session_counter`` argument is preserved as a no-op so call sites
+    don't need to change; the new unified flow has a single session and no
+    per-extractor concurrency, so the original session-isolation assertion
+    is meaningless under the new model.
+
+    The ``raise_on`` argument maps to the new fake provider's per-schema
+    soft failure path. Note: legacy extractor names (``commercial`` / ``ops``)
+    now map to canonical schema names (``contract_order`` /
+    ``commitment_task_risk``).
     """
 
-    async def fake_identity(*, session, document_id, ocr_text, progress=None):
-        if session_counter is not None:
-            session_counter.append(session)
-        if raise_on == "identity":
-            raise RuntimeError("synthetic identity failure")
-        return IdentityDraft.model_validate(_identity_payload())
-
-    async def fake_commercial(*, session, document_id, ocr_text, progress=None):
-        if session_counter is not None:
-            session_counter.append(session)
-        if raise_on == "commercial":
-            raise RuntimeError("synthetic commercial failure")
-        return CommercialDraft.model_validate(_commercial_payload())
-
-    async def fake_ops(*, session, document_id, ocr_text, progress=None):
-        if session_counter is not None:
-            session_counter.append(session)
-        if raise_on == "ops":
-            raise RuntimeError("synthetic ops failure")
-        return OpsDraft.model_validate(_ops_payload())
-
-    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "identity", fake_identity)
-    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "commercial", fake_commercial)
-    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "ops", fake_ops)
+    schema_raise: str | None
+    if raise_on == "commercial":
+        schema_raise = "contract_order"
+    elif raise_on == "ops":
+        schema_raise = "commitment_task_risk"
+    else:
+        schema_raise = raise_on
+    _stub_extractor_provider(monkeypatch, raise_on=schema_raise)
 
 
 def _patch_route_schemas(
@@ -504,9 +616,12 @@ async def test_auto_ingest_text_path_returns_draft_and_candidates(monkeypatch) -
             assert result.draft.customer.full_name == "测试客户有限公司"
             assert result.draft.order is not None
             assert len(result.draft.events) == 1
-            # Plan exposes all three dims (router → legacy extractor mapping).
-            names = sorted(s.name for s in result.plan.extractors)
-            assert names == ["commercial", "identity", "ops"]
+            # Plan.targets exposes the router's per-dimension confidence
+            # (the legacy ``extractors`` list is no longer synthesized under
+            # the unified provider flow — see auto.py synthesized_plan).
+            assert result.plan.targets["identity"] > 0
+            assert result.plan.targets["commercial"] > 0
+            assert result.plan.targets["ops"] > 0
 
             # Document row landed and carries the merged draft as raw_llm_response.
             # The Mistral path now stores ``{provider, route_plan, draft}`` so
@@ -521,46 +636,24 @@ async def test_auto_ingest_text_path_returns_draft_and_candidates(monkeypatch) -
             assert doc.raw_llm_response["draft"]["customer"]["full_name"] == "测试客户有限公司"
             assert "route_plan" in doc.raw_llm_response
             assert doc.raw_llm_response["route_plan"]["selected_pipelines"]
-    finally:
-        await engine.dispose()
+            # raw_llm_response.provider is stamped from settings.extractor_provider
+            # so the audit row records which extractor implementation ran.
+            from yinhu_brain.config import settings as _settings
 
-
-@pytest.mark.asyncio
-async def test_auto_ingest_uses_separate_session_per_extractor(monkeypatch) -> None:
-    """Each concurrent extractor must receive its own AsyncSession (call_claude
-    writes the llm_calls table; concurrent writes on a shared session corrupt
-    SQLAlchemy's identity map)."""
-    _patch_storage(monkeypatch)
-    _stub_planner_full_fanout(monkeypatch)
-    sessions_seen: list[AsyncSession] = []
-    _stub_extractors(monkeypatch, session_counter=sessions_seen)
-
-    engine = await _make_engine()
-    try:
-        async with AsyncSession(engine, expire_on_commit=False) as session:
-            await auto_ingest(
-                session=session,
-                text_content="测试有限公司 王经理 13800000000 6 月底前付款",
-                source_hint="pasted_text",
-            )
-            await session.commit()
-
-            # Three extractors → three sessions, all distinct, none equal to
-            # the orchestrator's main session.
-            assert len(sessions_seen) == 3
-            assert len({id(s) for s in sessions_seen}) == 3
-            assert all(id(s) != id(session) for s in sessions_seen)
+            assert doc.raw_llm_response["provider"] == _settings.extractor_provider
     finally:
         await engine.dispose()
 
 
 @pytest.mark.asyncio
 async def test_auto_ingest_extractor_failure_becomes_warning(monkeypatch) -> None:
-    """If one extractor raises, the rest still run and the merged draft
+    """If one schema extract fails, the rest still run and the merged draft
     surfaces a warning rather than the request 500-ing."""
     _patch_storage(monkeypatch)
     _stub_planner_full_fanout(monkeypatch)
-    _stub_extractors(monkeypatch, raise_on="commercial")
+    # Map the legacy 'commercial' name onto the canonical 'contract_order'
+    # schema for the new provider-driven flow.
+    _stub_extractor_provider(monkeypatch, raise_on="contract_order")
 
     engine = await _make_engine()
     try:
@@ -572,14 +665,24 @@ async def test_auto_ingest_extractor_failure_becomes_warning(monkeypatch) -> Non
             )
             await session.commit()
 
-            # Identity + ops drafts merged, commercial absent.
+            # Identity + ops drafts merged; the failing contract_order
+            # pipeline produced no order/contract data (normalize defaults
+            # the order/contract slots to empty Extraction objects with no
+            # values populated).
             assert result.draft.customer is not None
-            assert result.draft.order is None
-            assert result.draft.contract is None
+            assert (
+                result.draft.order is None
+                or result.draft.order.amount_total is None
+            )
+            assert (
+                result.draft.contract is None
+                or result.draft.contract.contract_no_external is None
+            )
             assert len(result.draft.events) == 1
-            # Failure surfaced as a warning.
+            # Failure surfaced as a warning carried through from the per-pipeline
+            # extract result.
             assert any(
-                "extractor 'commercial' failed" in w for w in result.draft.warnings
+                "'contract_order' failed" in w for w in result.draft.warnings
             )
     finally:
         await engine.dispose()
@@ -992,31 +1095,51 @@ def _stub_planner_only(
 def _counting_extractors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> dict[str, int]:
-    """Replace every extractor with a counter-recording stub.
+    """Replace the provider with a counter-recording stub.
 
-    Returns the call-count dict the test can assert against. The stubs
-    still return valid drafts so the orchestrator sees real data and
-    merge_drafts works as if production had run.
+    Returns a counter dict keyed by legacy extractor name (``identity`` /
+    ``commercial`` / ``ops``) so existing call-site assertions stay
+    readable. Internally the canonical schema names
+    (``identity`` / ``contract_order`` / ``commitment_task_risk``) are
+    mapped back onto the legacy keys.
     """
 
     counts: dict[str, int] = {"identity": 0, "commercial": 0, "ops": 0}
+    _schema_to_legacy = {
+        "identity": "identity",
+        "contract_order": "commercial",
+        "commitment_task_risk": "ops",
+    }
+    call_log: list[str] = []
+    _stub_extractor_provider(monkeypatch, call_log=call_log)
 
-    async def fake_identity(*, session, document_id, ocr_text, progress=None):
-        counts["identity"] += 1
-        return IdentityDraft.model_validate(_identity_payload())
+    # Bridge: every time the orchestrator hands a selection to the fake
+    # provider it'll append to call_log; wrap call_log into a property-like
+    # counter snapshot via __getitem__ — but tests already consume ``counts``
+    # as a dict, so update it lazily on the first read by exposing a special
+    # subclass.
+    class _LiveCounts(dict):
+        def __getitem__(self, key):
+            self._refresh()
+            return super().__getitem__(key)
 
-    async def fake_commercial(*, session, document_id, ocr_text, progress=None):
-        counts["commercial"] += 1
-        return CommercialDraft.model_validate(_commercial_payload())
+        def __eq__(self, other):
+            self._refresh()
+            return super().__eq__(other)
 
-    async def fake_ops(*, session, document_id, ocr_text, progress=None):
-        counts["ops"] += 1
-        return OpsDraft.model_validate(_ops_payload())
+        def __repr__(self):
+            self._refresh()
+            return super().__repr__()
 
-    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "identity", fake_identity)
-    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "commercial", fake_commercial)
-    monkeypatch.setitem(auto_module._EXTRACTOR_FUNCTIONS, "ops", fake_ops)
-    return counts
+        def _refresh(self):
+            for k in counts:
+                self[k] = 0
+            for sch in call_log:
+                legacy = _schema_to_legacy.get(sch)
+                if legacy is not None:
+                    self[legacy] = self.get(legacy, 0) + 1
+
+    return _LiveCounts(counts)
 
 
 @pytest.mark.asyncio
@@ -1078,33 +1201,20 @@ async def test_auto_ingest_planner_gating_two_extractors(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_auto_ingest_text_input_never_invokes_ocr(monkeypatch) -> None:
-    """Text input (modality=text) must NOT call any Mistral OCR function.
+    """Text input (modality=text) must NOT call any OCR provider.
 
     OCR is paid + latency-sensitive; routing pasted_text through the image
-    pipeline was a real bug in an earlier draft. Spy on every OCR entry
-    point and assert zero invocations.
+    pipeline was a real bug in an earlier draft. Spy on the provider factory
+    and assert zero invocations.
     """
     _patch_storage(monkeypatch)
     _stub_planner_full_fanout(monkeypatch)
     _stub_extractors(monkeypatch)
 
-    ocr_calls = {"image": 0, "pdf": 0, "doc": 0}
+    def boom_factory():
+        raise AssertionError("OCR provider must not be requested for text input")
 
-    async def boom_image(*args, **kwargs):
-        ocr_calls["image"] += 1
-        raise AssertionError("parse_image_to_markdown must not be called for text input")
-
-    async def boom_pdf(*args, **kwargs):
-        ocr_calls["pdf"] += 1
-        raise AssertionError("parse_pdf_to_markdown must not be called for text input")
-
-    async def boom_doc(*args, **kwargs):
-        ocr_calls["doc"] += 1
-        raise AssertionError("parse_document_to_markdown must not be called for text input")
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", boom_image)
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
-    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", boom_doc)
+    monkeypatch.setattr(evidence_module, "get_ocr_provider", boom_factory)
 
     engine = await _make_engine()
     try:
@@ -1116,7 +1226,6 @@ async def test_auto_ingest_text_input_never_invokes_ocr(monkeypatch) -> None:
             )
             await session.commit()
 
-            assert ocr_calls == {"image": 0, "pdf": 0, "doc": 0}
             # And the evidence row was created with the text as ocr_text.
             doc = (
                 await session.execute(select(Document).where(Document.id == result.document_id))
@@ -1141,10 +1250,16 @@ async def test_auto_endpoint_accepts_file_upload(monkeypatch) -> None:
     _stub_planner_full_fanout(monkeypatch)
     _stub_extractors(monkeypatch)
 
-    async def fake_image_ocr(image_bytes, filename, content_type):
-        return "测试客户有限公司 王经理 13800000000"
+    from yinhu_brain.services.ocr.base import OcrInput, OcrResult
 
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_image_ocr)
+    class _FakeProvider:
+        async def parse(self, ocr_input: OcrInput) -> OcrResult:
+            return OcrResult(
+                markdown="测试客户有限公司 王经理 13800000000",
+                provider="fake",
+            )
+
+    monkeypatch.setattr(evidence_module, "get_ocr_provider", lambda: _FakeProvider())
 
     engine = await _make_engine()
     try:
@@ -1619,14 +1734,18 @@ async def test_auto_ingest_isolated_engines_do_not_leak_customers(monkeypatch) -
 
 @pytest.mark.asyncio
 async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) -> None:
-    """When ``settings.document_ai_provider == 'landingai'``, the orchestrator
-    runs route_schemas + extract_selected_pipelines + normalize_pipeline_results
-    instead of the legacy extractor fan-out. The synthesized ``UnifiedDraft``
-    carries the same identity + contract/order fields the legacy path
-    produced, plus the new ``pipeline_results`` audit list."""
+    """The orchestrator runs route_schemas + the configured extractor provider
+    + normalize_pipeline_results to produce a ``UnifiedDraft`` with
+    ``pipeline_results`` populated.
+
+    Historically this test exercised the ``document_ai_provider == 'landingai'``
+    branch; under the unified provider flow it now exercises the default
+    ``settings.extractor_provider == 'landingai'`` path via the same
+    monkeypatched factory.
+    """
     engine = await _make_engine()
     _patch_storage(monkeypatch)
-    monkeypatch.setattr(auto_module.settings, "document_ai_provider", "landingai")
+    monkeypatch.setattr(auto_module.settings, "extractor_provider", "landingai")
 
     async def fake_collect_evidence(**kwargs):
         from yinhu_brain.models import (
@@ -1659,8 +1778,6 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
         )
 
     async def fake_route_schemas(**kwargs):
-        # New signature: takes session + document_id alongside the existing
-        # markdown / modality / source_hint kwargs.
         return PipelineRoutePlan(
             primary_pipeline="contract_order",
             selected_pipelines=[
@@ -1670,27 +1787,30 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
             document_summary="contract",
         )
 
-    async def fake_extract_selected_pipelines(**kwargs):
-        from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
+    from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
 
-        return [
-            PipelineExtractResult(
-                name="identity",
-                extraction={"customer": {"full_name": "测试客户有限公司"}},
-            ),
-            PipelineExtractResult(
-                name="contract_order",
-                extraction={
-                    "contract": {"contract_number": "HT-001"},
-                    "order": {"amount_total": 120000, "amount_currency": "CNY"},
-                },
-            ),
-        ]
+    class _FakeLandingAIProvider:
+        async def extract_selected(self, input, progress=None):
+            return [
+                PipelineExtractResult(
+                    name="identity",
+                    extraction={"customer": {"full_name": "测试客户有限公司"}},
+                    extraction_metadata={"provider": "landingai"},
+                ),
+                PipelineExtractResult(
+                    name="contract_order",
+                    extraction={
+                        "contract": {"contract_number": "HT-001"},
+                        "order": {"total_amount": 120000, "currency": "CNY"},
+                    },
+                    extraction_metadata={"provider": "landingai"},
+                ),
+            ]
 
     monkeypatch.setattr(auto_module, "collect_evidence", fake_collect_evidence)
     monkeypatch.setattr(auto_module, "route_schemas", fake_route_schemas)
     monkeypatch.setattr(
-        auto_module, "extract_selected_pipelines", fake_extract_selected_pipelines
+        auto_module, "get_extractor_provider", lambda: _FakeLandingAIProvider()
     )
 
     try:
@@ -1708,6 +1828,82 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
             assert result.draft.contract is not None
             assert result.draft.contract.contract_no_external == "HT-001"
             assert len(result.draft.pipeline_results) == 2
+            assert all(
+                r.extraction_metadata.get("provider") == "landingai"
+                for r in result.draft.pipeline_results
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_routes_through_deepseek_provider(monkeypatch) -> None:
+    """Setting ``settings.extractor_provider='deepseek'`` must route extraction
+    through the DeepSeek-fake provider. The raw_llm_response.provider field
+    must reflect the configured provider name so the audit row records which
+    extractor implementation ran.
+    """
+    _patch_storage(monkeypatch)
+    _stub_planner_full_fanout(monkeypatch)
+    monkeypatch.setattr(auto_module.settings, "extractor_provider", "deepseek")
+    _stub_extractor_provider(monkeypatch, provider_name="deepseek")
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="测试客户有限公司 王经理 13800000000 合同金额 12 万",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            assert result.draft.customer is not None
+            assert result.draft.customer.full_name == "测试客户有限公司"
+            # Every pipeline result was stamped by the DeepSeek fake.
+            assert all(
+                r.extraction_metadata.get("provider") == "deepseek"
+                for r in result.draft.pipeline_results
+            )
+
+            doc = (
+                await session.execute(select(Document).where(Document.id == result.document_id))
+            ).scalar_one()
+            assert doc.raw_llm_response["provider"] == "deepseek"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_routes_through_landingai_provider(monkeypatch) -> None:
+    """Setting ``settings.extractor_provider='landingai'`` routes through the
+    LandingAI-fake provider and stamps ``raw_llm_response.provider`` accordingly.
+    Mirror of the DeepSeek test so the factory-based switch is exercised both ways.
+    """
+    _patch_storage(monkeypatch)
+    _stub_planner_full_fanout(monkeypatch)
+    monkeypatch.setattr(auto_module.settings, "extractor_provider", "landingai")
+    _stub_extractor_provider(monkeypatch, provider_name="landingai")
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                text_content="测试客户有限公司 王经理 13800000000 合同金额 12 万",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+
+            assert all(
+                r.extraction_metadata.get("provider") == "landingai"
+                for r in result.draft.pipeline_results
+            )
+
+            doc = (
+                await session.execute(select(Document).where(Document.id == result.document_id))
+            ).scalar_one()
+            assert doc.raw_llm_response["provider"] == "landingai"
     finally:
         await engine.dispose()
 
@@ -1753,19 +1949,22 @@ async def test_auto_ingest_no_longer_calls_legacy_plan_extraction(monkeypatch) -
             )
             await session.commit()
 
-            # identity + contract_order schemas → identity + commercial
-            # extractors selected.
-            names = sorted(s.name for s in result.plan.extractors)
-            assert names == ["commercial", "identity"]
+            # Pipeline results reflect the schemas the router selected.
+            names = sorted(r.name for r in result.draft.pipeline_results)
+            assert names == ["contract_order", "identity"]
     finally:
         await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_auto_ingest_mistral_path_warns_on_unsupported_schemas(monkeypatch) -> None:
-    """When the router picks finance/logistics/manufacturing_requirement
-    under the Mistral provider, the orchestrator must surface a warning
-    instead of silently dropping them.
+async def test_auto_ingest_provider_handles_all_selected_schemas(monkeypatch) -> None:
+    """Under the unified provider flow the configured extractor handles every
+    schema the router picked — finance / logistics / manufacturing_requirement
+    no longer trigger ``"no Mistral extractor available"`` warnings.
+
+    Previous behaviour (Mistral-only branch) is gone: both LandingAI and
+    DeepSeek providers know how to load every schema in
+    ``landingai_schemas/registry.py``.
     """
     _patch_storage(monkeypatch)
     _patch_route_schemas(
@@ -1784,14 +1983,12 @@ async def test_auto_ingest_mistral_path_warns_on_unsupported_schemas(monkeypatch
             )
             await session.commit()
 
+            # All three selected schemas reached the provider.
+            names = sorted(r.name for r in result.draft.pipeline_results)
+            assert names == ["finance", "identity", "logistics"]
+            # No "no Mistral extractor available" warnings anymore.
             joined = " ".join(result.draft.warnings)
-            assert "finance" in joined
-            assert "logistics" in joined
-            # manufacturing_requirement was NOT selected → no warning.
-            assert "manufacturing_requirement" not in joined
-            # The one mapped schema fired its extractor.
-            names = [s.name for s in result.plan.extractors]
-            assert names == ["identity"]
+            assert "no Mistral extractor available" not in joined
     finally:
         await engine.dispose()
 
@@ -1800,9 +1997,8 @@ async def test_auto_ingest_mistral_path_warns_on_unsupported_schemas(monkeypatch
 async def test_auto_ingest_no_hard_cap_on_selected_schemas(monkeypatch) -> None:
     """All six schemas should pass through end-to-end without truncation.
 
-    Mistral provider: only identity / contract_order / commitment_task_risk
-    run as legacy extractors; the other three surface as warnings. The
-    router's ``needs_human_review`` flag must also reach ``draft.warnings``.
+    Every selected schema lands as a ``PipelineExtractResult`` and the
+    router's ``needs_human_review`` flag propagates into ``draft.warnings``.
     """
     _patch_storage(monkeypatch)
     _patch_route_schemas(
@@ -1829,17 +2025,17 @@ async def test_auto_ingest_no_hard_cap_on_selected_schemas(monkeypatch) -> None:
             )
             await session.commit()
 
-            joined = " ".join(result.draft.warnings)
-            for unsup in ("finance", "logistics", "manufacturing_requirement"):
-                assert unsup in joined, (
-                    f"expected unsupported schema {unsup!r} to warn, "
-                    f"got warnings={result.draft.warnings}"
-                )
+            names = sorted(r.name for r in result.draft.pipeline_results)
+            assert names == [
+                "commitment_task_risk",
+                "contract_order",
+                "finance",
+                "identity",
+                "logistics",
+                "manufacturing_requirement",
+            ]
             # Router-requested review propagated.
             assert any("review" in w for w in result.draft.warnings)
-            # Three legacy extractors fired.
-            names = sorted(s.name for s in result.plan.extractors)
-            assert names == ["commercial", "identity", "ops"]
             assert result.plan.review_required is True
     finally:
         await engine.dispose()
