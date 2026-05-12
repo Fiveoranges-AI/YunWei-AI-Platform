@@ -13,7 +13,7 @@ import {
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
-import type { Review, ReviewExtraction } from "../data/types";
+import type { Review, ReviewExtraction, SchemaSummary, SchemaSummaryItem } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { markCustomersChanged } from "../lib/customerRefresh";
@@ -366,6 +366,10 @@ export function ReviewScreen({ go }: { go: GoFn }) {
                 </div>
               </Section>
             )}
+
+            {review.schemaSummary && (
+              <SchemaSummarySection summary={review.schemaSummary} />
+            )}
           </div>
 
           {/* Right column on desktop, below on mobile */}
@@ -527,6 +531,220 @@ export function ReviewScreen({ go }: { go: GoFn }) {
           onClose={() => setShowEvidence(null)}
           isDesktop={isDesktop}
         />
+      )}
+    </div>
+  );
+}
+
+// Compact diagnostic block: which schemas the router picked, what each
+// schema actually returned, what's missing, and the final draft status.
+// Built from raw /auto response — see api/ingest.ts buildSchemaSummary.
+function SchemaSummarySection({ summary }: { summary: SchemaSummary }) {
+  const {
+    selectedSchemas,
+    routePlanMissing,
+    pipelineResultsMissing,
+    finalDraftStatus,
+    generalWarnings,
+  } = summary;
+
+  const statusChips: Array<{ label: string; ok: boolean }> = [
+    { label: "客户", ok: finalDraftStatus.hasCustomer },
+    { label: "联系人", ok: finalDraftStatus.hasContacts },
+    { label: "合同", ok: finalDraftStatus.hasContract },
+    { label: "订单", ok: finalDraftStatus.hasOrder },
+    { label: "订单金额", ok: finalDraftStatus.hasOrderAmount },
+    { label: "付款节点", ok: finalDraftStatus.hasPaymentMilestones },
+  ];
+
+  return (
+    <Section title="Schema 路由与抽取摘要">
+      <div className="card" style={{ padding: 12 }}>
+        {routePlanMissing && (
+          <div style={{ fontSize: 12, color: "var(--warn-700)", marginBottom: 8 }}>
+            后端未返回 route_plan，无法显示 schema 路由
+          </div>
+        )}
+        {pipelineResultsMissing && !routePlanMissing && (
+          <div style={{ fontSize: 12, color: "var(--warn-700)", marginBottom: 8 }}>
+            后端未返回 pipeline_results
+          </div>
+        )}
+
+        {/* Final draft status — always shown so reviewers know what survived merge */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600, marginBottom: 6 }}>
+            最终草稿
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {statusChips.map((s) => (
+              <span
+                key={s.label}
+                style={{
+                  fontSize: 11,
+                  padding: "2px 8px",
+                  borderRadius: 10,
+                  background: s.ok ? "var(--brand-100)" : "var(--surface-3)",
+                  color: s.ok ? "var(--brand-600)" : "var(--ink-500)",
+                  border: `1px solid ${s.ok ? "var(--brand-300, #c8dbe9)" : "var(--ink-100)"}`,
+                }}
+              >
+                {s.ok ? "✓" : "·"} {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Per-schema breakdown */}
+        {selectedSchemas.length === 0 && !routePlanMissing && (
+          <div style={{ fontSize: 12, color: "var(--ink-500)" }}>
+            路由未选择任何 schema
+          </div>
+        )}
+        {selectedSchemas.map((s) => (
+          <SchemaSummaryRow key={s.schemaName} item={s} />
+        ))}
+
+        {generalWarnings.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600, marginBottom: 4 }}>
+              整体警告
+            </div>
+            {generalWarnings.map((w, i) => (
+              <div
+                key={i}
+                style={{
+                  fontSize: 11,
+                  color: "var(--warn-700)",
+                  background: "#fff7e8",
+                  border: "1px solid #f4dfb6",
+                  borderRadius: 6,
+                  padding: "4px 8px",
+                  marginBottom: 4,
+                  wordBreak: "break-word",
+                  lineHeight: 1.4,
+                }}
+              >
+                {w.length > 200 ? `${w.slice(0, 200)}…` : w}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function SchemaSummaryRow({ item }: { item: SchemaSummaryItem }) {
+  const confPct = Math.round((item.confidence || 0) * 100);
+  const confColor = confPct >= 80 ? "var(--brand-600)" : confPct >= 60 ? "var(--warn-700)" : "var(--ink-500)";
+  return (
+    <div
+      style={{
+        padding: "8px 0",
+        borderTop: "1px solid var(--ink-100)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>
+          {item.schemaLabel}
+        </span>
+        <span
+          className="num"
+          style={{ fontSize: 11, color: confColor, fontWeight: 600 }}
+        >
+          {confPct}%
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            color: "var(--ink-400)",
+            fontFamily: "ui-monospace, SFMono-Regular, monospace",
+          }}
+        >
+          {item.schemaName}
+        </span>
+        {item.pipelineResultMissing && (
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--risk-500)",
+              padding: "1px 6px",
+              borderRadius: 4,
+              background: "var(--risk-100)",
+            }}
+          >
+            未跑
+          </span>
+        )}
+      </div>
+      {item.reason && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--ink-500)",
+            marginTop: 3,
+            lineHeight: 1.4,
+            wordBreak: "break-word",
+          }}
+        >
+          {item.reason.length > 140 ? `${item.reason.slice(0, 140)}…` : item.reason}
+        </div>
+      )}
+
+      {item.extracted.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+          {item.extracted.map((label) => (
+            <span
+              key={`e-${label}`}
+              style={{
+                fontSize: 10,
+                color: "var(--brand-600)",
+                background: "var(--brand-100)",
+                borderRadius: 4,
+                padding: "1px 6px",
+              }}
+            >
+              ✓ {label}
+            </span>
+          ))}
+        </div>
+      )}
+      {item.missing.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+          {item.missing.map((label) => (
+            <span
+              key={`m-${label}`}
+              style={{
+                fontSize: 10,
+                color: "var(--ink-500)",
+                background: "var(--surface-3)",
+                borderRadius: 4,
+                padding: "1px 6px",
+                border: "1px dashed var(--ink-100)",
+              }}
+            >
+              · {label}
+            </span>
+          ))}
+        </div>
+      )}
+      {item.warnings.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          {item.warnings.map((w, i) => (
+            <div
+              key={i}
+              style={{
+                fontSize: 10,
+                color: "var(--warn-700)",
+                lineHeight: 1.4,
+                wordBreak: "break-word",
+              }}
+            >
+              ⚠ {w.length > 160 ? `${w.slice(0, 160)}…` : w}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
