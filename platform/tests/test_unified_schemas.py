@@ -418,3 +418,50 @@ def test_payment_milestone_float_offset_days_truncates():
         {"ratio": 1.0, "trigger_event": "other", "trigger_offset_days": 90.7}
     )
     assert m.trigger_offset_days == 90
+
+
+# ── bind_existing customer/contact decision mode ────────────────────
+
+
+def test_customer_decision_accepts_bind_existing_mode():
+    """bind_existing is the new explicit binding mode (no field update)."""
+    from yinhu_brain.services.ingest.schemas import CustomerDecision
+    from uuid import uuid4
+
+    cd = CustomerDecision.model_validate(
+        {
+            "mode": "bind_existing",
+            "existing_id": str(uuid4()),
+            "final": {"full_name": "保留原值"},
+        }
+    )
+    assert cd.mode == "bind_existing"
+
+
+def test_customer_decision_rejects_unknown_mode():
+    from yinhu_brain.services.ingest.schemas import CustomerDecision
+    with pytest.raises(Exception):
+        CustomerDecision.model_validate(
+            {"mode": "wat", "final": {"full_name": "x"}}
+        )
+
+
+def test_auto_confirm_request_round_trips_bind_existing_mode():
+    from yinhu_brain.services.ingest.unified_schemas import AutoConfirmRequest
+    from uuid import uuid4
+
+    existing = str(uuid4())
+    req = AutoConfirmRequest.model_validate(
+        {
+            "customer": {
+                "mode": "bind_existing",
+                "existing_id": existing,
+                "final": {"full_name": ""},
+            },
+        }
+    )
+    payload = req.model_dump(mode="json")
+    restored = AutoConfirmRequest.model_validate(payload)
+    assert restored.customer is not None
+    assert restored.customer.mode == "bind_existing"
+    assert str(restored.customer.existing_id) == existing
