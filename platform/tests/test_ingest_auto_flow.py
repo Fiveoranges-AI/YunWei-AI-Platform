@@ -1078,33 +1078,20 @@ async def test_auto_ingest_planner_gating_two_extractors(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_auto_ingest_text_input_never_invokes_ocr(monkeypatch) -> None:
-    """Text input (modality=text) must NOT call any Mistral OCR function.
+    """Text input (modality=text) must NOT call any OCR provider.
 
     OCR is paid + latency-sensitive; routing pasted_text through the image
-    pipeline was a real bug in an earlier draft. Spy on every OCR entry
-    point and assert zero invocations.
+    pipeline was a real bug in an earlier draft. Spy on the provider factory
+    and assert zero invocations.
     """
     _patch_storage(monkeypatch)
     _stub_planner_full_fanout(monkeypatch)
     _stub_extractors(monkeypatch)
 
-    ocr_calls = {"image": 0, "pdf": 0, "doc": 0}
+    def boom_factory():
+        raise AssertionError("OCR provider must not be requested for text input")
 
-    async def boom_image(*args, **kwargs):
-        ocr_calls["image"] += 1
-        raise AssertionError("parse_image_to_markdown must not be called for text input")
-
-    async def boom_pdf(*args, **kwargs):
-        ocr_calls["pdf"] += 1
-        raise AssertionError("parse_pdf_to_markdown must not be called for text input")
-
-    async def boom_doc(*args, **kwargs):
-        ocr_calls["doc"] += 1
-        raise AssertionError("parse_document_to_markdown must not be called for text input")
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", boom_image)
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
-    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", boom_doc)
+    monkeypatch.setattr(evidence_module, "get_ocr_provider", boom_factory)
 
     engine = await _make_engine()
     try:
@@ -1116,7 +1103,6 @@ async def test_auto_ingest_text_input_never_invokes_ocr(monkeypatch) -> None:
             )
             await session.commit()
 
-            assert ocr_calls == {"image": 0, "pdf": 0, "doc": 0}
             # And the evidence row was created with the text as ocr_text.
             doc = (
                 await session.execute(select(Document).where(Document.id == result.document_id))
@@ -1141,10 +1127,16 @@ async def test_auto_endpoint_accepts_file_upload(monkeypatch) -> None:
     _stub_planner_full_fanout(monkeypatch)
     _stub_extractors(monkeypatch)
 
-    async def fake_image_ocr(image_bytes, filename, content_type):
-        return "测试客户有限公司 王经理 13800000000"
+    from yinhu_brain.services.ocr.base import OcrInput, OcrResult
 
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_image_ocr)
+    class _FakeProvider:
+        async def parse(self, ocr_input: OcrInput) -> OcrResult:
+            return OcrResult(
+                markdown="测试客户有限公司 王经理 13800000000",
+                provider="fake",
+            )
+
+    monkeypatch.setattr(evidence_module, "get_ocr_provider", lambda: _FakeProvider())
 
     engine = await _make_engine()
     try:

@@ -17,7 +17,7 @@ The design is sound with one required correction already applied to the spec:
 - **High cohesion / low coupling:** OCR adapters own parsing API quirks; extractor adapters own model extraction quirks; business schemas and normalizer remain provider-neutral.
 - **KISS:** The plan uses plain provider factories and dataclasses, not a dynamic plugin framework.
 - **Cautious DRY:** Shared provider contracts are justified because Mistral/MinerU and LandingAI/DeepSeek are the same concepts and will change together at orchestration boundaries.
-- **Explicit over implicit:** `ExtractionInput` now carries `AsyncSession` because DeepSeek and legacy extractors write `llm_calls`. No hidden global DB dependency.
+- **Explicit over implicit:** `ExtractionInput` now carries `AsyncSession` because DeepSeek writes `llm_calls`. No hidden global DB dependency.
 - **Verifiability:** Every provider gets focused tests with no live network calls. Orchestrator tests verify provider composition end to end.
 
 Implementation constraint: do not change winapp types, DB tables, confirm writeback, or the shape of `/win/api/ingest/auto`.
@@ -42,12 +42,10 @@ Create:
   `ExtractionInput`, `ExtractorProvider`.
 - `platform/yinhu_brain/services/ingest/extractors/providers/landingai.py`  
   Wraps current LandingAI schema extraction.
-- `platform/yinhu_brain/services/ingest/extractors/providers/legacy.py`  
-  Preserves identity/commercial/ops behavior and warnings for unsupported schemas.
 - `platform/yinhu_brain/services/ingest/extractors/providers/deepseek_schema.py`  
   New schema-routed DeepSeek extraction returning `PipelineExtractResult[]`.
 - `platform/yinhu_brain/services/ingest/extractors/providers/factory.py`  
-  `get_extractor_provider` and backwards-compatible provider resolution.
+  `get_extractor_provider`.
 - `platform/prompts/schema_extraction.md`  
   Provider-neutral schema extraction prompt.
 - `platform/tests/test_ocr_provider_factory.py`
@@ -55,7 +53,6 @@ Create:
 - `platform/tests/test_mineru_ocr_provider.py`
 - `platform/tests/test_extractor_provider_factory.py`
 - `platform/tests/test_landingai_extractor_provider.py`
-- `platform/tests/test_legacy_extractor_provider.py`
 - `platform/tests/test_deepseek_schema_extractor_provider.py`
 
 Modify:
@@ -136,7 +133,7 @@ In `platform/yinhu_brain/config.py`, add after `document_ai_provider`:
 ```python
     # ---- Modular ingest providers ----------------------------------------
     ocr_provider: Literal["mistral", "mineru"] = "mistral"
-    extractor_provider: Literal["landingai", "deepseek", "legacy"] | None = None
+    extractor_provider: Literal["landingai", "deepseek"] = "landingai"
 
     # ---- MinerU precise OCR ----------------------------------------------
     mineru_api_token: str = ""

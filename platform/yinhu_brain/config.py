@@ -33,6 +33,25 @@ class Settings(BaseSettings):
     # ---- Document extraction provider ----------------------------------
     document_ai_provider: Literal["mistral", "landingai"] = "mistral"
 
+    # ---- Modular ingest providers --------------------------------------
+    # New provider surface. OCR_PROVIDER selects the markdown/text extractor
+    # for non-text inputs; EXTRACTOR_PROVIDER selects schema-based extraction.
+    # These will eventually supersede `document_ai_provider`.
+    ocr_provider: Literal["mistral", "mineru"] = "mistral"
+    extractor_provider: Literal["landingai", "deepseek"] = "landingai"
+
+    # ---- MinerU 精准解析 -------------------------------------------------
+    # Used by MineruPreciseOcrProvider. Implementation lands in a later task.
+    mineru_api_token: str = ""
+    mineru_base_url: str = "https://mineru.net"
+    mineru_model_version: Literal["pipeline", "vlm"] = "vlm"
+    mineru_language: str = "ch"
+    mineru_enable_table: bool = True
+    mineru_enable_formula: bool = True
+    mineru_is_ocr: bool = True
+    mineru_poll_interval_seconds: float = 2.0
+    mineru_timeout_seconds: int = 180
+
     # ---- LandingAI ADE --------------------------------------------------
     # LandingAI's Python library reads VISION_AGENT_API_KEY from env. We keep
     # the value in settings too so Railway/.env config can be validated.

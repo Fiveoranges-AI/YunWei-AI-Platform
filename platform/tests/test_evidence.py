@@ -32,10 +32,9 @@ from yinhu_brain.models import (
     DocumentReviewStatus,
     DocumentType,
 )
-from yinhu_brain.services import pdf as pdf_utils
 from yinhu_brain.services.ingest import evidence as evidence_module
 from yinhu_brain.services.ingest.evidence import Evidence, collect_evidence
-from yinhu_brain.services.mistral_ocr_client import MistralOCRUnavailable
+from yinhu_brain.services.ocr.base import OcrInput, OcrResult
 
 
 # ---------- helpers -------------------------------------------------------
@@ -82,26 +81,39 @@ def _patch_store_upload(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return calls
 
 
+class _FakeOcrProvider:
+    """Capture each ``parse`` call and return a pre-canned ``OcrResult``.
+
+    Used to assert that ``collect_evidence`` forwards modality / filename /
+    content_type through to whichever provider the factory returns.
+    """
+
+    def __init__(self, result: OcrResult) -> None:
+        self.result = result
+        self.inputs: list[OcrInput] = []
+
+    async def parse(self, ocr_input: OcrInput) -> OcrResult:
+        self.inputs.append(ocr_input)
+        return self.result
+
+
+def _install_provider(monkeypatch: pytest.MonkeyPatch, provider) -> None:
+    """Patch ``get_ocr_provider`` so ``collect_evidence`` uses ``provider``."""
+    monkeypatch.setattr(evidence_module, "get_ocr_provider", lambda: provider)
+
+
 # ---------- text-content path --------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_text_content_does_not_call_ocr(monkeypatch) -> None:
-    """A pasted text note becomes the ocr_text directly; no OCR helper fires."""
+    """A pasted text note becomes the ocr_text directly; no OCR provider fires."""
     store_calls = _patch_store_upload(monkeypatch)
 
-    async def boom_image(*a, **k):
-        raise AssertionError("parse_image_to_markdown must not be called for text")
+    def boom_factory():
+        raise AssertionError("OCR provider must not be requested for text input")
 
-    async def boom_pdf(*a, **k):
-        raise AssertionError("parse_pdf_to_markdown must not be called for text")
-
-    async def boom_doc(*a, **k):
-        raise AssertionError("parse_document_to_markdown must not be called for text")
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", boom_image)
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
-    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", boom_doc)
+    monkeypatch.setattr(evidence_module, "get_ocr_provider", boom_factory)
 
     session, engine = await _make_session()
     try:
@@ -166,28 +178,13 @@ async def test_short_text_adds_warning_but_does_not_raise(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_image_bytes_trigger_image_ocr(monkeypatch) -> None:
-    """Image bytes flow through ``parse_image_to_markdown`` and the markdown
+    """Image bytes flow through the OCR provider and the markdown
     becomes ``ocr_text``."""
     store_calls = _patch_store_upload(monkeypatch)
     fake_md = "# Card\n\n王经理 13800000000 wang@example.com"
 
-    captured: dict = {}
-
-    async def fake_image(image_bytes, filename, content_type=None):
-        captured["bytes_len"] = len(image_bytes)
-        captured["filename"] = filename
-        captured["content_type"] = content_type
-        return fake_md
-
-    async def boom_pdf(*a, **k):
-        raise AssertionError("pdf OCR must not run for image inputs")
-
-    async def boom_doc(*a, **k):
-        raise AssertionError("document OCR must not run for image inputs")
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_image)
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
-    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", boom_doc)
+    provider = _FakeOcrProvider(OcrResult(markdown=fake_md, provider="fake"))
+    _install_provider(monkeypatch, provider)
 
     session, engine = await _make_session()
     try:
@@ -205,9 +202,14 @@ async def test_image_bytes_trigger_image_ocr(monkeypatch) -> None:
         assert result.warnings == []
         assert result.document.type == DocumentType.business_card
         assert result.document.content_type == "image/png"
-        assert captured["filename"] == "card.png"
-        assert captured["content_type"] == "image/png"
-        assert captured["bytes_len"] > 0
+        # Provider received the correct OcrInput.
+        assert len(provider.inputs) == 1
+        ocr_input = provider.inputs[0]
+        assert ocr_input.modality == "image"
+        assert ocr_input.filename == "card.png"
+        assert ocr_input.content_type == "image/png"
+        assert ocr_input.source_hint == "file"
+        assert len(ocr_input.file_bytes) > 0
         # store_upload was called once with the original filename
         assert len(store_calls) == 1
         assert store_calls[0]["filename"] == "card.png"
@@ -222,10 +224,8 @@ async def test_camera_capture_defaults_filename_and_content_type(monkeypatch) ->
     and image/jpeg so the OCR client picks the right media type."""
     store_calls = _patch_store_upload(monkeypatch)
 
-    async def fake_image(image_bytes, filename, content_type=None):
-        return "ocr text from camera"
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_image)
+    provider = _FakeOcrProvider(OcrResult(markdown="ocr text from camera", provider="fake"))
+    _install_provider(monkeypatch, provider)
 
     session, engine = await _make_session()
     try:
@@ -241,6 +241,8 @@ async def test_camera_capture_defaults_filename_and_content_type(monkeypatch) ->
         assert result.document.content_type == "image/jpeg"
         assert store_calls[0]["filename"] == "capture.jpg"
         assert store_calls[0]["default_ext"] == ".jpg"
+        # ``source_hint=camera`` should propagate to the provider input.
+        assert provider.inputs[0].source_hint == "camera"
     finally:
         await session.close()
         await engine.dispose()
@@ -248,13 +250,18 @@ async def test_camera_capture_defaults_filename_and_content_type(monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_image_ocr_unavailable_warns_does_not_raise(monkeypatch) -> None:
-    """Mistral down → ocr_text empty + warning, Document row still flushed."""
+    """Provider returns empty markdown + warning → ocr_text empty,
+    Document row still flushed, warning attached."""
     _patch_store_upload(monkeypatch)
 
-    async def explode(*a, **k):
-        raise MistralOCRUnavailable("mistral ocr unreachable: ConnectError(...)")
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", explode)
+    provider = _FakeOcrProvider(
+        OcrResult(
+            markdown="",
+            provider="fake",
+            warnings=["Mistral OCR unavailable: ConnectError(...)"],
+        )
+    )
+    _install_provider(monkeypatch, provider)
 
     session, engine = await _make_session()
     try:
@@ -287,24 +294,23 @@ async def test_image_ocr_unavailable_warns_does_not_raise(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_pdf_with_text_layer_uses_native_text_no_ocr(monkeypatch) -> None:
-    """Born-digital PDF: pypdf returns plenty of text → no Mistral OCR call."""
+async def test_pdf_routes_to_provider_with_pdf_modality(monkeypatch) -> None:
+    """A PDF flows through the OCR provider with ``modality='pdf'``.
+
+    The native-text / OCR-fallback decision now lives inside the provider, so
+    the orchestrator-level test only verifies routing + result forwarding.
+    """
     _patch_store_upload(monkeypatch)
 
-    fake_pages = [
-        pdf_utils.PageText(page_num=1, text="甲方：测试客户有限公司\n金额：120000 元"),
-        pdf_utils.PageText(page_num=2, text="交付日期：2026-06-30"),
-    ]
-    monkeypatch.setattr(
-        evidence_module.pdf_utils,
-        "extract_text_with_pages",
-        lambda path: fake_pages,
+    fake_md = "[page 1]\n甲方：测试客户有限公司\n金额：120000 元"
+    provider = _FakeOcrProvider(
+        OcrResult(
+            markdown=fake_md,
+            provider="fake",
+            metadata={"pdf_text_source": "native"},
+        )
     )
-
-    async def boom_pdf(*a, **k):
-        raise AssertionError("parse_pdf_to_markdown should not run for born-digital PDFs")
-
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
+    _install_provider(monkeypatch, provider)
 
     session, engine = await _make_session()
     try:
@@ -318,56 +324,12 @@ async def test_pdf_with_text_layer_uses_native_text_no_ocr(monkeypatch) -> None:
         await session.commit()
 
         assert result.modality == "pdf"
-        assert "测试客户有限公司" in result.ocr_text
-        assert "[page 1]" in result.ocr_text
+        assert result.ocr_text == fake_md
         assert result.warnings == []
         assert result.document.type == DocumentType.contract
         assert result.document.content_type == "application/pdf"
-    finally:
-        await session.close()
-        await engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_pdf_scanned_falls_back_to_mistral_ocr(monkeypatch) -> None:
-    """Scanned PDF: pypdf returns ~nothing → Mistral OCR is called and used."""
-    _patch_store_upload(monkeypatch)
-
-    # is_scanned() returns True when total chars across pages < 50.
-    fake_pages = [pdf_utils.PageText(page_num=1, text="")]
-    monkeypatch.setattr(
-        evidence_module.pdf_utils,
-        "extract_text_with_pages",
-        lambda path: fake_pages,
-    )
-
-    fake_md = "# Scanned PDF\n\n甲方：测试客户有限公司\n金额：120000"
-    captured: dict = {}
-
-    async def fake_pdf_ocr(pdf_bytes, filename="doc.pdf"):
-        captured["bytes_len"] = len(pdf_bytes)
-        captured["filename"] = filename
-        return fake_md
-
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", fake_pdf_ocr)
-
-    session, engine = await _make_session()
-    try:
-        result = await collect_evidence(
-            session=session,
-            file_bytes=b"%PDF-1.4 scanned bytes",
-            original_filename="scan.pdf",
-            content_type="application/pdf",
-            source_hint="file",
-        )
-        await session.commit()
-
-        assert result.modality == "pdf"
-        assert result.ocr_text == fake_md
-        assert "测试客户有限公司" in result.ocr_text
-        assert result.warnings == []
-        assert captured["filename"] == "scan.pdf"
-        assert captured["bytes_len"] > 0
+        assert provider.inputs[0].modality == "pdf"
+        assert provider.inputs[0].filename == "contract.pdf"
     finally:
         await session.close()
         await engine.dispose()
@@ -375,19 +337,17 @@ async def test_pdf_scanned_falls_back_to_mistral_ocr(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_pdf_ocr_unavailable_warns(monkeypatch) -> None:
-    """Scanned PDF + OCR down → ocr_text stays empty, warning attached."""
+    """Provider's warning bubbles up as a Document parse_warning."""
     _patch_store_upload(monkeypatch)
 
-    monkeypatch.setattr(
-        evidence_module.pdf_utils,
-        "extract_text_with_pages",
-        lambda path: [pdf_utils.PageText(page_num=1, text="")],
+    provider = _FakeOcrProvider(
+        OcrResult(
+            markdown="",
+            provider="fake",
+            warnings=["Mistral OCR unavailable: 5xx 500"],
+        )
     )
-
-    async def explode(*a, **k):
-        raise MistralOCRUnavailable("mistral ocr 5xx 500: down")
-
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", explode)
+    _install_provider(monkeypatch, provider)
 
     session, engine = await _make_session()
     try:
@@ -412,29 +372,13 @@ async def test_pdf_ocr_unavailable_warns(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_office_doc_routes_to_document_url_ocr(monkeypatch) -> None:
-    """A .docx file goes through ``parse_document_to_markdown``."""
+async def test_office_doc_routes_to_provider_with_office_modality(monkeypatch) -> None:
+    """A .docx file flows through the OCR provider with ``modality='office'``."""
     _patch_store_upload(monkeypatch)
 
     fake_md = "# Word doc\n\n甲方：另一家测试客户公司"
-    captured: dict = {}
-
-    async def fake_doc_ocr(doc_bytes, filename="doc.pdf", content_type=None):
-        captured["bytes_len"] = len(doc_bytes)
-        captured["filename"] = filename
-        captured["content_type"] = content_type
-        return fake_md
-
-    monkeypatch.setattr(evidence_module, "parse_document_to_markdown", fake_doc_ocr)
-
-    async def boom_image(*a, **k):
-        raise AssertionError("image OCR must not run for office files")
-
-    async def boom_pdf(*a, **k):
-        raise AssertionError("pdf OCR must not run for office files")
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", boom_image)
-    monkeypatch.setattr(evidence_module, "parse_pdf_to_markdown", boom_pdf)
+    provider = _FakeOcrProvider(OcrResult(markdown=fake_md, provider="fake"))
+    _install_provider(monkeypatch, provider)
 
     session, engine = await _make_session()
     try:
@@ -448,7 +392,8 @@ async def test_office_doc_routes_to_document_url_ocr(monkeypatch) -> None:
 
         assert result.modality == "office"
         assert result.ocr_text == fake_md
-        assert captured["filename"] == "proposal.docx"
+        assert provider.inputs[0].modality == "office"
+        assert provider.inputs[0].filename == "proposal.docx"
         assert result.document.type == DocumentType.contract
     finally:
         await session.close()
@@ -504,10 +449,8 @@ async def test_progress_callback_emits_stages(monkeypatch) -> None:
     """The progress callback receives ``stored`` and ``ocr`` notifications."""
     _patch_store_upload(monkeypatch)
 
-    async def fake_image(*a, **k):
-        return "some markdown"
-
-    monkeypatch.setattr(evidence_module, "parse_image_to_markdown", fake_image)
+    provider = _FakeOcrProvider(OcrResult(markdown="some markdown", provider="fake"))
+    _install_provider(monkeypatch, provider)
 
     events: list[tuple[str, str]] = []
 
