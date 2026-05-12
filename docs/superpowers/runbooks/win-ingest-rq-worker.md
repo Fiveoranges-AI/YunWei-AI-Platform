@@ -42,6 +42,9 @@ Same image as `platform-app`. In Railway:
    - `LANDINGAI_*` model overrides if any
    - `ANTHROPIC_API_KEY` (Claude/DeepSeek)
    - `MODEL_PARSE` / `MODEL_QA` / `MODEL_VISION` if customized
+   - `WORKER_MAX_JOBS` (optional; default `100`) — worker processes this
+     many jobs then exits so Railway restarts it, capping memory growth
+     from LandingAI/httpx pools. Set to `0` (or empty) to disable.
 
 5. Settings → Volumes: attach the **same Railway Volume** the web service
    uses, mounted at the same path (e.g. `/data`). The volume holds the

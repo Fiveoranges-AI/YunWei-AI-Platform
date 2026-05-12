@@ -50,10 +50,10 @@ async def _make_engine():
 
 def _stub_queue(monkeypatch):
     """Replace enqueue/Redis to avoid Redis dependency. Captures all calls."""
-    calls: list[tuple[str, int]] = []
+    calls: list[tuple[str, int, str]] = []
 
-    def fake_enqueue(job_id: str, *, attempt: int) -> str:
-        calls.append((job_id, attempt))
+    def fake_enqueue(job_id: str, *, attempt: int, enterprise_id: str) -> str:
+        calls.append((job_id, attempt, enterprise_id))
         return f"rq:{job_id}:a{attempt}"
 
     monkeypatch.setattr(job_queue_module, "enqueue_ingest_job", fake_enqueue)
@@ -105,7 +105,7 @@ async def test_create_jobs_returns_batch_id_and_persists_rows(monkeypatch, tmp_p
             j = body["jobs"][0]
             assert j["status"] == "queued"
             assert j["original_filename"] == "a.pdf"
-            assert calls == [(j["id"], 1)]
+            assert calls == [(j["id"], 1, "tenant_test")]
 
         async with AsyncSession(engine, expire_on_commit=False) as session:
             row = (await session.execute(select(IngestJob))).scalar_one()
@@ -249,7 +249,7 @@ async def test_retry_failed_job_reenqueues(monkeypatch, tmp_path):
             body = res.json()
             assert body["status"] == "queued"
             assert body["attempts"] == 2
-            assert calls == [(jid, 2)]
+            assert calls == [(jid, 2, "tenant_test")]
     finally:
         await engine.dispose()
 
@@ -299,3 +299,81 @@ def test_rq_id_uses_only_letters_digits_dashes_underscores():
     assert rid.endswith("-a3")
     # Encodes the business job id (UUID) verbatim
     assert "abc12345-6789-4def-0123-456789abcdef" in rid
+
+
+# ---------- enqueue signature -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_enqueue_signature_includes_enterprise_id(monkeypatch, tmp_path):
+    """The worker resolves the tenant DB straight from the RQ args, so the
+    API must pass ``enterprise_id`` to ``enqueue_ingest_job`` on every
+    enqueue. Regression for the deleted Redis side-channel."""
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    calls = _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.post(
+                "/win/api/ingest/jobs",
+                files=[("files", ("a.pdf", b"%PDF-fake", "application/pdf"))],
+                data={"source_hint": "file"},
+            )
+            assert res.status_code == 200, res.text
+            assert len(calls) == 1
+            job_id, attempt, enterprise_id = calls[0]
+            assert attempt == 1
+            assert enterprise_id == "tenant_test"
+            assert job_id == res.json()["jobs"][0]["id"]
+    finally:
+        await engine.dispose()
+
+
+# ---------- watchdog -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_watchdog_resets_stale_running_jobs(monkeypatch, tmp_path):
+    """A job stuck in ``running`` for >15 min (worker died) gets flipped
+    back to ``queued`` and re-enqueued on the next GET /jobs hit."""
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    calls = _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+        j = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="stuck.pdf", source_hint="file",
+            status=IngestJobStatus.running, stage=IngestJobStage.extract,
+            attempts=1,
+        )
+        session.add(j)
+        await session.commit()
+        jid = str(j.id)
+        # Force ``updated_at`` to be old (default = now). SQLAlchemy default
+        # fires on insert; we have to overwrite after commit.
+        await session.execute(
+            IngestJob.__table__.update()
+            .where(IngestJob.id == j.id)
+            .values(updated_at=stale_time)
+        )
+        await session.commit()
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.get("/win/api/ingest/jobs?status=active")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert len(body) == 1
+            assert body[0]["id"] == jid
+            assert body[0]["status"] == "queued"
+            assert body[0]["attempts"] == 2
+            assert (jid, 2, "tenant_test") in calls
+    finally:
+        await engine.dispose()

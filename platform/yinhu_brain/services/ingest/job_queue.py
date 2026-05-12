@@ -1,29 +1,37 @@
 """RQ queue + enqueue helper for ingest jobs.
 
-The actual worker function lives in ``yinhu_brain.workers.ingest_rq``
-(Agent B). This module just wires up the Redis connection + Queue
-singleton + a small enqueue() helper API handlers call. JSONSerializer is
-used so the queue can only carry a single string job_id (no pickled
-Python objects).
+The actual worker function lives in ``yinhu_brain.workers.ingest_rq``.
+This module just wires up the Redis connection + Queue singleton + a small
+enqueue() helper API handlers call. JSONSerializer is used so the queue
+can only carry primitive args (job_id + enterprise_id strings).
+
+Tenant routing: ``enterprise_id`` is passed positionally to the worker
+function so the worker can resolve the tenant engine directly — no Redis
+side-channel hash. Loud failure if a caller forgets it (required kw-only
+arg on ``enqueue_ingest_job``).
 """
 
 from __future__ import annotations
 
 import os
+import uuid
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
 from redis import Redis
-from rq import Queue
+from rq import Queue, Retry
 from rq.serializers import JSONSerializer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 INGEST_QUEUE_NAME = "win-ingest"
 WORKER_FN = "yinhu_brain.workers.ingest_rq.run_ingest_job"
 
-# Redis hash mapping business job_id -> enterprise_id. The worker reads
-# this to know which tenant DB to route to. Lossy-OK: a missing entry
-# simply means the worker can't find the job and logs an error; the
-# next retry from the API restores the mapping.
-_JOB_ENT_HASH = "win-ingest:job-enterprise"
+# Stale-running watchdog threshold. Jobs whose status is ``running`` but
+# whose ``updated_at`` is older than this are considered orphaned (worker
+# died mid-job) and get flipped back to ``queued`` so the next pickup can
+# retry them.
+STALE_RUNNING_AFTER_MINUTES = 15
 
 
 @lru_cache(maxsize=1)
@@ -53,62 +61,66 @@ def _rq_id_for(job_id: str, attempt: int) -> str:
     return f"ingest-{job_id}-a{attempt}"
 
 
-def enqueue_ingest_job(job_id: str, *, attempt: int) -> str:
-    """Enqueue the worker function with the business job_id. Returns the
-    RQ job id (we keep a different namespace per attempt so retries don't
-    collide on RQ side).
+def enqueue_ingest_job(
+    job_id: str,
+    *,
+    attempt: int,
+    enterprise_id: str,
+) -> str:
+    """Enqueue the worker function with the business job_id + enterprise_id.
+    Returns the RQ job id (we keep a different namespace per attempt so
+    retries don't collide on RQ side).
+
+    ``enterprise_id`` is required so the worker can resolve the tenant DB
+    directly from the job args — no Redis side-channel.
+
+    Also configures RQ's built-in retry policy: 3 in-worker retries with
+    1m / 5m / 15m backoff for transient LandingAI/OCR failures. This is
+    distinct from the IngestJob-row ``attempts`` field used for manual
+    user-initiated retries.
     """
     queue = get_ingest_queue()
     rq_id = _rq_id_for(job_id, attempt)
     queue.enqueue(
         WORKER_FN,
         job_id,
+        enterprise_id,
         job_id=rq_id,
         job_timeout=600,  # 10 min per job
         result_ttl=300,
         failure_ttl=24 * 3600,
+        retry=Retry(max=3, interval=[60, 300, 900]),
     )
     return rq_id
 
 
-def remember_enterprise_for_job(job_id: str, enterprise_id: str) -> None:
-    """Store ``job_id -> enterprise_id`` so the worker can resolve the
-    tenant DB without scanning. RQ's JSONSerializer only carries the
-    string job_id, so we side-channel the enterprise via Redis. Lossy-OK:
-    on Redis hiccups the worker will log and skip; retry restores it.
+async def reset_stale_running_jobs(
+    session: AsyncSession,
+    *,
+    threshold_minutes: int = STALE_RUNNING_AFTER_MINUTES,
+) -> list[uuid.UUID]:
+    """Flip any IngestJob stuck in ``running`` past the staleness threshold
+    back to ``queued`` so the next worker pickup can retry it.
+
+    Returns the affected job ids. Caller decides whether to re-enqueue
+    them on RQ; the API endpoint just resets state, the worker tick also
+    re-enqueues so the next tick picks them up.
     """
-    try:
-        _redis().hset(_JOB_ENT_HASH, job_id, enterprise_id)
-    except Exception:
-        # Same swallow policy as enqueue: callers handle Redis-down via
-        # the surrounding try/except that marks jobs failed. We log via
-        # the standard logging chain but never raise from a side-channel.
-        import logging
+    from yinhu_brain.models import IngestJob, IngestJobStatus
 
-        logging.getLogger(__name__).exception(
-            "remember_enterprise_for_job: redis hset failed for %s", job_id
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold_minutes)
+    stmt = select(IngestJob).where(
+        IngestJob.status == IngestJobStatus.running,
+        IngestJob.updated_at < cutoff,
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    ids: list[uuid.UUID] = []
+    for j in rows:
+        j.status = IngestJobStatus.queued
+        j.progress_message = (
+            f"worker did not check in for >{threshold_minutes} min; reset to queued"
         )
-
-
-def lookup_enterprise_for(job_id: str) -> str | None:
-    """Return the enterprise_id previously stored for ``job_id`` or None
-    if no mapping exists. Sync — the underlying redis client is sync."""
-    raw = _redis().hget(_JOB_ENT_HASH, job_id)
-    if raw is None:
-        return None
-    if isinstance(raw, (bytes, bytearray)):
-        return raw.decode("utf-8")
-    return str(raw)
-
-
-def forget_enterprise_for_job(job_id: str) -> None:
-    """Remove the mapping. Currently unused — kept for completeness so
-    a future GC step doesn't need to reach into Redis directly."""
-    try:
-        _redis().hdel(_JOB_ENT_HASH, job_id)
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception(
-            "forget_enterprise_for_job: redis hdel failed for %s", job_id
-        )
+        ids.append(j.id)
+    if ids:
+        await session.commit()
+    return ids

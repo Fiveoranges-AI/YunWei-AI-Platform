@@ -1,16 +1,13 @@
 """RQ worker function for /win/api/ingest/jobs.
 
 Enqueued by ``yinhu_brain.services.ingest.job_queue.enqueue_ingest_job``.
-The queue carries a single string job_id (JSONSerializer). The worker
-reads the IngestJob row from the tenant DB, drives ``auto_ingest``, and
-persists ``result_json`` + status transitions.
+The queue carries two strings — ``job_id`` and ``enterprise_id`` — under
+JSONSerializer. The worker reads the IngestJob row from the tenant DB,
+drives ``auto_ingest``, and persists ``result_json`` + status transitions.
 
-Tenant routing: web request middleware sets ``request.state.enterprise_id``;
-the worker has no request, so the enqueue path side-channels the
-``job_id -> enterprise_id`` mapping into a Redis hash (see
-``yinhu_brain.services.ingest.job_queue.remember_enterprise_for_job``).
-The worker reads that mapping here and resolves the tenant engine via
-``yinhu_brain.db.get_engine_for(enterprise_id)``.
+Tenant routing: the enqueue path passes ``enterprise_id`` as a positional
+arg so the worker can resolve the tenant engine directly via
+``yinhu_brain.db.get_engine_for(enterprise_id)`` — no Redis side-channel.
 """
 
 from __future__ import annotations
@@ -28,7 +25,6 @@ from yinhu_brain.db import ensure_ingest_job_tables, get_engine_for
 from yinhu_brain.models import IngestJob, IngestJobStage, IngestJobStatus
 from yinhu_brain.services.ingest.auto import auto_ingest
 from yinhu_brain.services.ingest.evidence import PreStoredFile
-from yinhu_brain.services.ingest.job_queue import lookup_enterprise_for
 
 logger = logging.getLogger(__name__)
 
@@ -72,15 +68,15 @@ class _CanceledMidFlight(Exception):
 # ---------- RQ entrypoint ------------------------------------------------
 
 
-def run_ingest_job(job_id: str) -> None:
+def run_ingest_job(job_id: str, enterprise_id: str) -> None:
     """Synchronous entrypoint RQ calls. Boots an asyncio loop, runs the
     actual coroutine, and lets RQ record completion. Every exception is
     caught and persisted as ``status=failed`` so the worker never crashes
     its RQ runner mid-job."""
-    asyncio.run(process_ingest_job(job_id))
+    asyncio.run(process_ingest_job(job_id, enterprise_id))
 
 
-async def process_ingest_job(job_id: str) -> None:
+async def process_ingest_job(job_id: str, enterprise_id: str) -> None:
     """Drive a single ingest job end-to-end.
 
     Postgres is the source of truth; every status/stage change is committed
@@ -89,11 +85,6 @@ async def process_ingest_job(job_id: str) -> None:
     boundary instead of writing extracted/result_json.
     """
     job_uuid = UUID(job_id)
-
-    enterprise_id = lookup_enterprise_for(job_id)
-    if not enterprise_id:
-        logger.error("worker: no enterprise mapping for job %s; aborting", job_id)
-        return
 
     engine = await get_engine_for(enterprise_id)
     await ensure_ingest_job_tables(engine)
