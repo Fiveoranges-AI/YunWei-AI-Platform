@@ -6,8 +6,10 @@ the Redis `win-ingest` queue. A separate worker service consumes that
 queue and runs the same `auto_ingest` pipeline that `/win/api/ingest/auto`
 runs, persisting the result back to the job row.
 
-Two Railway services, one Docker image, one Postgres, one Redis, one
-shared volume.
+Two Railway services, one Docker image, one Postgres, one Redis. Files
+go through an S3-compatible object store (Cloudflare R2 recommended) —
+**Railway Volumes cannot be shared between services**, so the local
+backend is only suitable for single-service / dev deployments.
 
 ## Railway services
 
@@ -24,12 +26,23 @@ uvicorn platform_app.main:app --host 0.0.0.0 --port $PORT --workers 1
 Same image as `platform-app`. In Railway:
 
 1. Create a new service from the same GitHub repo.
-2. Settings → Build: leave Dockerfile auto-detect.
+2. Settings → Build:
+   - **Builder**: Dockerfile (not Railpack — auto-detect fails because
+     `pyproject.toml` lives under `platform/`, not at repo root)
+   - **Dockerfile Path**: `platform/Dockerfile`
+   - **Build Context**: leave empty (= repo root, because the Dockerfile's
+     `COPY` paths are repo-root-relative)
 3. Settings → Deploy → **Custom Start Command**:
 
    ```
-   yinhu-ingest-worker
+   python -m yinhu_brain.workers.ingest_rq_worker
    ```
+
+   (Use `python -m` instead of the bare `yinhu-ingest-worker` console
+   script so CWD=`/app` gets on `sys.path` and prompts at `/app/prompts`
+   resolve via `Path(__file__).parents[N]`. The console script also
+   works once `find_prompt` is in place, but `python -m` is the safer
+   shape that matches how `uvicorn` starts the web service.)
 
 4. Settings → Variables: copy all variables from `platform-app`, in
    particular:
@@ -51,10 +64,14 @@ Same image as `platform-app`. In Railway:
      `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` — required when
      `STORAGE_BACKEND=s3`. See the storage-backend section below.
 
-5. Settings → Volumes: attach the **same Railway Volume** the web service
-   uses, mounted at the same path (e.g. `/data`). The volume holds the
-   staged uploads; without sharing it the worker cannot read what the
-   web service wrote.
+5. Settings → Volumes: **leave empty**. Railway Volumes cannot be shared
+   between services — every attached Volume is scoped to one service.
+   The S3 backend (next section) is the supported way to give both
+   services access to the same staged files.
+
+   If you really must keep `STORAGE_BACKEND=local` for development, run
+   the worker inside the web service as a background asyncio task
+   instead of a separate Railway service.
 
 ### Postgres + Redis
 
@@ -80,16 +97,17 @@ EXISTS). No migration script needs to run.
 6. Confirm归档 → job status flips to `confirmed` and the card moves to
    "查看历史".
 
-## Storage backend (local Volume vs S3-compatible)
+## Storage backend (S3-compatible required for two-service deploy)
 
-By default `STORAGE_BACKEND=local` and both services share a Railway
-Volume mounted at the same `DATA_ROOT` path. This is the path of least
-resistance for the first deploy but couples the two services to a single
-disk.
+`STORAGE_BACKEND=local` writes to `$DATA_ROOT/files` on the service's
+disk. That works fine for a single-service deploy (dev / running the
+worker inside the web process). It does **not** work across two Railway
+services because Railway Volumes are scoped to one service — there is no
+"attach this same Volume to both" option in the Railway UI.
 
-For multi-region, multi-worker, or just less coupling, switch to an
-S3-compatible backend (AWS S3, Cloudflare R2 — recommended, free at our
-volume — or self-hosted MinIO). On **both** services set:
+For the standard two-service deploy use an S3-compatible store. AWS S3
+works; Cloudflare R2 is recommended (S3-compatible, free at our volume,
+no egress fees). On **both** services set:
 
 ```env
 STORAGE_BACKEND=s3

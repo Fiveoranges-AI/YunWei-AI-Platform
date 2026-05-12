@@ -377,3 +377,95 @@ async def test_watchdog_resets_stale_running_jobs(monkeypatch, tmp_path):
             assert (jid, 2, "tenant_test") in calls
     finally:
         await engine.dispose()
+
+
+# ---------- DELETE /jobs/history -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_clear_history_default_only_deletes_failed(monkeypatch, tmp_path):
+    """Default status=failed wipes failed jobs but preserves confirmed/canceled."""
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        batch = IngestBatch(enterprise_id="tenant_test", total_jobs=3)
+        session.add(batch)
+        await session.flush()
+        for stat in (IngestJobStatus.failed, IngestJobStatus.confirmed, IngestJobStatus.canceled):
+            session.add(
+                IngestJob(
+                    batch_id=batch.id,
+                    enterprise_id="tenant_test",
+                    original_filename=f"{stat.value}.pdf",
+                    source_hint="file",
+                    status=stat,
+                    stage=IngestJobStage.done,
+                )
+            )
+        await session.commit()
+
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.delete("/win/api/ingest/jobs/history")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body["deleted"] == 1
+            assert body["status_filter"] == "failed"
+
+            history = (await ac.get("/win/api/ingest/jobs?status=history")).json()
+            statuses = sorted(j["status"] for j in history)
+            # failed is gone; confirmed + canceled remain
+            assert statuses == ["canceled", "confirmed"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clear_history_all_wipes_every_terminal_state(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        batch = IngestBatch(enterprise_id="tenant_test", total_jobs=3)
+        session.add(batch)
+        await session.flush()
+        for stat in (IngestJobStatus.failed, IngestJobStatus.confirmed, IngestJobStatus.canceled):
+            session.add(
+                IngestJob(
+                    batch_id=batch.id,
+                    enterprise_id="tenant_test",
+                    original_filename=f"{stat.value}.pdf",
+                    source_hint="file",
+                    status=stat,
+                    stage=IngestJobStage.done,
+                )
+            )
+        # Also seed an active job to make sure it isn't touched.
+        session.add(
+            IngestJob(
+                batch_id=batch.id,
+                enterprise_id="tenant_test",
+                original_filename="running.pdf",
+                source_hint="file",
+                status=IngestJobStatus.running,
+                stage=IngestJobStage.extract,
+            )
+        )
+        await session.commit()
+
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.delete("/win/api/ingest/jobs/history?status=all")
+            assert res.status_code == 200, res.text
+            assert res.json()["deleted"] == 3
+
+            active = (await ac.get("/win/api/ingest/jobs?status=active")).json()
+            assert len(active) == 1
+            assert active[0]["status"] == "running"
+    finally:
+        await engine.dispose()

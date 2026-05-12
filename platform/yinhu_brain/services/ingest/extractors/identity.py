@@ -49,9 +49,9 @@ IDENTITY_TOOL_NAME = "submit_identity_extraction"
 # rather truncate than trip a token-limit retry.
 _LLM_CONTEXT_CHARS = 30000
 
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[4] / "prompts" / "identity_extraction.md"
-)
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("identity_extraction.md")
 
 
 # ---------- post-validation regexes ---------------------------------------

@@ -50,9 +50,9 @@ COMMERCIAL_TOOL_NAME = "submit_commercial_extraction"
 # the front of the document anyway.
 _LLM_CONTEXT_CHARS = 30000
 
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[4] / "prompts" / "commercial_extraction.md"
-)
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("commercial_extraction.md")
 
 # Ratio-sum tolerance: matches the value used inside ContractExtractionResult
 # so warnings emitted from this extractor are consistent with the legacy

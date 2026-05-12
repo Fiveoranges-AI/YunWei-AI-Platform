@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import type { GoFn } from "../App";
 import {
   cancelIngestJob,
+  clearIngestHistory,
   createIngestJobs,
   listIngestJobs,
   retryIngestJob,
@@ -40,6 +41,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyJobs, setHistoryJobs] = useState<IngestJob[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -242,6 +244,21 @@ export function UploadScreen({ go }: { go: GoFn }) {
       await refreshHistory();
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "取消失败");
+    }
+  }
+
+  async function onClearFailedHistory() {
+    if (clearingHistory) return;
+    if (!window.confirm("确定要清空所有失败的历史任务吗？该操作不可撤销。已成功归档的任务不会被删除。")) return;
+    setClearingHistory(true);
+    setHistoryError(null);
+    try {
+      await clearIngestHistory("failed");
+      await refreshHistory();
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : "清空失败");
+    } finally {
+      setClearingHistory(false);
     }
   }
 
@@ -649,16 +666,42 @@ export function UploadScreen({ go }: { go: GoFn }) {
 
           {showHistory && (
             <div style={{ marginTop: 12 }}>
-              <h3
+              <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "var(--ink-500)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                   margin: "0 0 8px",
                 }}
               >
-                历史任务
-              </h3>
+                <h3
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "var(--ink-500)",
+                    margin: 0,
+                  }}
+                >
+                  历史任务
+                </h3>
+                {historyJobs.length > 0 && (
+                  <button
+                    onClick={onClearFailedHistory}
+                    disabled={clearingHistory}
+                    style={{
+                      fontSize: 11,
+                      color: clearingHistory ? "var(--ink-400)" : "var(--risk-500)",
+                      background: "transparent",
+                      border: "none",
+                      cursor: clearingHistory ? "wait" : "pointer",
+                      textDecoration: "underline",
+                      padding: 0,
+                    }}
+                  >
+                    {clearingHistory ? "正在清空…" : "清空失败任务"}
+                  </button>
+                )}
+              </div>
               {historyError && (
                 <div style={{ fontSize: 11, color: "var(--risk-500)", marginBottom: 8 }}>
                   {historyError}

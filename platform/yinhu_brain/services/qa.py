@@ -27,7 +27,9 @@ from yinhu_brain.services.llm import call_claude, extract_tool_use_input
 
 logger = logging.getLogger(__name__)
 
-_PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "qa.md"
+from yinhu_brain.services.prompts import find_prompt
+
+_PROMPT_PATH = find_prompt("qa.md")
 
 # Hard cap so we never blow context. Claude Opus 1M+ but we keep prompt < 30K
 # chars for cost / latency.

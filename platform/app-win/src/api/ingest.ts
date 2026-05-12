@@ -595,6 +595,23 @@ export async function cancelIngestJob(jobId: string): Promise<IngestJob> {
   return (await res.json()) as IngestJob;
 }
 
+/** Bulk-delete completed jobs from the history list.
+ *
+ * Default: only ``failed`` jobs (the common "clear the crashed mess"
+ * use case). Pass ``"all"`` to also wipe canceled + confirmed rows.
+ * Document rows are preserved either way.
+ */
+export async function clearIngestHistory(
+  status: "failed" | "canceled" | "confirmed" | "all" = "failed",
+): Promise<{ deleted: number; status_filter: string }> {
+  const res = await fetch(
+    `${API_BASE}/jobs/history?status=${status}`,
+    { method: "DELETE", credentials: "include" },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as { deleted: number; status_filter: string };
+}
+
 /** Job-aware confirm — same payload as /auto/{id}/confirm. */
 export async function confirmIngestJob(
   jobId: string,
