@@ -35,6 +35,40 @@ from yinhu_brain.services.ingest.unified_schemas import (
 )
 
 
+def _int_or_none(v: Any) -> int | None:
+    """Best-effort int coercion. Used for fields LandingAI declares as string
+    (e.g. ``trigger_offset_days``) but our DB models type as ``int | None``.
+
+    - ``None`` / empty / blank string → ``None``
+    - ``int`` / ``float`` → ``int(value)``
+    - ``"90"`` / ``"90天"`` / ``"  90 "`` → ``90``
+    - Anything else unparseable → ``None`` (don't crash the ingest)
+    """
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        try:
+            return int(v)
+        except (OverflowError, ValueError):
+            return None
+    if isinstance(v, str):
+        cleaned = v.strip().replace("天", "").replace(" ", "")
+        if not cleaned:
+            return None
+        try:
+            return int(cleaned)
+        except ValueError:
+            try:
+                return int(float(cleaned))
+            except ValueError:
+                return None
+    return None
+
+
 def _num(v: Any) -> float | None:
     if v is None:
         return None
@@ -141,7 +175,9 @@ def normalize_pipeline_results(results: list[PipelineExtractResult]) -> UnifiedD
                                 "name": m.get("name"),
                                 "ratio": _ratio(m.get("ratio")),
                                 "trigger_event": m.get("trigger_event") or "other",
-                                "trigger_offset_days": m.get("trigger_offset_days"),
+                                "trigger_offset_days": _int_or_none(
+                                    m.get("trigger_offset_days")
+                                ),
                                 "raw_text": m.get("raw_text"),
                             }
                         )

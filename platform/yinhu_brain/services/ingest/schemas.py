@@ -173,6 +173,37 @@ class PaymentMilestone(BaseModel):
                 return v
         return v
 
+    @field_validator("trigger_offset_days", mode="before")
+    @classmethod
+    def _offset_days(cls, v):
+        """Tolerate string offsets like ``""``, ``"90"``, ``"90天"`` that
+        upstream extractors (LandingAI in particular) emit. Empty / unparseable
+        → ``None`` so a single garbage milestone never kills the whole ingest.
+        """
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return int(v)
+        if isinstance(v, int):
+            return v
+        if isinstance(v, float):
+            try:
+                return int(v)
+            except (OverflowError, ValueError):
+                return None
+        if isinstance(v, str):
+            s = v.strip().replace("天", "").replace(" ", "")
+            if not s:
+                return None
+            try:
+                return int(s)
+            except ValueError:
+                try:
+                    return int(float(s))
+                except ValueError:
+                    return None
+        return None
+
 
 class ContractExtraction(BaseModel):
     model_config = ConfigDict(extra="ignore")

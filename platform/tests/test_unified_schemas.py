@@ -38,6 +38,7 @@ from yinhu_brain.services.ingest.schemas import (
     CustomerExtraction,
     FieldProvenanceEntry,
     OrderExtraction,
+    PaymentMilestone,
 )
 from yinhu_brain.services.ingest.unified_schemas import (
     AutoConfirmRequest,
@@ -370,3 +371,50 @@ def test_extra_fields_ignored_per_codebase_style():
         }
     )
     assert "spurious_extra_field" not in plan.model_dump()
+
+
+# ── PaymentMilestone.trigger_offset_days boundary tolerance ────────
+# Regression for WHHX250922合同.pdf: LandingAI returns "" for offset
+# days; model validation must coerce to None, not raise.
+
+
+def test_payment_milestone_empty_offset_days_becomes_none():
+    m = PaymentMilestone.model_validate(
+        {"ratio": 0.3, "trigger_event": "contract_signed", "trigger_offset_days": ""}
+    )
+    assert m.trigger_offset_days is None
+
+
+def test_payment_milestone_whitespace_offset_days_becomes_none():
+    m = PaymentMilestone.model_validate(
+        {"ratio": 0.3, "trigger_event": "contract_signed", "trigger_offset_days": "   "}
+    )
+    assert m.trigger_offset_days is None
+
+
+def test_payment_milestone_string_offset_days_parses_to_int():
+    m = PaymentMilestone.model_validate(
+        {"ratio": 1.0, "trigger_event": "invoice_issued", "trigger_offset_days": "90"}
+    )
+    assert m.trigger_offset_days == 90
+
+
+def test_payment_milestone_chinese_unit_offset_days_parses_to_int():
+    m = PaymentMilestone.model_validate(
+        {"ratio": 1.0, "trigger_event": "invoice_issued", "trigger_offset_days": "90 天"}
+    )
+    assert m.trigger_offset_days == 90
+
+
+def test_payment_milestone_unparseable_offset_days_becomes_none():
+    m = PaymentMilestone.model_validate(
+        {"ratio": 1.0, "trigger_event": "other", "trigger_offset_days": "abc"}
+    )
+    assert m.trigger_offset_days is None
+
+
+def test_payment_milestone_float_offset_days_truncates():
+    m = PaymentMilestone.model_validate(
+        {"ratio": 1.0, "trigger_event": "other", "trigger_offset_days": 90.7}
+    )
+    assert m.trigger_offset_days == 90
