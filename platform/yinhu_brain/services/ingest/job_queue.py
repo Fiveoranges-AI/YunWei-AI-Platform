@@ -41,13 +41,25 @@ def get_ingest_queue() -> Queue:
     )
 
 
+def _rq_id_for(job_id: str, attempt: int) -> str:
+    """Build the RQ job id for a given business job + attempt.
+
+    RQ rejects any id with characters outside ``[A-Za-z0-9_-]`` so we
+    can't use colons as separators (commit ``be56aee`` originally did and
+    every enqueue blew up on real Redis with
+    ``Job ID must only contain letters, numbers, underscores and dashes``).
+    UUIDs use dashes already, so segment separators are dashes too.
+    """
+    return f"ingest-{job_id}-a{attempt}"
+
+
 def enqueue_ingest_job(job_id: str, *, attempt: int) -> str:
     """Enqueue the worker function with the business job_id. Returns the
     RQ job id (we keep a different namespace per attempt so retries don't
     collide on RQ side).
     """
     queue = get_ingest_queue()
-    rq_id = f"ingest:{job_id}:a{attempt}"
+    rq_id = _rq_id_for(job_id, attempt)
     queue.enqueue(
         WORKER_FN,
         job_id,

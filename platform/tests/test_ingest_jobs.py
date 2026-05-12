@@ -280,3 +280,22 @@ async def test_cancel_queued_job_marks_canceled(monkeypatch, tmp_path):
             assert res.json()["status"] == "canceled"
     finally:
         await engine.dispose()
+
+
+# ---------- RQ id format ----------------------------------------------
+
+
+def test_rq_id_uses_only_letters_digits_dashes_underscores():
+    """RQ rejects job ids with any char outside [A-Za-z0-9_-]. Regression
+    for the colon-separated format that shipped in commit be56aee and
+    failed every real enqueue with 'Job ID must only contain letters,
+    numbers, underscores and dashes'. SCYN250620合同.pdf surfaced it."""
+    import re
+    from yinhu_brain.services.ingest.job_queue import _rq_id_for
+
+    rid = _rq_id_for("abc12345-6789-4def-0123-456789abcdef", 3)
+    assert re.fullmatch(r"[A-Za-z0-9_-]+", rid), rid
+    # Encodes the attempt so retries don't collide
+    assert rid.endswith("-a3")
+    # Encodes the business job id (UUID) verbatim
+    assert "abc12345-6789-4def-0123-456789abcdef" in rid
