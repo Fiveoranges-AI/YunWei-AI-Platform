@@ -27,6 +27,7 @@ dependencies = [
     "pypdf>=5.1",
     "tenacity>=9.0",
     "landingai-ade>=0.1.0",
+    "rq>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,11 @@ dev = [
 
 [project.scripts]
 platform-admin = "platform_app.admin:main"
+# Background worker for /win/api/ingest/jobs. Run as a separate Railway
+# service with `Start Command: yinhu-ingest-worker` and the same env as the
+# web service (DATABASE_URL, REDIS_URL, DATA_ROOT, MISTRAL_API_KEY,
+# VISION_AGENT_API_KEY, DOCUMENT_AI_PROVIDER, ANTHROPIC_API_KEY, …).
+yinhu-ingest-worker = "yinhu_brain.workers.ingest_rq_worker:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

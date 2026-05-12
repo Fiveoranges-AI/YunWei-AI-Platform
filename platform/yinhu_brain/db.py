@@ -79,6 +79,7 @@ def _admin_url() -> str:
 
 _engines: dict[str, AsyncEngine] = {}
 _provisioned: set[str] = set()
+_provisioned_ingest_tables: set[str] = set()
 _engine_lock = asyncio.Lock()
 
 
@@ -139,6 +140,38 @@ async def get_engine_for(enterprise_id: str) -> AsyncEngine:
     return await _get_engine(enterprise_id)
 
 
+async def ensure_ingest_job_tables(engine: AsyncEngine) -> None:
+    """Idempotently create ingest_batches + ingest_jobs on an existing tenant
+    engine. Safe to call from API request handlers — uses CREATE TABLE IF
+    NOT EXISTS via Base.metadata.create_all on the two specific tables.
+    """
+    import yinhu_brain.models  # noqa: F401 — register mappers
+    from yinhu_brain.models.ingest_job import IngestBatch, IngestJob
+
+    async with engine.begin() as conn:
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.create_all(
+                sync_conn,
+                tables=[IngestBatch.__table__, IngestJob.__table__],
+                checkfirst=True,
+            )
+        )
+
+
+async def ensure_ingest_job_tables_for(enterprise_id: str) -> None:
+    """Per-enterprise cached wrapper around ``ensure_ingest_job_tables``.
+
+    API handlers call this once per request before touching the new tables;
+    after the first call for an enterprise, the cache short-circuits the
+    create_all roundtrip.
+    """
+    if enterprise_id in _provisioned_ingest_tables:
+        return
+    engine = await get_engine_for(enterprise_id)
+    await ensure_ingest_job_tables(engine)
+    _provisioned_ingest_tables.add(enterprise_id)
+
+
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     """FastAPI dependency: yield a session bound to the caller's enterprise.
 
@@ -164,3 +197,4 @@ async def dispose_all() -> None:
         await engine.dispose()
     _engines.clear()
     _provisioned.clear()
+    _provisioned_ingest_tables.clear()

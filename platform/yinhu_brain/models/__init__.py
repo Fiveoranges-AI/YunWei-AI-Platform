@@ -36,6 +36,12 @@ from yinhu_brain.models.contract import Contract
 from yinhu_brain.models.customer import Customer
 from yinhu_brain.models.document import Document, DocumentType
 from yinhu_brain.models.field_provenance import EntityType, FieldProvenance
+from yinhu_brain.models.ingest_job import (
+    IngestBatch,
+    IngestJob,
+    IngestJobStage,
+    IngestJobStatus,
+)
 from yinhu_brain.models.llm_call import LLMCall
 from yinhu_brain.models.order import Order
 
@@ -48,6 +54,8 @@ __all__ = [
     "EntityType", "FieldProvenance",
     "LLMCall",
     "Order",
+    # ingest jobs
+    "IngestBatch", "IngestJob", "IngestJobStage", "IngestJobStatus",
     # customer-memory
     "CustomerEvent", "CustomerEventType",
     "CustomerCommitment", "CommitmentDirection", "CommitmentStatus",

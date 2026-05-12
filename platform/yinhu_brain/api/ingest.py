@@ -32,13 +32,28 @@ import logging
 from typing import Any, AsyncIterator, Awaitable, Callable, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yinhu_brain.db import get_session
-from yinhu_brain.models import Document, DocumentReviewStatus
+from yinhu_brain.db import ensure_ingest_job_tables_for, get_session
+from yinhu_brain.models import (
+    Document,
+    DocumentReviewStatus,
+    IngestBatch,
+    IngestJob,
+    IngestJobStage,
+    IngestJobStatus,
+)
+from yinhu_brain.services.ingest.job_queue import (
+    enqueue_ingest_job,
+    get_ingest_queue,
+    remember_enterprise_for_job,
+)
+from yinhu_brain.services.storage import store_upload
 from yinhu_brain.services.ingest.auto import auto_ingest
 from yinhu_brain.services.ingest.auto_confirm import (
     AutoConfirmResult,
@@ -524,3 +539,330 @@ async def upload_wechat_screenshot(
     return _ndjson(
         _stream_with_progress(_do, session=session, label="wechat ingest"),
     )
+
+
+# ---------- Async /jobs surface (RQ-backed) -------------------------------
+#
+# These endpoints stage uploads + enqueue an RQ job and return immediately.
+# The worker (yinhu_brain.workers.ingest_rq) reads the IngestJob row, runs
+# the same auto_ingest internals as /auto, and writes status=extracted +
+# result_json back to Postgres. Clients poll GET /jobs/{id} until extracted,
+# then call /confirm to commit.
+
+
+def _job_dict(j: IngestJob) -> dict:
+    return {
+        "id": str(j.id),
+        "batch_id": str(j.batch_id),
+        "document_id": str(j.document_id) if j.document_id else None,
+        "original_filename": j.original_filename,
+        "content_type": j.content_type,
+        "source_hint": j.source_hint,
+        "uploader": j.uploader,
+        "status": j.status.value,
+        "stage": j.stage.value,
+        "progress_message": j.progress_message,
+        "error_message": j.error_message,
+        "attempts": j.attempts,
+        "result_json": j.result_json,
+        "started_at": j.started_at.isoformat() if j.started_at else None,
+        "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+        "created_at": j.created_at.isoformat() if j.created_at else None,
+        "updated_at": j.updated_at.isoformat() if j.updated_at else None,
+    }
+
+
+def _enterprise_id_from_request(request: Request) -> str:
+    eid = getattr(request.state, "enterprise_id", None)
+    if not eid:
+        raise HTTPException(401, "not_authenticated")
+    return eid
+
+
+@router.post("/jobs")
+async def create_ingest_jobs(
+    request: Request,
+    files: list[UploadFile] = File(default_factory=list),
+    text: str | None = Form(default=None),
+    source_hint: Literal["file", "camera", "pasted_text"] = Form(default="file"),
+    uploader: str | None = Form(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Stage uploaded files / text and enqueue worker jobs.
+
+    Returns immediately with batch_id + job_ids. The actual extraction runs
+    in an RQ worker (see workers/ingest_rq.py).
+    """
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+
+    staged: list[dict] = []
+    for f in files:
+        body = await f.read()
+        if not body:
+            continue
+        stored = store_upload(body, f.filename or "upload.bin")
+        staged.append({
+            "filename": f.filename or "upload.bin",
+            "content_type": f.content_type,
+            "size": stored.size,
+            "sha256": stored.sha256,
+            "path": stored.path,
+            "text": None,
+        })
+    if text and text.strip():
+        staged.append({
+            "filename": "note.txt",
+            "content_type": "text/plain",
+            "size": len(text.encode("utf-8")),
+            "sha256": None,
+            "path": None,
+            "text": text,
+        })
+    if not staged:
+        raise HTTPException(400, "no file or text provided")
+
+    batch = IngestBatch(
+        enterprise_id=enterprise_id,
+        uploader=uploader,
+        source="win-upload",
+        total_jobs=len(staged),
+    )
+    session.add(batch)
+    await session.flush()
+
+    jobs: list[IngestJob] = []
+    for s in staged:
+        job = IngestJob(
+            batch_id=batch.id,
+            enterprise_id=enterprise_id,
+            original_filename=s["filename"],
+            content_type=s["content_type"],
+            file_sha256=s["sha256"],
+            file_size_bytes=s["size"],
+            staged_file_url=s["path"],
+            text_content=s["text"],
+            source_hint=source_hint if s["text"] is None else "pasted_text",
+            uploader=uploader,
+            status=IngestJobStatus.queued,
+            stage=IngestJobStage.received,
+            attempts=0,
+        )
+        session.add(job)
+        jobs.append(job)
+    await session.flush()
+    # Commit so the worker can see these rows.
+    await session.commit()
+
+    # Now enqueue. If Redis is down, mark queued jobs as failed with a
+    # clear error so the user sees something actionable.
+    for j in jobs:
+        try:
+            j.attempts = 1
+            remember_enterprise_for_job(str(j.id), enterprise_id)
+            j.rq_job_id = enqueue_ingest_job(str(j.id), attempt=1)
+        except Exception as exc:
+            logger.exception("enqueue failed for job %s", j.id)
+            j.status = IngestJobStatus.failed
+            j.error_message = f"enqueue failed: {exc!s}"
+            j.finished_at = datetime.now(timezone.utc)
+    await session.commit()
+
+    return {
+        "batch_id": str(batch.id),
+        "jobs": [_job_dict(j) for j in jobs],
+    }
+
+
+_ACTIVE_STATUSES = (
+    IngestJobStatus.queued,
+    IngestJobStatus.running,
+    IngestJobStatus.extracted,
+)
+_HISTORY_STATUSES = (
+    IngestJobStatus.confirmed,
+    IngestJobStatus.failed,
+    IngestJobStatus.canceled,
+)
+
+
+@router.get("/jobs")
+async def list_ingest_jobs(
+    request: Request,
+    status: Literal["active", "history", "all"] = "active",
+    limit: int = Query(default=50, le=200),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    stmt = select(IngestJob).where(IngestJob.enterprise_id == enterprise_id)
+    if status == "active":
+        stmt = stmt.where(IngestJob.status.in_(_ACTIVE_STATUSES))
+    elif status == "history":
+        stmt = stmt.where(IngestJob.status.in_(_HISTORY_STATUSES))
+    stmt = stmt.order_by(desc(IngestJob.created_at)).limit(limit)
+    rows = (await session.execute(stmt)).scalars().all()
+    return [_job_dict(j) for j in rows]
+
+
+@router.get("/jobs/{job_id}")
+async def get_ingest_job(
+    job_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    j = (
+        await session.execute(
+            select(IngestJob).where(
+                IngestJob.id == job_id,
+                IngestJob.enterprise_id == enterprise_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if j is None:
+        raise HTTPException(404, "job not found")
+    return _job_dict(j)
+
+
+@router.post("/jobs/{job_id}/retry")
+async def retry_ingest_job(
+    job_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    j = (
+        await session.execute(
+            select(IngestJob).where(
+                IngestJob.id == job_id,
+                IngestJob.enterprise_id == enterprise_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if j is None:
+        raise HTTPException(404, "job not found")
+    if j.status not in (IngestJobStatus.failed, IngestJobStatus.canceled):
+        raise HTTPException(409, f"cannot retry job in status {j.status.value}")
+    MAX_ATTEMPTS = 3
+    if j.attempts >= MAX_ATTEMPTS:
+        raise HTTPException(409, f"retry limit reached ({MAX_ATTEMPTS})")
+    j.attempts = (j.attempts or 0) + 1
+    j.status = IngestJobStatus.queued
+    j.stage = IngestJobStage.received
+    j.error_message = None
+    j.finished_at = None
+    j.progress_message = None
+    try:
+        remember_enterprise_for_job(str(j.id), enterprise_id)
+        j.rq_job_id = enqueue_ingest_job(str(j.id), attempt=j.attempts)
+    except Exception as exc:
+        logger.exception("retry enqueue failed for job %s", j.id)
+        j.status = IngestJobStatus.failed
+        j.error_message = f"enqueue failed: {exc!s}"
+        j.finished_at = datetime.now(timezone.utc)
+    await session.commit()
+    return _job_dict(j)
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_ingest_job(
+    job_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    j = (
+        await session.execute(
+            select(IngestJob).where(
+                IngestJob.id == job_id,
+                IngestJob.enterprise_id == enterprise_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if j is None:
+        raise HTTPException(404, "job not found")
+    if j.status in (IngestJobStatus.confirmed, IngestJobStatus.canceled):
+        return _job_dict(j)  # idempotent
+    if j.status == IngestJobStatus.failed:
+        raise HTTPException(409, "cannot cancel a failed job; use retry")
+    # Best-effort RQ cancel; safe even if rq_job_id missing.
+    if j.rq_job_id:
+        try:
+            from rq.command import send_stop_job_command
+            from rq.job import Job as RQJob
+            queue = get_ingest_queue()
+            try:
+                rq_job = RQJob.fetch(
+                    j.rq_job_id, connection=queue.connection, serializer=queue.serializer
+                )
+                if rq_job.is_started:
+                    send_stop_job_command(queue.connection, j.rq_job_id)
+                else:
+                    rq_job.cancel()
+            except Exception:
+                logger.exception("rq cancel best-effort failed for %s", j.rq_job_id)
+        except Exception:
+            pass
+    j.status = IngestJobStatus.canceled
+    j.finished_at = datetime.now(timezone.utc)
+    await session.commit()
+    return _job_dict(j)
+
+
+@router.post("/jobs/{job_id}/confirm")
+async def confirm_ingest_job(
+    job_id: UUID,
+    request: Request,
+    payload: dict,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Confirm a job's extraction. Internally uses the same commit logic
+    as /auto/{document_id}/confirm, then flips the job to status=confirmed.
+    """
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    j = (
+        await session.execute(
+            select(IngestJob).where(
+                IngestJob.id == job_id,
+                IngestJob.enterprise_id == enterprise_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if j is None:
+        raise HTTPException(404, "job not found")
+    if j.status != IngestJobStatus.extracted:
+        raise HTTPException(409, f"cannot confirm job in status {j.status.value}")
+    if j.document_id is None:
+        raise HTTPException(409, "job has no document_id; cannot confirm")
+
+    try:
+        confirm_req = AutoConfirmRequest.model_validate(payload)
+    except Exception as exc:
+        raise HTTPException(400, f"invalid confirm payload: {exc!s}") from exc
+    try:
+        ingest = await commit_auto_extraction(
+            session=session, document_id=j.document_id, request=confirm_req,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    j.status = IngestJobStatus.confirmed
+    j.finished_at = datetime.now(timezone.utc)
+    await session.commit()
+
+    return {
+        "job_id": str(j.id),
+        "document_id": str(ingest.document_id),
+        "created_entities": {
+            "customer_id": str(ingest.customer_id) if ingest.customer_id else None,
+            "contact_ids": [str(x) for x in ingest.contact_ids],
+            "order_id": str(ingest.order_id) if ingest.order_id else None,
+            "contract_id": str(ingest.contract_id) if ingest.contract_id else None,
+        },
+        "warnings": ingest.warnings,
+    }

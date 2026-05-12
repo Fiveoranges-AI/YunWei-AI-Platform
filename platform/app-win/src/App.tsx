@@ -70,7 +70,7 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
     case "upload":
       return <UploadScreen go={go} />;
     case "review":
-      return <ReviewScreen go={go} />;
+      return <ReviewScreen go={go} params={entry.params ?? {}} />;
     case "ask":
       return <AskScreen go={go} params={entry.params ?? {}} />;
     case "profile":
