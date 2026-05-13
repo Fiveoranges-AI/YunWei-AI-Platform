@@ -12,7 +12,7 @@ surface under `/api/*`.
 
 ### `platform_app` — control plane
 
-FastAPI app at `platform/platform_app/`. Owns everything that is
+FastAPI app at `services/platform-api/platform_app/`. Owns everything that is
 tenant-agnostic or cross-tenant:
 
 - **Auth / session** (`auth.py`, `csrf.py`) — cookie sessions, CSRF
@@ -36,7 +36,7 @@ tenant-agnostic or cross-tenant:
 
 ### `yunwei_win` — product backend (智通客户)
 
-Lives at `platform/yunwei_win/`, mounted at `/api/win/*`. Owns the
+Lives at `services/platform-api/yunwei_win/`, mounted at `/api/win/*`. Owns the
 customer-facing product surface:
 
 - **Customer profile** (`api/customers.py`, `models/customer.py`).
@@ -124,7 +124,7 @@ GET /win/                              (same origin)
     │
     ▼
 platform_app.main.win_root
-    │  serves apps/yunwei-win-web/dist/index.html
+    │  serves apps/win-web/dist/index.html
     ▼
 SPA boots, calls
 POST /api/win/assistant/chat           (same origin, X-CSRF-Token)
@@ -177,8 +177,8 @@ flowchart TD
 
 | Service                  | Image            | Start command                                 |
 | ------------------------ | ---------------- | --------------------------------------------- |
-| `platform-app` (web)     | `platform/Dockerfile` | `uvicorn platform_app.main:app …`        |
-| `platform-ingest-worker` | `platform/Dockerfile` | `python -m yunwei_win.workers.ingest_rq_worker` |
+| `platform-app` (web)     | `services/platform-api/Dockerfile` | `uvicorn platform_app.main:app …`        |
+| `platform-ingest-worker` | `services/platform-api/Dockerfile` | `python -m yunwei_win.workers.ingest_rq_worker` |
 | Dedicated runtimes       | per-vendor      | per-vendor; see `runtimes/README.md`           |
 
 Local development uses `infra/local/docker-compose.yml` for the platform

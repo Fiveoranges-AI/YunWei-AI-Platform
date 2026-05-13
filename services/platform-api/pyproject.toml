@@ -48,9 +48,9 @@ yunwei-win-ingest-worker = "yunwei_win.workers.ingest_rq_worker:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
-# Add the worktree's platform/ directory to sys.path so tests import
-# platform_app from the local working tree rather than the editable install
-# pointing at the main worktree (which uses a shared .venv).
+# Add the worktree's services/platform-api/ directory to sys.path so tests
+# import platform_app from the local working tree rather than the editable
+# install pointing at the main worktree (which uses a shared .venv).
 pythonpath = ["."]
 
 [build-system]

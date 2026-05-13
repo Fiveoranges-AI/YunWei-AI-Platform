@@ -9,16 +9,20 @@ __pycache__/
 *.db-wal
 .worktrees/
 
-# apps/yunwei-win-web/ (智通客户 — served at /win/) build artifacts.
+# apps/win-web/ (智通客户 — served at /win/) build artifacts.
 # Railway's build context is repo root, so the Dockerfile copies from
-# apps/yunwei-win-web/ in stage 1.
-/apps/yunwei-win-web/node_modules/
-/apps/yunwei-win-web/dist/
+# apps/win-web/ in stage 1.
+/apps/win-web/node_modules/
+/apps/win-web/dist/
 # Reference copies of design prototype files; not for git.
-/apps/yunwei-win-web/src/_design-reference/
-# Override the global `data/` rule above so yunwei-win-web's frontend types/mock are tracked.
-!/apps/yunwei-win-web/src/data/
-!/apps/yunwei-win-web/src/data/**
+/apps/win-web/src/_design-reference/
+# Override the global `data/` rule above so win-web's frontend types/mock are tracked.
+!/apps/win-web/src/data/
+!/apps/win-web/src/data/**
+
+# apps/marketing-web/ (landing site) build artifacts.
+/apps/marketing-web/node_modules/
+/apps/marketing-web/dist/
 
 # playwright MCP test artifacts
 .playwright-mcp/

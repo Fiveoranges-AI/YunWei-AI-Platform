@@ -1,6 +1,9 @@
-# Keep the build context lean — exclude large dirs not needed by platform/Dockerfile.
-# Stage 1a/1b (node) copy app/ and app-win/ package*.json + src; node_modules rebuilt via npm ci.
-# Stage 2 (python) copies platform/pyproject.toml + platform/platform_app + platform/yinhu_brain + platform/migrations + platform/static.
+# Keep the build context lean — exclude large dirs not needed by
+# services/platform-api/Dockerfile.
+# Stage 1 (node) copies apps/win-web/ package*.json + src; node_modules
+# rebuilt via npm ci.
+# Stage 2 (python) copies services/platform-api/pyproject.toml +
+# platform_app + yunwei_win + migrations + static + prompts.
 
 **/node_modules/
 **/dist/
@@ -9,7 +12,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-landing/
+apps/marketing-web/
 agents/
-ops/
+scripts/
 docs/

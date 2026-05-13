@@ -1,7 +1,7 @@
 # Railway deploy — `platform-api`
 
 The platform v3 stack on Railway is **two services backed by the same
-Docker image**, both built from `platform/Dockerfile`:
+Docker image**, both built from `services/platform-api/Dockerfile`:
 
 1. **`platform-app`** — FastAPI web service. Serves the canonical v3
    surface: page routes (`/`, `/login`, `/register`, `/admin`, `/win/`)
@@ -18,23 +18,23 @@ and vice versa.
 
 ## Image build
 
-`platform/Dockerfile` is a multi-stage build. The build context is the
-**repo root** — Railway's "Root Directory" should be left blank (or set
-to `/`).
+`services/platform-api/Dockerfile` is a multi-stage build. The build
+context is the **repo root** — Railway's "Root Directory" should be
+left blank (or set to `/`).
 
 ```
 Service settings:
   Builder:          Dockerfile
-  Dockerfile path:  platform/Dockerfile
+  Dockerfile path:  services/platform-api/Dockerfile
   Root Directory:   <blank — repo root>
 ```
 
 The Dockerfile:
-1. Builds `apps/yunwei-win-web` with Vite → dist copied into
-   `/app/yunwei-win-web/dist`.
-2. Installs `platform/` Python deps via `uv` into a venv.
-3. Copies `platform/platform_app/` and `platform/yunwei_win/` into
-   `/app/`.
+1. Builds `apps/win-web` with Vite → dist copied into
+   `/app/win-web/dist`.
+2. Installs `services/platform-api/` Python deps via `uv` into a venv.
+3. Copies `services/platform-api/platform_app/` and
+   `services/platform-api/yunwei_win/` into `/app/`.
 
 The same image runs both services. The start command differs.
 
@@ -92,7 +92,8 @@ Start Command:  yunwei-win-ingest-worker
 ```
 
 `yunwei-win-ingest-worker` is a console-script entry point declared in
-`platform/pyproject.toml` (`yunwei_win.workers.ingest_rq_worker:main`).
+`services/platform-api/pyproject.toml`
+(`yunwei_win.workers.ingest_rq_worker:main`).
 The worker subscribes to the `ingest` queue on `REDIS_URL`.
 
 > Prior to v3 this entry point was named `yinhu-ingest-worker`.
@@ -129,8 +130,9 @@ Service → Deployments → <previous deploy> → Redeploy
 ```
 
 Both services should be rolled back to the same SHA together. The web
-service and worker share migrations (`platform/migrations/`), so if a
-deploy ran `010_runtime_registry.sql` you must NOT roll back below the
+service and worker share migrations
+(`services/platform-api/migrations/`), so if a deploy ran
+`010_runtime_registry.sql` you must NOT roll back below the
 migration that introduced it without first dropping those tables. The
 safer rollback path is: re-deploy the previous SHA and re-apply any
 needed forward-only schema fix in a separate change.
@@ -140,7 +142,7 @@ needed forward-only schema fix in a separate change.
 ## First-time provisioning checklist
 
 1. Create two Railway services in the same project from this repo.
-2. Set `Dockerfile path = platform/Dockerfile` on both.
+2. Set `Dockerfile path = services/platform-api/Dockerfile` on both.
 3. Override `Start Command = yunwei-win-ingest-worker` on the second.
 4. Provision a Postgres add-on → `PLATFORM_DATABASE_URL`.
 5. Provision a Redis add-on → `REDIS_URL`.

@@ -8,7 +8,7 @@ Skipped when no DATABASE_URL is set or the configured Postgres isn't
 reachable. Locally::
 
     DATABASE_URL="postgresql+asyncpg://postgres@localhost:5433/postgres" \
-    pytest platform/tests/test_yunwei_win_tenant_isolation.py -v
+    pytest services/platform-api/tests/test_yunwei_win_tenant_isolation.py -v
 """
 from __future__ import annotations
 

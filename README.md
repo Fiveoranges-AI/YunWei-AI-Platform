@@ -5,12 +5,13 @@ portal that serves the **智通客户 (`/win/`)** customer-relationship
 product, with optional dedicated AI runtimes for Pro/Max tenants.
 
 ```
-fiveoranges.ai          → marketing site         (apps/landing-web is in landing/)
+fiveoranges.ai          → marketing site         (apps/marketing-web)
 app.fiveoranges.ai/     → authed → /win/         (platform_app)
-app.fiveoranges.ai/win/ → 智通客户 SPA          (yunwei_win + apps/yunwei-win-web)
+app.fiveoranges.ai/win/ → 智通客户 SPA          (yunwei_win + apps/win-web)
 ```
 
 > 📐 **Architecture overview:** [`docs/architecture/platform-v3.md`](docs/architecture/platform-v3.md)
+> 🗂️ **Repo structure proposal:** [`docs/architecture/repo-structure-v2.md`](docs/architecture/repo-structure-v2.md)
 > 🚢 **Deploy:** [`infra/railway/platform-api.md`](infra/railway/platform-api.md)
 > 🧹 **What changed in v3:** [`docs/migration/legacy-removal.md`](docs/migration/legacy-removal.md)
 
@@ -20,46 +21,51 @@ app.fiveoranges.ai/win/ → 智通客户 SPA          (yunwei_win + apps/yunwei-
 
 ```
 agent-platform/
-├── platform/                 # FastAPI monolith (control plane + product backend)
-│   ├── platform_app/         #   control plane — auth, enterprise, plan, entitlements,
-│   │                         #   runtime registry, HMAC proxy, admin, audit
-│   ├── yunwei_win/           #   product backend — customer profile, ingestion,
-│   │                         #   shared assistant, dedicated-runtime adapter
-│   │                         #   mounted at /win/api/*
-│   ├── migrations/           #   SQL migrations (auto-run on startup)
-│   ├── prompts/              #   LLM prompts (shared across extractors)
-│   ├── static/               #   login.html, register.html
-│   ├── tests/                #   pytest — requires Postgres + Redis on :5433 / :6380
-│   ├── Dockerfile            #   multi-stage: builds frontend + Python svc
-│   └── pyproject.toml
-│
 ├── apps/
-│   └── yunwei-win-web/       # /win/ React SPA (Vite + TypeScript)
+│   ├── marketing-web/            # fiveoranges.ai marketing site (separate Vercel project)
+│   └── win-web/                  # /win/ React SPA (Vite + TypeScript)
 │
-├── landing/                  # fiveoranges.ai marketing site (separate Vercel project)
+├── services/
+│   └── platform-api/             # FastAPI monolith (control plane + product backend)
+│       ├── platform_app/         #   control plane — auth, enterprise, plan, entitlements,
+│       │                         #   runtime registry, HMAC proxy, admin, audit
+│       ├── yunwei_win/           #   product backend — customer profile, ingestion,
+│       │                         #   shared assistant, dedicated-runtime adapter
+│       │                         #   mounted at /api/win/*
+│       ├── migrations/           #   SQL migrations (auto-run on startup)
+│       ├── prompts/              #   LLM prompts (shared across extractors)
+│       ├── static/               #   login.html, register.html
+│       ├── tests/                #   pytest — requires Postgres + Redis on :5433 / :6380
+│       ├── Dockerfile            #   multi-stage: builds frontend + Python svc
+│       └── pyproject.toml
 │
 ├── runtimes/
-│   ├── README.md             # contract dedicated runtimes must satisfy
-│   └── examples/             # opt-in compose files for example runtimes
+│   ├── README.md                 # contract dedicated runtimes must satisfy
+│   └── examples/                 # opt-in compose files for example runtimes
 │
 ├── infra/
-│   ├── local/                # docker-compose stack for dev/staging
-│   └── railway/              # Railway deploy notes
+│   ├── local/                    # docker-compose stack for dev/staging
+│   └── railway/                  # Railway deploy notes
 │
-├── ops/
-│   ├── bootstrap.sh          # seed admin user + enterprise (v3-compatible)
-│   └── sync_silver_canonical.py
+├── scripts/
+│   ├── bootstrap-dev.sh          # seed admin user + enterprise (v3-compatible)
+│   └── sync-silver-canonical.py
 │
 ├── docs/
-│   ├── architecture/         # current architecture docs
-│   ├── migration/            # v2 → v3 migration log + archived v1/v2 docs
-│   └── superpowers/          # implementation plans + specs
+│   ├── architecture/             # current architecture docs
+│   ├── migration/                # v2 → v3 migration log + archived v1/v2 docs
+│   └── superpowers/              # implementation plans + specs
 │
-├── AGENTS.md                 # AI-agent guidance (Codex / generic)
-├── CLAUDE.md                 # AI-agent guidance (Claude Code)
-├── coding-principle.md       # team coding conventions
-└── README.md                 # this file
+├── AGENTS.md                     # AI-agent guidance (Codex / generic)
+├── CLAUDE.md                     # AI-agent guidance (Claude Code)
+├── coding-principle.md           # team coding conventions
+└── README.md                     # this file
 ```
+
+The Python import packages (`platform_app`, `yunwei_win`) are unchanged
+by the Phase 1 directory move; only their filesystem location changed.
+See [`docs/architecture/repo-structure-v2.md`](docs/architecture/repo-structure-v2.md)
+for the full rationale and future phases.
 
 ---
 
@@ -77,7 +83,7 @@ agent-platform/
 ### Backend
 
 ```bash
-cd platform
+cd services/platform-api
 uv sync                              # creates .venv with all deps
 ./.venv/bin/uvicorn platform_app.main:app --reload --port 8000
 ```
@@ -86,7 +92,7 @@ Migrations run automatically on startup. The first time you boot, seed
 an admin + enterprise:
 
 ```bash
-./ops/bootstrap.sh
+./scripts/bootstrap-dev.sh
 ```
 
 (Override `ADMIN_BOOTSTRAP_USER`, `ADMIN_BOOTSTRAP_PASSWORD`,
@@ -96,20 +102,24 @@ customize.)
 ### Frontend
 
 ```bash
-cd apps/yunwei-win-web
+cd apps/win-web
 npm install
 npm run dev                          # Vite dev server on :5173
 # OR for a one-off build that the FastAPI process can serve:
 npm run build                        # writes dist/ that /win/ reads
 ```
 
-`/win/` returns the SPA if `apps/yunwei-win-web/dist` exists, otherwise
+`/win/` returns the SPA if `apps/win-web/dist` exists, otherwise
 a `503 win_not_built` for clearer dev feedback.
+
+The marketing site lives at `apps/marketing-web/` and deploys
+independently to Vercel — see `apps/marketing-web/` for its own README
+if you need to run it locally.
 
 ### Tests
 
 ```bash
-cd platform && ./.venv/bin/pytest -q
+cd services/platform-api && ./.venv/bin/pytest -q
 ```
 
 The autouse fixture truncates all DB tables between tests, so the test
@@ -121,7 +131,7 @@ your dev data.
 ## Deploy
 
 Production runs on Railway as **two services** sharing one Docker
-image (`platform/Dockerfile`):
+image (`services/platform-api/Dockerfile`):
 
 1. **`platform-app`** — FastAPI web. CMD is the default (`uvicorn`).
 2. **`win-ingest-worker`** — RQ worker. Start Command:
@@ -141,14 +151,14 @@ For local docker-compose: [`infra/local/README.md`](infra/local/README.md).
 
 `platform_app` is the **control plane** — auth, enterprise, plan,
 entitlements, runtime registry, HMAC reverse proxy, admin. It
-populates `request.state.auth_context` for every `/win/api/*` call
+populates `request.state.auth_context` for every `/api/win/*` call
 from the session cookie; the customer's `enterprise_id` is **never**
 trusted from request bodies or LLM tool inputs.
 
-`yunwei_win` is the **product backend** mounted at `/win/api/*` —
+`yunwei_win` is the **product backend** mounted at `/api/win/*` —
 customer profile, document ingestion (OCR + extractor providers via
 the modular ingest pipeline), customer memory, and the
-**shared assistant** (`/win/api/assistant/chat`) for Free/Lite users.
+**shared assistant** (`/api/win/assistant/chat`) for Free/Lite users.
 
 Pro/Max enterprises can bind a **dedicated runtime** for a capability
 (`assistant`, `daily_report`, `erp_sync`, …) in the runtime registry.
@@ -186,6 +196,7 @@ atomic commits.
 | Looking for… | Path |
 |---|---|
 | Current architecture | `docs/architecture/platform-v3.md` |
+| Repo structure proposal | `docs/architecture/repo-structure-v2.md` |
 | What was deleted in v3 | `docs/migration/legacy-removal.md` |
 | Old plans (v1/v2 era) | `docs/migration/archive/` |
 | Active implementation plans | `docs/superpowers/plans/` |
@@ -193,9 +204,9 @@ atomic commits.
 | Runtime contract (Pro+) | `runtimes/README.md` |
 | Railway deploy notes | `infra/railway/platform-api.md` |
 | Local docker compose | `infra/local/docker-compose.yml` |
-| Database schema | `platform/migrations/` |
-| API routes (control plane) | `platform/platform_app/*_api.py` |
-| API routes (product) | `platform/yunwei_win/api/` |
+| Database schema | `services/platform-api/migrations/` |
+| API routes (control plane) | `services/platform-api/platform_app/*_api.py` |
+| API routes (product) | `services/platform-api/yunwei_win/api/` |
 
 ---
 
@@ -204,9 +215,14 @@ atomic commits.
 - v3 restructure landed in PR #77 (May 2026): `yinhu_brain` → `yunwei_win`,
   `/` → `/win/`, `AuthContext` + entitlements, shared assistant + dedicated
   runtime adapter, runtime registry, legacy dashboard archived.
-- The legacy `/<client>/<agent>/` HMAC reverse proxy still exists for
-  admin/debug; it is **not** the customer entry point. Slated for
-  retirement once dedicated-runtime routing covers every Pro/Max tenant.
+- URL canonicalization (PR #79): browser API surface unified onto
+  `/api/auth/*`, `/api/me`, `/api/win/*`, `/api/admin/*`,
+  `/api/enterprise/*`. Legacy `/win/api/*`, `/<client>/<agent>/*`,
+  `/data`, `/enterprise/:id` deleted outright.
+- Repo structure v2 Phase 1 (branch `chore/repo-structure-v2`):
+  `landing/` → `apps/marketing-web/`, `apps/yunwei-win-web/` → `apps/win-web/`,
+  `platform/` → `services/platform-api/`, `ops/` → `scripts/`.
+  Python import packages unchanged.
 
 ## License
 

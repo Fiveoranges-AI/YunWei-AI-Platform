@@ -2,7 +2,7 @@ services:
   platform-app:
     build:
       context: ../..
-      dockerfile: platform/Dockerfile
+      dockerfile: services/platform-api/Dockerfile
     container_name: platform-app
     restart: unless-stopped
     env_file: ../../.env
