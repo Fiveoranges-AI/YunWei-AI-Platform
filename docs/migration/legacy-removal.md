@@ -214,4 +214,45 @@ deleted earlier in v3).
   never visible to the browser. See `runtimes/README.md`.
 - `apps/yunwei-win-web` SPA build — the frontend already moved to the
   new URLs in PR #77 (`refactor(win-web): point frontend at /api/win
-  and new page routes`).
+  and new page routes`). The directory itself was renamed to
+  `apps/win-web/` in the Phase 1 repo-structure move below.
+
+## Phase 1 repo structure (branch `chore/repo-structure-v2`)
+
+Follow-up to the URL canonicalization above. Phase 1 of the
+[repo structure v2 proposal](../architecture/repo-structure-v2.md)
+clarifies the outer repository shape without changing runtime
+behavior. Four moves, no application logic changes:
+
+| Old | New |
+|---|---|
+| `landing/` | `apps/marketing-web/` |
+| `apps/yunwei-win-web/` | `apps/win-web/` |
+| `platform/` | `services/platform-api/` |
+| `ops/bootstrap.sh` | `scripts/bootstrap-dev.sh` |
+| `ops/sync_silver_canonical.py` | `scripts/sync-silver-canonical.py` |
+
+Python import package names (`platform_app`, `yunwei_win`) are
+unchanged — only the filesystem location of the package roots moved.
+Pytest now runs from `services/platform-api/`; the same applies to
+`uv sync` and the worker entrypoints.
+
+Commits on `chore/repo-structure-v2`:
+
+- `b64293c refactor(repo): move frontends to apps/marketing-web and apps/win-web`
+- `ea682ac refactor(repo): move backend service to services/platform-api`
+- `ed93b0a refactor(repo): move ops to scripts and update infra references`
+- `docs(repo): align README and docs with services/platform-api layout`
+
+Infra files updated by the move:
+
+- `services/platform-api/Dockerfile` `COPY` paths.
+- `infra/railway/platform-api.md` Dockerfile path + start command.
+- `infra/local/docker-compose.yml` build context + volume mounts.
+- `.gitignore` / `.dockerignore` references.
+- `vercel.json` rootDirectory (now `apps/marketing-web`).
+- Vite config inside `apps/win-web/` build output paths.
+
+Phase 2-4 (URL contract, `platform-web` Next.js portal, optional
+Python service split) are still proposals; see
+[`docs/architecture/repo-structure-v2.md`](../architecture/repo-structure-v2.md).

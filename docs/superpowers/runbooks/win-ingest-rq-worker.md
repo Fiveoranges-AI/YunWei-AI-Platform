@@ -28,8 +28,8 @@ Same image as `platform-app`. In Railway:
 1. Create a new service from the same GitHub repo.
 2. Settings → Build:
    - **Builder**: Dockerfile (not Railpack — auto-detect fails because
-     `pyproject.toml` lives under `platform/`, not at repo root)
-   - **Dockerfile Path**: `platform/Dockerfile`
+     `pyproject.toml` lives under `services/platform-api/`, not at repo root)
+   - **Dockerfile Path**: `services/platform-api/Dockerfile`
    - **Build Context**: leave empty (= repo root, because the Dockerfile's
      `COPY` paths are repo-root-relative)
 3. Settings → Deploy → **Custom Start Command**:

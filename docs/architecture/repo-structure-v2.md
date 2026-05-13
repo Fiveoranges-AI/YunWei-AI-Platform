@@ -1,8 +1,16 @@
 # Repository Structure v2
 
-Status: proposal for the next repository cleanup.
+Status: Phase 1 complete (branch `chore/repo-structure-v2`).
+Phase 2-4 still proposed; see Migration Plan below.
 
 Date: 2026-05-13
+
+Phase 1 execution (commits on `chore/repo-structure-v2`):
+
+- `b64293c refactor(repo): move frontends to apps/marketing-web and apps/win-web`
+- `ea682ac refactor(repo): move backend service to services/platform-api`
+- `ed93b0a refactor(repo): move ops to scripts and update infra references`
+- `docs(repo): align README and docs with services/platform-api layout` (this commit)
 
 ## Problem
 
