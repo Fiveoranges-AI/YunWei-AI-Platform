@@ -3,12 +3,13 @@
 This is the single place that pins the canonical URL layout introduced
 by the ``feat/api-url-canonicalize`` work: ``/api/win/*`` for the 智通
 客户 API, ``/api/admin/*`` / ``/api/enterprise/*`` for platform ops,
-and ``/api/me`` for the chrome.
+``/api/auth/*`` for login / logout / register, and ``/api/me`` for the
+chrome.
 
 Legacy URLs that used to exist (``/win/api/*``, the ``/<client>/<agent>``
 HMAC reverse-proxy entrypoint, ``/data``, ``/enterprise/<id>`` page route,
-``/api/agents``) MUST 404 outright — no aliases, no redirects, no
-compatibility rewrites.
+``/api/agents``, ``/auth/login``, ``/auth/logout``, ``/api/register``)
+MUST 404 outright — no aliases, no redirects, no compatibility rewrites.
 """
 from __future__ import annotations
 
@@ -171,6 +172,56 @@ def test_legacy_api_agents_is_404(client: TestClient) -> None:
     longer uses this surface, so it must be gone."""
     r = client.get("/api/agents")
     assert r.status_code == 404
+
+
+# ─── /api/auth/* contract (login / logout / register moved here) ────
+
+
+def test_legacy_auth_login_is_404(client: TestClient) -> None:
+    """``POST /auth/login`` moved to ``/api/auth/login`` — no alias."""
+    r = client.post("/auth/login", data={"username": "x", "password": "y"})
+    assert r.status_code == 404
+
+
+def test_legacy_auth_logout_is_404(client: TestClient) -> None:
+    """``POST /auth/logout`` moved to ``/api/auth/logout`` — no alias."""
+    r = client.post("/auth/logout")
+    assert r.status_code == 404
+
+
+def test_legacy_api_register_is_404(client: TestClient) -> None:
+    """``POST /api/register`` moved to ``/api/auth/register`` — no alias."""
+    r = client.post("/api/register", json={"code": "WIN-AAAA-AAAA"})
+    assert r.status_code == 404
+
+
+def test_api_auth_login_is_wired(client: TestClient) -> None:
+    """``POST /api/auth/login`` must be wired (not 404). Bad credentials
+    yield 401; this still proves the route exists."""
+    r = client.post(
+        "/api/auth/login", data={"username": "nobody", "password": "wrong"}
+    )
+    assert r.status_code != 404
+    assert r.status_code == 401
+
+
+def test_api_auth_logout_is_wired(client: TestClient) -> None:
+    """``POST /api/auth/logout`` must be wired (not 404). Without a session
+    cookie it's still a 200 — logout is idempotent and only clears cookies."""
+    r = client.post("/api/auth/logout")
+    assert r.status_code != 404
+    assert r.status_code == 200
+
+
+def test_api_auth_register_is_wired(client: TestClient) -> None:
+    """``POST /api/auth/register`` must be wired (not 404). A malformed
+    invite code yields a 400 business error — proves the route exists."""
+    r = client.post(
+        "/api/auth/register",
+        json={"code": "not-a-code", "username": "x", "password": "p"},
+    )
+    assert r.status_code != 404
+    assert r.status_code == 400
 
 
 # ─── /api/me contract ───────────────────────────────────────────────

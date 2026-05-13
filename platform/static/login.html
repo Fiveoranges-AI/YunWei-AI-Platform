@@ -732,7 +732,7 @@
           fd.append('username', userInp.value.trim());
           fd.append('password', pw.value);
 
-          const res = await fetch('/auth/login', {
+          const res = await fetch('/api/auth/login', {
             method: 'POST',
             body: fd,
             credentials: 'same-origin',

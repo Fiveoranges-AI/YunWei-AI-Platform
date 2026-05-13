@@ -53,7 +53,7 @@ def _register(c: TestClient, username: str) -> tuple[str, str]:
     """Register a fresh trial user, return (session_id, enterprise_id)."""
     code = _mint_code()
     r = c.post(
-        "/api/register",
+        "/api/auth/register",
         json={
             "code": code,
             "username": username,

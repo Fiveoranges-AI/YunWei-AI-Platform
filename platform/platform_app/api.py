@@ -88,7 +88,7 @@ def me(request: Request):
     }
 
 
-@router.post("/auth/login")
+@router.post("/api/auth/login")
 async def login(request: Request, response: Response):
     form = await request.form()
     username = (form.get("username") or "").strip()
@@ -139,7 +139,7 @@ def check_invite(code: str):
     return {"valid": True}
 
 
-@router.post("/api/register")
+@router.post("/api/auth/register")
 def register(request: Request, response: Response, body: dict = Body(...)):
     """Trial registration: invite code → new user + per-user enterprise."""
     code = (body.get("code") or "").strip().upper()
@@ -189,7 +189,7 @@ def register(request: Request, response: Response, body: dict = Body(...)):
     return {"ok": True, "redirect": "/win/", "user_id": user_id}
 
 
-@router.post("/auth/logout")
+@router.post("/api/auth/logout")
 def logout(request: Request, response: Response):
     sid = request.cookies.get("app_session")
     if sid:
