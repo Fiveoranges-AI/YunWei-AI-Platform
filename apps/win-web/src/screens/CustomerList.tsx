@@ -578,9 +578,6 @@ function MobileCustomerCard({
           <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
             {customer.name}
           </span>
-          <span className="pill pill-ink" style={{ fontSize: 10, padding: "2px 7px" }}>
-            {customer.tag}
-          </span>
         </div>
         <div
           style={{
