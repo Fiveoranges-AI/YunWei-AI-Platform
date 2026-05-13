@@ -1,162 +1,155 @@
-# Railway deploy — `platform-api`
+# Railway deploy — platform API + win ingest worker
 
-The platform v3 stack on Railway is **two services backed by the same
-Docker image**, both built from `services/platform-api/Dockerfile`:
+The Railway production shape is:
 
-1. **`platform-app`** — FastAPI web service. Serves the canonical v3
-   surface: page routes (`/`, `/login`, `/register`, `/admin`, `/win/`)
-   and the `/api/*` browser API (`/api/auth/*`, `/api/me`, `/api/win/*`,
-   `/api/admin/*`, `/api/enterprise/*`). No legacy reverse proxy.
-2. **`win-ingest-worker`** — long-running RQ worker that drains the
-   `yunwei_win` ingest queue. No HTTP listener.
+1. `platform-app` — public FastAPI web service. Serves `/`, `/win/`, and
+   `/api/*`.
+2. `win-ingest-worker` — private RQ worker. No HTTP listener. Drains the
+   `win-ingest` Redis queue and runs `auto_ingest`.
+3. `Postgres` — one shared platform metadata database.
+4. `Redis` — one shared session/cache/queue Redis.
+5. S3-compatible object storage — required for the standard two-service
+   ingest deploy because staged upload files must be readable by both the
+   web service and the worker.
 
-Both services share `DATABASE_URL`, `REDIS_URL`, and the upload
-volume so a Document INSERT by the web service is visible to the worker
-and vice versa.
+Both app services use the same Docker image built from
+`services/platform-api/Dockerfile`; only the start command and variables
+differ.
 
----
+## Railway service build settings
 
-## Image build
+Apply these settings to both `platform-app` and `win-ingest-worker`:
 
-`services/platform-api/Dockerfile` is a multi-stage build. The build
-context is the **repo root** — Railway's "Root Directory" should be
-left blank (or set to `/`).
-
-```
-Service settings:
-  Builder:          Dockerfile
-  Dockerfile path:  services/platform-api/Dockerfile
-  Root Directory:   <blank — repo root>
+```text
+Builder:          Dockerfile
+Dockerfile path:  services/platform-api/Dockerfile
+Root Directory:   <blank; repo root>
 ```
 
-The Dockerfile:
-1. Builds `apps/win-web` with Vite → dist copied into
-   `/app/win-web/dist`.
-2. Installs `services/platform-api/` Python deps via `uv` into a venv.
-3. Copies `services/platform-api/platform_app/` and
-   `services/platform-api/yunwei_win/` into `/app/`.
+Do not set a custom build context under `services/platform-api`. The
+Dockerfile copies `apps/win-web`, `services/platform-api/platform_app`,
+`services/platform-api/yunwei_win`, migrations, static files, and prompts
+using repo-root-relative paths.
 
-The same image runs both services. The start command differs.
+## Start commands
 
----
+`platform-app`:
 
-## Service: `platform-app` (web)
-
-```
-Start Command:  (leave blank — uses CMD)
+```text
+Start Command: <blank>
 ```
 
-The Dockerfile's `CMD` already runs:
+The Dockerfile `CMD` runs:
 
-```
+```text
 uvicorn platform_app.main:app --host 0.0.0.0 --port ${PORT:-80} --workers 1
 ```
 
-Railway injects `$PORT` automatically.
+`win-ingest-worker`:
 
-### Required env vars
+```text
+Start Command: yunwei-win-ingest-worker
+```
 
-| Key | Notes |
-|---|---|
-| `DATABASE_URL` | Postgres — platform metadata (users, enterprises, runtimes, …). |
-| `REDIS_URL` | Shared with the worker; used for sessions + RQ queue. |
-| `COOKIE_SECRET` | Signing key for `app_session` cookie. |
-| `ANTHROPIC_API_KEY` | LLM upstream for the shared assistant + ingest extractors. |
-| `MISTRAL_API_KEY` | OCR provider (default). |
-| `LANDINGAI_API_KEY` | Extractor provider (default). |
-| `STORAGE_BACKEND` | `local` or `s3`. If `s3`, set `S3_*` vars. |
+The old `yinhu-ingest-worker` entrypoint no longer exists.
 
-### Optional / per-feature
+## Variable strategy
 
-| Key | Default | Purpose |
+Use Railway Shared Variables for values that must be identical across
+services, then reference them from the services that need them. Keep
+service-only secrets on the service itself.
+
+Principles:
+
+- `DATABASE_URL` and `REDIS_URL` must point to the same Railway Postgres
+  and Redis resources for both services.
+- AI provider and storage variables must match between `platform-app` and
+  `win-ingest-worker` while `/api/win/ingest/auto` still exists on the web
+  service.
+- `COOKIE_SECRET` belongs only on `platform-app`; the worker does not serve
+  browser sessions.
+- Do not set `PORT` manually unless Railway domain routing requires a fixed
+  target port. The web service already listens on Railway's injected `PORT`;
+  the worker should not expose public networking.
+- Prefer `STORAGE_BACKEND=s3` for Railway. `STORAGE_BACKEND=local` only
+  works when the process that stages files is the same process that reads
+  them.
+- Do not set `DOCUMENT_AI_PROVIDER` for new deploys. The current auto
+  ingest path uses `OCR_PROVIDER` and `EXTRACTOR_PROVIDER`.
+
+## Railway variable templates
+
+The copy/paste-ready Railway variables live outside this Markdown file so
+the deploy contract stays easy to reuse and review.
+
+| Railway target | Template file | Notes |
 |---|---|---|
-| `OCR_PROVIDER` | `mistral` | `mistral` or `mineru`. |
-| `EXTRACTOR_PROVIDER` | `landingai` | `landingai` or `deepseek`. |
-| `MINERU_API_TOKEN` | — | Required if `OCR_PROVIDER=mineru`. |
-| `DEEPSEEK_API_KEY` | — | Required if `EXTRACTOR_PROVIDER=deepseek`. |
+| Project Settings → Shared Variables | `infra/railway/env/shared.env.example` | Common AI, provider, storage, model, and log variables. |
+| `platform-app` → Variables → Raw Editor | `infra/railway/env/platform-app.env.example` | References shared variables and adds `COOKIE_SECRET`. |
+| `win-ingest-worker` → Variables → Raw Editor | `infra/railway/env/win-ingest-worker.env.example` | References shared variables and adds `WORKER_MAX_JOBS`. |
 
-### Health
+Adjust resource names in the service templates if your Railway Postgres
+or Redis services are not named exactly `Postgres` and `Redis`.
 
-`GET /` returns 200 (login) or 303 → `/win/`. Railway's default HTTP
-healthcheck on `/` works.
+The default LLM upstream in `infra/railway/env/shared.env.example` is
+DeepSeek. The `ANTHROPIC_*` names are historical because the app uses an
+Anthropic-compatible client shape; put the DeepSeek key in
+`ANTHROPIC_API_KEY` and keep `ANTHROPIC_BASE_URL` pointed at DeepSeek's
+Anthropic-compatible endpoint. Do not rely on `DEEPSEEK_API_KEY` for win
+ingest unless the code grows an explicit alias.
 
----
+## Service notes: `platform-app`
 
-## Service: `win-ingest-worker`
+Healthcheck: `GET /` is enough. It returns login or redirects an
+authenticated user to `/win/`.
 
-Same Dockerfile, same image. Override the start command:
+## Service notes: `win-ingest-worker`
 
-```
-Start Command:  yunwei-win-ingest-worker
-```
+The worker intentionally does not need:
 
-`yunwei-win-ingest-worker` is a console-script entry point declared in
-`services/platform-api/pyproject.toml`
-(`yunwei_win.workers.ingest_rq_worker:main`).
-The worker subscribes to the `ingest` queue on `REDIS_URL`.
+- `COOKIE_SECRET`
+- `PLATFORM_HOST_APP`
+- `PLATFORM_HOST_API`
+- public networking
+- `PORT`
 
-> Prior to v3 this entry point was named `yinhu-ingest-worker`.
-> **The old name no longer exists in the wheel** — make sure the
-> Railway dashboard reflects the new name or the worker service will
-> fail to start with a "command not found" error.
+## Storage
 
-### Required env vars
+For two Railway services, use the S3 storage section in
+`infra/railway/env/shared.env.example`, then reference those shared
+variables from both service templates. Cloudflare R2, AWS S3, or any
+S3-compatible store is fine.
 
-Same as `platform-app`. Both services must read the same
-`DATABASE_URL` and `REDIS_URL`. If `STORAGE_BACKEND=local`,
-both must mount the same persistent volume.
+Avoid `STORAGE_BACKEND=local` for the standard Railway split. The web
+service stages uploaded files, and the worker later reads them. A local
+filesystem path inside one service is not a shared storage contract for
+another service.
 
----
+## Rollout checklist
 
-## Shared volume (only when `STORAGE_BACKEND=local`)
+1. Create or confirm services: `platform-app`, `win-ingest-worker`,
+   `Postgres`, `Redis`.
+2. Set the same Dockerfile build settings on both app services.
+3. Leave `platform-app` start command blank.
+4. Set `win-ingest-worker` start command to `yunwei-win-ingest-worker`.
+5. Add Shared Variables for common AI/storage/model settings.
+6. Add service variables using reference variables.
+7. Confirm `platform-app` has public networking and custom domain.
+8. Confirm `win-ingest-worker` has no public domain.
+9. Deploy both app services from the same git SHA.
+10. Smoke test:
+    - login redirects to `/win/`
+    - `/api/win/ingest/jobs` creates a queued job
+    - worker logs show it picked up the job
+    - job status reaches `extracted`
+    - review screen renders `result_json`
 
-| Mount path | Used by | Purpose |
-|---|---|---|
-| `/data` | platform-app + worker | Uploaded staged files |
+## Rollback
 
-When `STORAGE_BACKEND=s3` the volume is not needed — both services
-stream uploads through the configured bucket.
+Roll back `platform-app` and `win-ingest-worker` to the same git SHA. Do
+not roll one back without the other when migrations or job payload shape
+changed.
 
----
-
-## Promote / rollback
-
-Railway tags every successful deploy with a git SHA. Promotion is a
-no-op rebuild from the new SHA on both services. To roll back:
-
-```
-Service → Deployments → <previous deploy> → Redeploy
-```
-
-Both services should be rolled back to the same SHA together. The web
-service and worker share migrations
-(`services/platform-api/migrations/`), so if a deploy ran
-`010_runtime_registry.sql` you must NOT roll back below the
-migration that introduced it without first dropping those tables. The
-safer rollback path is: re-deploy the previous SHA and re-apply any
-needed forward-only schema fix in a separate change.
-
----
-
-## First-time provisioning checklist
-
-1. Create two Railway services in the same project from this repo.
-2. Set `Dockerfile path = services/platform-api/Dockerfile` on both.
-3. Override `Start Command = yunwei-win-ingest-worker` on the second.
-4. Provision a Postgres add-on → `DATABASE_URL`.
-5. Provision a Redis add-on → `REDIS_URL`.
-6. Set `COOKIE_SECRET` (`openssl rand -hex 32`).
-7. Set the AI provider keys above.
-8. If `STORAGE_BACKEND=local`: attach a Volume to both services at
-   `/data`.
-9. Deploy. Migrations run on `platform-app` startup
-   (`platform_app.main.lifespan` → `db._migrate`).
-
----
-
-## Related
-
-- Docker stack for local dev: `infra/local/docker-compose.yml`.
-- Worker operations: `docs/superpowers/runbooks/win-ingest-rq-worker.md`.
-- Architecture overview: `docs/architecture/platform-v3.md`.
-- Dedicated runtime contract (Pro+): `runtimes/README.md`.
+If the worker deploy is bad but the web service is healthy, temporarily
+stop the worker service or set its start command to `sleep infinity`. New
+async ingest jobs will remain queued until the worker is restored.

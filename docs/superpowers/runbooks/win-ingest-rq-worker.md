@@ -7,9 +7,12 @@ queue and runs the same `auto_ingest` pipeline that `/win/api/ingest/auto`
 runs, persisting the result back to the job row.
 
 Two Railway services, one Docker image, one Postgres, one Redis. Files
-go through an S3-compatible object store (Cloudflare R2 recommended) —
-**Railway Volumes cannot be shared between services**, so the local
-backend is only suitable for single-service / dev deployments.
+go through an S3-compatible object store (Cloudflare R2 recommended);
+the local backend is only suitable for single-service / dev deployments.
+
+For the deploy-time variable template, use
+`infra/railway/platform-api.md`. This runbook focuses on worker
+operations and failure modes.
 
 ## Railway services
 
@@ -21,7 +24,7 @@ No change. Start command stays:
 uvicorn platform_app.main:app --host 0.0.0.0 --port $PORT --workers 1
 ```
 
-### `platform-ingest-worker` (new)
+### `win-ingest-worker` (new)
 
 Same image as `platform-app`. In Railway:
 
@@ -35,34 +38,26 @@ Same image as `platform-app`. In Railway:
 3. Settings → Deploy → **Custom Start Command**:
 
    ```
-   python -m yunwei_win.workers.ingest_rq_worker
+   yunwei-win-ingest-worker
    ```
 
-   (Use `python -m` instead of the bare `yunwei-win-ingest-worker`
-   console script so CWD=`/app` gets on `sys.path` and prompts at
-   `/app/prompts` resolve via `Path(__file__).parents[N]`. The console
-   script also works once `find_prompt` is in place, but `python -m` is
-   the safer shape that matches how `uvicorn` starts the web service.)
-
-4. Settings → Variables: copy all variables from `platform-app`, in
-   particular:
+4. Settings → Variables: use the template in
+   `infra/railway/platform-api.md`. In particular the worker needs:
    - `DATABASE_URL`
    - `REDIS_URL`
-   - `DATA_ROOT`
+   - `STORAGE_BACKEND=s3`
+   - `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` /
+     `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`
+   - `OCR_PROVIDER`
+   - `EXTRACTOR_PROVIDER`
    - `MISTRAL_API_KEY`
    - `VISION_AGENT_API_KEY`
-   - `DOCUMENT_AI_PROVIDER` (set to `landingai`)
    - `LANDINGAI_*` model overrides if any
-   - `ANTHROPIC_API_KEY` (Claude/DeepSeek)
+   - `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`
    - `MODEL_PARSE` / `MODEL_QA` / `MODEL_VISION` if customized
    - `WORKER_MAX_JOBS` (optional; default `100`) — worker processes this
      many jobs then exits so Railway restarts it, capping memory growth
      from LandingAI/httpx pools. Set to `0` (or empty) to disable.
-   - `STORAGE_BACKEND` (optional; default `local`) — set to `s3` to write
-     uploads to an S3-compatible bucket instead of the shared Volume.
-   - `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` /
-     `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` — required when
-     `STORAGE_BACKEND=s3`. See the storage-backend section below.
 
 5. Settings → Volumes: **leave empty**. Railway Volumes cannot be shared
    between services — every attached Volume is scoped to one service.
@@ -107,16 +102,8 @@ services because Railway Volumes are scoped to one service — there is no
 
 For the standard two-service deploy use an S3-compatible store. AWS S3
 works; Cloudflare R2 is recommended (S3-compatible, free at our volume,
-no egress fees). On **both** services set:
-
-```env
-STORAGE_BACKEND=s3
-S3_BUCKET=your-bucket-name
-S3_ENDPOINT_URL=https://<accountid>.r2.cloudflarestorage.com   # R2 example
-S3_REGION=auto
-S3_ACCESS_KEY_ID=...
-S3_SECRET_ACCESS_KEY=...
-```
+no egress fees). Use `infra/railway/env/shared.env.example` for the
+storage variables and reference them from both service templates.
 
 When the S3 backend is active, `staged_file_url` rows look like
 `s3://your-bucket-name/files/<uuid>.pdf`. The Volume mount is no longer
@@ -131,10 +118,12 @@ dispatch on the URL scheme.
 - **Worker can't reach Redis**: enqueue fails inside the API handler;
   the job is created with `status=failed` and an error_message. Check
   `REDIS_URL` on both services.
-- **Worker can't read staged file**: most likely the volume isn't
-  mounted on the worker. Confirm both services have a volume at the same
-  `DATA_ROOT`. Without it the worker job fails with
-  `FileNotFoundError`.
+- **Worker can't read staged file**: most likely `STORAGE_BACKEND=s3` or
+  one of the `S3_*` variables differs between `platform-app` and
+  `win-ingest-worker`. Confirm both services point at the same bucket and
+  endpoint. If someone used `STORAGE_BACKEND=local` in a two-service
+  Railway deploy, the worker will not have a reliable way to read files
+  staged by the web service.
 - **Mistral OCR or LandingAI extract failure**: surfaces as a normal
   `failed` job with the upstream error in `error_message`. User can
   click "重试" — increments `attempts` and re-enqueues.
@@ -154,6 +143,6 @@ synchronously in the web process and ignores Redis.
 
 - Worker heartbeat → `running` jobs older than N minutes auto-reset to
   `queued` for re-run.
-- Object storage (S3 / R2) instead of Railway Volume so workers can scale
-  beyond a single shared disk.
+- Optional provider fallback policy, for example MinerU OCR → Mistral OCR
+  when the precision parser is unavailable.
 - Retry budget per failure class (LLM 429 ≠ user error ≠ FK violation).
