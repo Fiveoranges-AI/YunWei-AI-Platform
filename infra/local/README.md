@@ -42,18 +42,79 @@ services:
 From the repo root:
 
 ```bash
-docker compose -f infra/local/docker-compose.yml up --build
-```
-
-Or use the helper script (sets `COMPOSE` to the new path):
-
-```bash
-./ops/bootstrap.sh
+docker compose -f infra/local/docker-compose.yml up --build -d
 ```
 
 `platform-app` listens on port 80 inside the container; Cloudflare
 tunnel forwards your public hostname to it. There is no published
 port on the host — connect via the tunnel hostname.
+
+## Bootstrap the DB
+
+Once the stack is up, seed the admin user + enterprise + membership:
+
+```bash
+./ops/bootstrap.sh
+```
+
+This is the minimal v3 path. It does **not** provision any
+dedicated runtime or legacy HMAC tenant — the shared `/win/` product
+works against `platform-app` alone.
+
+Vars consulted from `.env`:
+
+| Var | Default |
+|---|---|
+| `ADMIN_BOOTSTRAP_USER` | `xuzong` |
+| `ADMIN_BOOTSTRAP_PASSWORD` | (required) |
+| `BOOTSTRAP_ENTERPRISE_ID` | `yinhu` |
+| `BOOTSTRAP_ENTERPRISE_NAME` | `银湖石墨` |
+
+## Optional: register a dedicated runtime
+
+Pro/Max plans route their assistant through a dedicated per-enterprise
+runtime container. Register it via the runtime_registry:
+
+1. Start the runtime container in a separate compose stack joined to
+   the `cf-tunnel` external network (see
+   `runtimes/examples/yinhu-super-xiaochen.compose.yml`).
+2. Re-run bootstrap with `--with-runtime`:
+
+   ```bash
+   ./ops/bootstrap.sh --with-runtime
+   ```
+
+   Override the defaults with env vars when needed:
+
+   | Var | Default |
+   |---|---|
+   | `RUNTIME_ID` | `rt_yinhu_super_xiaochen` |
+   | `RUNTIME_PROVIDER` | `super-xiaochen` |
+   | `RUNTIME_URL` | `http://agent-yinhu-super-xiaochen:8000` |
+   | `RUNTIME_VERSION` | `v1` |
+   | `RUNTIME_CAPABILITY` | `assistant` |
+
+3. Verify the binding landed in the DB:
+
+   ```bash
+   docker compose -f infra/local/docker-compose.yml exec platform-app \
+     python -c "from platform_app import db, runtime_registry; \
+       db.init(); \
+       print(runtime_registry.get_runtime_for('yinhu', 'assistant'))"
+   ```
+
+## Optional: legacy HMAC tenant
+
+Only needed when keeping the v2 reverse proxy at `/<client>/<agent>/`
+alive for a tenant. Requires a populated `agents/<client>-<agent>/.env`
+with placeholder HMAC values. Run:
+
+```bash
+./ops/bootstrap.sh --legacy-tenant
+```
+
+The script will call `platform-admin add-tenant`, capture the issued
+HMAC secret/kid, and patch them back into the agent `.env`.
 
 ## Tear down
 
@@ -95,9 +156,9 @@ end-to-end locally:
 1. Start the local stack as above.
 2. Start the runtime stack separately, joining it to the
    `cf-tunnel` external network.
-3. Insert a row into `runtimes` + `runtime_bindings` (see
-   `platform/platform_app/runtime_registry.py` helpers or the Pro
-   admin UI if it exists yet).
+3. Register it via `./ops/bootstrap.sh --with-runtime` (see
+   *Optional: register a dedicated runtime* above) — that writes the
+   row into `runtimes` + `runtime_bindings` for you.
 
 See `runtimes/README.md` for the runtime contract.
 

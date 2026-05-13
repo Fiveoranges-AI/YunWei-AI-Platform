@@ -129,3 +129,10 @@ Railway dashboard Start Command before promoting.
 - **HMAC proxy → runtime registry migration** — once dedicated-runtime
   routing is the only Pro/Max path, the `tenants` table and
   `/<client>/<agent>/` URL pattern can be retired. Tracked separately.
+- **`ops/bootstrap.sh` legacy tenant path** — the v2 `add-tenant` +
+  HMAC-patching flow is preserved behind a `--legacy-tenant` opt-in
+  flag. Default bootstrap now only seeds the admin user + enterprise +
+  membership. Dedicated runtimes register via `--with-runtime`, which
+  calls `runtime_registry.upsert_runtime` + `bind_runtime` directly.
+  Drop the `--legacy-tenant` branch when the HMAC reverse proxy is
+  retired.
