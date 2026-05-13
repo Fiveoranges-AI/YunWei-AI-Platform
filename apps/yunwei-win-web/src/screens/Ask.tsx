@@ -128,7 +128,7 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
           >
             {I.back(20)}
           </button>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-900)" }}>问 AI</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-900)" }}>问小陈</div>
         </div>
         <div
           style={{
@@ -169,7 +169,7 @@ export function AskScreen({ go, params }: { go: GoFn; params: Record<string, str
           >
             {I.back(20)}
           </button>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-900)" }}>问 AI</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-900)" }}>问小陈</div>
         </div>
         <div
           style={{

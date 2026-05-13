@@ -467,7 +467,12 @@ function askResponseToBlock(raw: RawAskResponse): AskAIBlock {
 }
 
 export async function askAI(customerId: string, question: string): Promise<AskAIBlock> {
-  const path = customerId === "all" ? "/ask" : `/customers/${customerId}/ask`;
-  const raw = await postJSON<RawAskResponse>(path, { question });
+  // Free/Lite/Pro all hit the shared assistant endpoint; the server
+  // reads enterprise scope from the session cookie (never the body).
+  // customer_id="all" → cross-customer Q&A; a UUID → single-customer KB.
+  const raw = await postJSON<RawAskResponse>("/assistant/chat", {
+    question,
+    customer_id: customerId,
+  });
   return askResponseToBlock(raw);
 }

@@ -1,0 +1,85 @@
+"""POST /api/assistant/chat — shared assistant endpoint.
+
+Mounted by ``yunwei_win`` under ``/win/api/assistant``. The middleware in
+``platform_app.main`` has already attached ``request.state.auth_context``
+for every ``/win/api/*`` request, so we read enterprise scope from there
+and refuse to honour any tenant ID supplied in the request body.
+
+For Pro/Max users this is the same shared QA path Free/Lite use; the
+dedicated-runtime resolver (Task 7) will eventually short-circuit this
+for tenants that have a per-tenant runtime, but Task 5 only adds the
+endpoint.
+"""
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from platform_app.entitlements import entitlements_for
+from yunwei_win.assistant.service import answer_shared_assistant
+from yunwei_win.db import get_session
+from yunwei_win.services.llm import LLMCallFailed
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/assistant")
+
+
+class AssistantChatRequest(BaseModel):
+    """Client-supplied chat payload.
+
+    Note: ``enterprise_id`` is deliberately **not** a field here. Tenant
+    scope must come from the server-side ``AuthContext``; accepting it
+    from the body would let any logged-in user impersonate another
+    enterprise's data. ``extra="ignore"`` makes such fields a no-op
+    instead of an error so legacy clients don't break.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    question: str = Field(min_length=1, max_length=2000)
+    customer_id: str | None = None
+
+
+@router.post("/chat")
+async def chat(
+    payload: AssistantChatRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    ctx = getattr(request.state, "auth_context", None)
+    if ctx is None:
+        # Belt-and-braces: middleware should have rejected this already,
+        # but if /win/api/assistant ever moves we want a hard failure.
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "not_logged_in", "message": "请登录"},
+        )
+    ent = entitlements_for(ctx)
+    if not ent.can_use_shared_assistant:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "assistant_not_enabled",
+                "message": "当前套餐未开通问答",
+            },
+        )
+
+    try:
+        result = await answer_shared_assistant(
+            session, payload.question, customer_id=payload.customer_id
+        )
+    except ValueError as exc:
+        # _parse_customer_id rejects non-UUID, non-"all" inputs.
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_customer_id", "message": str(exc)},
+        ) from exc
+    except LLMCallFailed as exc:
+        logger.exception("shared assistant LLM call failed")
+        raise HTTPException(502, f"upstream LLM error: {exc!s}") from exc
+
+    await session.commit()
+    return result

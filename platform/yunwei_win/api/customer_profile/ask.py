@@ -232,6 +232,54 @@ async def _build_customer_kb(
     return "\n".join(lines)[:_KB_CHAR_BUDGET]
 
 
+async def answer_customer_question(
+    session: AsyncSession, customer_id: UUID, question: str
+) -> dict[str, Any]:
+    """Customer-scoped Q&A as a plain dict.
+
+    Loads the customer KB, calls Claude with the forced tool, and returns
+    ``{answer, citations, confidence, no_relevant_info}``. Raises
+    :class:`LLMCallFailed` on upstream failure; the caller is responsible
+    for translating that to HTTP and for committing the session (which
+    flushes the ``llm_calls`` audit row).
+    """
+    cust = await load_customer(session, customer_id)
+    kb = await _build_customer_kb(session, cust)
+
+    prompt = _PROMPT_PATH.read_text(encoding="utf-8").format(
+        kb=kb, question=question
+    )
+    messages = [{"role": "user", "content": prompt}]
+
+    response = await call_claude(
+        messages,
+        purpose="customer_ask",
+        session=session,
+        model=settings.model_qa,
+        tools=[_ask_tool()],
+        tool_choice={"type": "tool", "name": _TOOL_NAME},
+        max_tokens=2000,
+    )
+
+    tool_input = extract_tool_use_input(response, _TOOL_NAME)
+
+    citations: list[dict[str, Any]] = []
+    for c in tool_input.get("citations") or []:
+        try:
+            citations.append(
+                CustomerAskCitation.model_validate(c).model_dump(mode="json")
+            )
+        except Exception:
+            continue
+
+    return {
+        "answer": tool_input.get("answer", ""),
+        "citations": citations,
+        "confidence": float(tool_input.get("confidence", 0.5)),
+        "no_relevant_info": bool(tool_input.get("no_relevant_info", False)),
+    }
+
+
 @router.post(
     "/{customer_id}/ask", response_model=CustomerAskResponse
 )
@@ -240,41 +288,13 @@ async def customer_ask(
     payload: CustomerAskRequest,
     session: AsyncSession = Depends(get_session),
 ) -> CustomerAskResponse:
-    cust = await load_customer(session, customer_id)
-    kb = await _build_customer_kb(session, cust)
-
-    prompt = _PROMPT_PATH.read_text(encoding="utf-8").format(
-        kb=kb, question=payload.question
-    )
-    messages = [{"role": "user", "content": prompt}]
-
     try:
-        response = await call_claude(
-            messages,
-            purpose="customer_ask",
-            session=session,
-            model=settings.model_qa,
-            tools=[_ask_tool()],
-            tool_choice={"type": "tool", "name": _TOOL_NAME},
-            max_tokens=2000,
+        result = await answer_customer_question(
+            session, customer_id, payload.question
         )
     except LLMCallFailed as exc:
         raise HTTPException(502, f"upstream LLM error: {exc!s}") from exc
     finally:
         await session.commit()
 
-    tool_input = extract_tool_use_input(response, _TOOL_NAME)
-
-    citations: list[CustomerAskCitation] = []
-    for c in tool_input.get("citations") or []:
-        try:
-            citations.append(CustomerAskCitation.model_validate(c))
-        except Exception:
-            continue
-
-    return CustomerAskResponse(
-        answer=tool_input.get("answer", ""),
-        citations=citations,
-        confidence=float(tool_input.get("confidence", 0.5)),
-        no_relevant_info=bool(tool_input.get("no_relevant_info", False)),
-    )
+    return CustomerAskResponse.model_validate(result)

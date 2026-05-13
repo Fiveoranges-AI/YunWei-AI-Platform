@@ -4,7 +4,7 @@ import type { TabName } from "../App";
 const ITEMS: { id: TabName; label: string; sub: string; icon: (s?: number, c?: string) => JSX.Element }[] = [
   { id: "customers", label: "客户", sub: "Customers", icon: I.customers },
   { id: "upload", label: "添加", sub: "Upload", icon: I.upload },
-  { id: "ask", label: "问 AI", sub: "Ask AI", icon: I.ask },
+  { id: "ask", label: "问小陈", sub: "Ask AI", icon: I.ask },
   { id: "profile", label: "我的", sub: "Profile", icon: I.profile },
 ];
 
