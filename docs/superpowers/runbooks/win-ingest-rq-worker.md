@@ -102,8 +102,9 @@ services because Railway Volumes are scoped to one service — there is no
 
 For the standard two-service deploy use an S3-compatible store. AWS S3
 works; Cloudflare R2 is recommended (S3-compatible, free at our volume,
-no egress fees). Use `infra/railway/env/shared.env.example` for the
-storage variables and reference them from both service templates.
+no egress fees). Configure the storage variables in both
+`infra/railway/env/platform-app.env.example` and
+`infra/railway/env/win-ingest-worker.env.example` with the same values.
 
 When the S3 backend is active, `staged_file_url` rows look like
 `s3://your-bucket-name/files/<uuid>.pdf`. The Volume mount is no longer

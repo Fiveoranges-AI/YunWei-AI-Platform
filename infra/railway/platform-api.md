@@ -55,9 +55,9 @@ The old `yinhu-ingest-worker` entrypoint no longer exists.
 
 ## Variable strategy
 
-Use Railway Shared Variables for values that must be identical across
-services, then reference them from the services that need them. Keep
-service-only secrets on the service itself.
+Use service-specific variables. Each Railway service gets a complete
+copy/paste env template; variables that must match are duplicated
+intentionally instead of going through a project-level variable layer.
 
 Principles:
 
@@ -84,15 +84,14 @@ the deploy contract stays easy to reuse and review.
 
 | Railway target | Template file | Notes |
 |---|---|---|
-| Project Settings → Shared Variables | `infra/railway/env/shared.env.example` | Common AI, provider, storage, model, and log variables. |
-| `platform-app` → Variables → Raw Editor | `infra/railway/env/platform-app.env.example` | References shared variables and adds `COOKIE_SECRET`. |
-| `win-ingest-worker` → Variables → Raw Editor | `infra/railway/env/win-ingest-worker.env.example` | References shared variables and adds `WORKER_MAX_JOBS`. |
+| `platform-app` → Variables → Raw Editor | `infra/railway/env/platform-app.env.example` | Complete web-service template. Includes `COOKIE_SECRET`. |
+| `win-ingest-worker` → Variables → Raw Editor | `infra/railway/env/win-ingest-worker.env.example` | Complete worker template. Includes `WORKER_MAX_JOBS`; no browser-session secrets. |
 
 Adjust resource names in the service templates if your Railway Postgres
 or Redis services are not named exactly `Postgres` and `Redis`.
 
-The default LLM upstream in `infra/railway/env/shared.env.example` is
-DeepSeek. The `ANTHROPIC_*` names are historical because the app uses an
+The default LLM upstream in both service templates is DeepSeek. The
+`ANTHROPIC_*` names are historical because the app uses an
 Anthropic-compatible client shape; put the DeepSeek key in
 `ANTHROPIC_API_KEY` and keep `ANTHROPIC_BASE_URL` pointed at DeepSeek's
 Anthropic-compatible endpoint. Do not rely on `DEEPSEEK_API_KEY` for win
@@ -115,10 +114,10 @@ The worker intentionally does not need:
 
 ## Storage
 
-For two Railway services, use the S3 storage section in
-`infra/railway/env/shared.env.example`, then reference those shared
-variables from both service templates. Cloudflare R2, AWS S3, or any
-S3-compatible store is fine.
+For two Railway services, set the S3 storage section in both
+`infra/railway/env/platform-app.env.example` and
+`infra/railway/env/win-ingest-worker.env.example` to the same values.
+Cloudflare R2, AWS S3, or any S3-compatible store is fine.
 
 Avoid `STORAGE_BACKEND=local` for the standard Railway split. The web
 service stages uploaded files, and the worker later reads them. A local
@@ -132,8 +131,11 @@ another service.
 2. Set the same Dockerfile build settings on both app services.
 3. Leave `platform-app` start command blank.
 4. Set `win-ingest-worker` start command to `yunwei-win-ingest-worker`.
-5. Add Shared Variables for common AI/storage/model settings.
-6. Add service variables using reference variables.
+5. Paste `infra/railway/env/platform-app.env.example` into `platform-app`
+   Variables → Raw Editor, then fill secrets.
+6. Paste `infra/railway/env/win-ingest-worker.env.example` into
+   `win-ingest-worker` Variables → Raw Editor, then fill matching
+   AI/storage/provider values.
 7. Confirm `platform-app` has public networking and custom domain.
 8. Confirm `win-ingest-worker` has no public domain.
 9. Deploy both app services from the same git SHA.
