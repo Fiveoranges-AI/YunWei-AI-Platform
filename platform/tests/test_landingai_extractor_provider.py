@@ -37,13 +37,13 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
 
 import uuid
 
-from yinhu_brain.services.ingest.extractors.providers import landingai as provider_module
-from yinhu_brain.services.ingest.extractors.providers.base import ExtractionInput
-from yinhu_brain.services.ingest.extractors.providers.landingai import (
+from yunwei_win.services.ingest.extractors.providers import landingai as provider_module
+from yunwei_win.services.ingest.extractors.providers.base import ExtractionInput
+from yunwei_win.services.ingest.extractors.providers.landingai import (
     LandingAIExtractorProvider,
 )
-from yinhu_brain.services.ingest.unified_schemas import PipelineSelection
-from yinhu_brain.services.landingai_ade_client import (
+from yunwei_win.services.ingest.unified_schemas import PipelineSelection
+from yunwei_win.services.landingai_ade_client import (
     LandingAIExtractResult,
     LandingAIUnavailable,
 )

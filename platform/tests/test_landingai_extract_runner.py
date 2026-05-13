@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from yinhu_brain.services.ingest import landingai_extract as extract_module
-from yinhu_brain.services.ingest.landingai_extract import extract_selected_pipelines
-from yinhu_brain.services.ingest.unified_schemas import PipelineSelection
+from yunwei_win.services.ingest import landingai_extract as extract_module
+from yunwei_win.services.ingest.landingai_extract import extract_selected_pipelines
+from yunwei_win.services.ingest.unified_schemas import PipelineSelection
 
 
 @pytest.mark.asyncio
@@ -13,7 +13,7 @@ async def test_extract_selected_pipelines_runs_each_schema(monkeypatch):
 
     async def fake_extract_with_schema(*, schema_json, markdown):
         calls.append(schema_json)
-        from yinhu_brain.services.landingai_ade_client import LandingAIExtractResult
+        from yunwei_win.services.landingai_ade_client import LandingAIExtractResult
         return LandingAIExtractResult(
             extraction={"ok": True},
             extraction_metadata={},

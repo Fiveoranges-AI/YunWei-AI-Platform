@@ -15,14 +15,14 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
     yield
 
 
-from yinhu_brain.config import settings
-from yinhu_brain.services.ocr.factory import get_ocr_provider
-from yinhu_brain.services.ocr.mineru import MineruPreciseOcrProvider
-from yinhu_brain.services.ocr.mistral import MistralOcrProvider
+from yunwei_win.config import settings
+from yunwei_win.services.ocr.factory import get_ocr_provider
+from yunwei_win.services.ocr.mineru import MineruPreciseOcrProvider
+from yunwei_win.services.ocr.mistral import MistralOcrProvider
 
 
 def test_get_ocr_provider_defaults_to_mistral(monkeypatch):
-    from yinhu_brain.services.ocr import factory
+    from yunwei_win.services.ocr import factory
 
     monkeypatch.setattr(factory.settings, "ocr_provider", "mistral")
 
@@ -32,7 +32,7 @@ def test_get_ocr_provider_defaults_to_mistral(monkeypatch):
 
 
 def test_get_ocr_provider_can_select_mineru(monkeypatch):
-    from yinhu_brain.services.ocr import factory
+    from yunwei_win.services.ocr import factory
 
     monkeypatch.setattr(factory.settings, "ocr_provider", "mineru")
 

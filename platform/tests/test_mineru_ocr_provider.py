@@ -32,8 +32,8 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
     yield
 
 
-from yinhu_brain.services.ocr.base import OcrInput, OcrUnavailable
-from yinhu_brain.services.ocr.mineru import MineruPreciseOcrProvider
+from yunwei_win.services.ocr.base import OcrInput, OcrUnavailable
+from yunwei_win.services.ocr.mineru import MineruPreciseOcrProvider
 
 
 def _zip_bytes(files: dict[str, str]) -> bytes:
@@ -56,7 +56,7 @@ def _ocr_input(filename: str = "doc.pdf") -> OcrInput:
 
 
 def _set_mineru_settings(monkeypatch, **overrides) -> None:
-    from yinhu_brain.services.ocr import mineru as mineru_module
+    from yunwei_win.services.ocr import mineru as mineru_module
 
     defaults = {
         "mineru_api_token": "test-token",

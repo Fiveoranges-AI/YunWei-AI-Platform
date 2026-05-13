@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from yinhu_brain.api.ingest import _stream_with_progress
+from yunwei_win.api.ingest import _stream_with_progress
 
 
 class _DummySession:

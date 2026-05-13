@@ -16,7 +16,7 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
     yield
 
 
-from yinhu_brain.services.ingest.customer_memory_schema import (
+from yunwei_win.services.ingest.customer_memory_schema import (
     CommitmentDirectionEx,
     CustomerEventTypeEx,
     ExtractedCommitment,
@@ -29,7 +29,7 @@ from yinhu_brain.services.ingest.customer_memory_schema import (
     RiskSeverityEx,
     TaskPriorityEx,
 )
-from yinhu_brain.services.ingest.schemas import (
+from yunwei_win.services.ingest.schemas import (
     ContactDecision,
     ContactExtraction,
     ContactRoleEx,
@@ -40,7 +40,7 @@ from yinhu_brain.services.ingest.schemas import (
     OrderExtraction,
     PaymentMilestone,
 )
-from yinhu_brain.services.ingest.unified_schemas import (
+from yunwei_win.services.ingest.unified_schemas import (
     AutoConfirmRequest,
     CommercialDraft,
     ExtractorSelection,
@@ -425,7 +425,7 @@ def test_payment_milestone_float_offset_days_truncates():
 
 def test_customer_decision_accepts_bind_existing_mode():
     """bind_existing is the new explicit binding mode (no field update)."""
-    from yinhu_brain.services.ingest.schemas import CustomerDecision
+    from yunwei_win.services.ingest.schemas import CustomerDecision
     from uuid import uuid4
 
     cd = CustomerDecision.model_validate(
@@ -439,7 +439,7 @@ def test_customer_decision_accepts_bind_existing_mode():
 
 
 def test_customer_decision_rejects_unknown_mode():
-    from yinhu_brain.services.ingest.schemas import CustomerDecision
+    from yunwei_win.services.ingest.schemas import CustomerDecision
     with pytest.raises(Exception):
         CustomerDecision.model_validate(
             {"mode": "wat", "final": {"full_name": "x"}}
@@ -447,7 +447,7 @@ def test_customer_decision_rejects_unknown_mode():
 
 
 def test_auto_confirm_request_round_trips_bind_existing_mode():
-    from yinhu_brain.services.ingest.unified_schemas import AutoConfirmRequest
+    from yunwei_win.services.ingest.unified_schemas import AutoConfirmRequest
     from uuid import uuid4
 
     existing = str(uuid4())

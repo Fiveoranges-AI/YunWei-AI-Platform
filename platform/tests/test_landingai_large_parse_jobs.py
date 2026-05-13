@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from yinhu_brain.services import landingai_ade_client as client_module
-from yinhu_brain.services.landingai_ade_client import parse_large_file_job
+from yunwei_win.services import landingai_ade_client as client_module
+from yunwei_win.services.landingai_ade_client import parse_large_file_job
 
 
 class _FakeParseJobs:

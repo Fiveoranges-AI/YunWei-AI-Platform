@@ -11,10 +11,10 @@ from . import admin_api, api, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 from .settings import settings
-# yinhu_brain (智通客户) — vendored from yunwei-tools, mounted at /win/api/.
+# yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /win/api/.
 # Per-enterprise Postgres database; lazy-provisioned on first access.
-from yinhu_brain import router as _yinhu_router
-from yinhu_brain.db import dispose_all as _yinhu_dispose
+from yunwei_win import router as _win_router
+from yunwei_win.db import dispose_all as _win_dispose
 
 PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
 
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     yield
     health_task.cancel()
     scheduler_task.cancel()
-    await _yinhu_dispose()
+    await _win_dispose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -40,16 +40,16 @@ app.include_router(enterprise_api.router)
 app.include_router(daily_report_api.router)
 # /win/api/* — 智通客户 routes. The middleware below stamps
 # request.state.enterprise_id from the app_session cookie, which
-# yinhu_brain.db.get_session reads to pick the right per-tenant DB.
-# NB: yinhu_brain's inner routers already mount under /api/* (legacy from
+# yunwei_win.db.get_session reads to pick the right per-tenant DB.
+# NB: yunwei_win's inner routers already mount under /api/* (legacy from
 # yunwei-tools), so prefix is just /win/.
-app.include_router(_yinhu_router, prefix="/win")
+app.include_router(_win_router, prefix="/win")
 
 
 @app.middleware("http")
 async def _attach_enterprise(request: Request, call_next):
     """For /win/api/* requests, resolve the caller's enterprise from the
-    app_session cookie and stamp it on request.state. yinhu_brain.db reads
+    app_session cookie and stamp it on request.state. yunwei_win.db reads
     this to route the SQLAlchemy session to the right per-tenant database."""
     if request.url.path.startswith("/win/api/"):
         cookie = request.cookies.get("app_session")

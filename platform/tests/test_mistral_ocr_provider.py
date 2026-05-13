@@ -19,15 +19,15 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
     yield
 
 
-from yinhu_brain.services import pdf as pdf_utils
-from yinhu_brain.services.mistral_ocr_client import MistralOCRUnavailable
-from yinhu_brain.services.ocr.base import OcrInput
-from yinhu_brain.services.ocr.mistral import MistralOcrProvider
+from yunwei_win.services import pdf as pdf_utils
+from yunwei_win.services.mistral_ocr_client import MistralOCRUnavailable
+from yunwei_win.services.ocr.base import OcrInput
+from yunwei_win.services.ocr.mistral import MistralOcrProvider
 
 
 @pytest.mark.asyncio
 async def test_image_modality_calls_image_ocr(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     captured: dict = {}
 
@@ -68,7 +68,7 @@ async def test_image_modality_calls_image_ocr(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_pdf_native_text_skips_ocr(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     monkeypatch.setattr(
         mistral_module.pdf_utils,
@@ -103,7 +103,7 @@ async def test_pdf_native_text_skips_ocr(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_pdf_scanned_falls_back_to_mistral_ocr(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     monkeypatch.setattr(
         mistral_module.pdf_utils,
@@ -140,7 +140,7 @@ async def test_pdf_scanned_falls_back_to_mistral_ocr(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_office_modality_calls_document_ocr(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     captured: dict = {}
 
@@ -170,7 +170,7 @@ async def test_office_modality_calls_document_ocr(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_image_ocr_unavailable_becomes_warning(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     async def explode(*a, **k):
         raise MistralOCRUnavailable("mistral ocr unreachable: ConnectError")
@@ -195,7 +195,7 @@ async def test_image_ocr_unavailable_becomes_warning(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_pdf_scanned_ocr_unavailable_becomes_warning(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     monkeypatch.setattr(
         mistral_module.pdf_utils,
@@ -225,7 +225,7 @@ async def test_pdf_scanned_ocr_unavailable_becomes_warning(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_office_ocr_unavailable_becomes_warning(monkeypatch) -> None:
-    from yinhu_brain.services.ocr import mistral as mistral_module
+    from yunwei_win.services.ocr import mistral as mistral_module
 
     async def explode(*a, **k):
         raise MistralOCRUnavailable("mistral down")

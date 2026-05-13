@@ -18,15 +18,15 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Hatchling needs the package present to compute metadata, so copy
-# pyproject + platform_app + yinhu_brain together before pip install.
+# pyproject + platform_app + yunwei_win together before pip install.
 COPY platform/pyproject.toml /app/
 COPY platform/platform_app /app/platform_app/
-COPY platform/yinhu_brain /app/yinhu_brain/
+COPY platform/yunwei_win /app/yunwei_win/
 RUN pip install --no-cache-dir .
 
 COPY platform/migrations /app/migrations/
 COPY platform/static /app/static/
-# yinhu_brain reads its LLM prompts via Path(__file__).parents[N] / "prompts"
+# yunwei_win reads its LLM prompts via Path(__file__).parents[N] / "prompts"
 # which resolves to /app/prompts in the container. Without this the
 # /win/api/ingest/* endpoints raise 422 "draft failed: [Errno 2] No such file…".
 COPY platform/prompts /app/prompts/
@@ -48,7 +48,7 @@ CMD ["sh", "-c", "uvicorn platform_app.main:app --host 0.0.0.0 --port ${PORT:-80
 # service that shares the same code + env). Override the start command in
 # the worker service settings:
 #
-#     Start Command: yinhu-ingest-worker
+#     Start Command: yunwei-win-ingest-worker
 #
 # The web and worker services MUST share:
 #  - DATABASE_URL  — same Postgres

@@ -18,20 +18,20 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
 
 from pydantic import ValidationError
 
-from yinhu_brain.config import Settings, settings
-from yinhu_brain.services.ingest.extractors.providers.deepseek import (
+from yunwei_win.config import Settings, settings
+from yunwei_win.services.ingest.extractors.providers.deepseek import (
     DeepSeekSchemaExtractorProvider,
 )
-from yinhu_brain.services.ingest.extractors.providers.factory import (
+from yunwei_win.services.ingest.extractors.providers.factory import (
     get_extractor_provider,
 )
-from yinhu_brain.services.ingest.extractors.providers.landingai import (
+from yunwei_win.services.ingest.extractors.providers.landingai import (
     LandingAIExtractorProvider,
 )
 
 
 def test_get_extractor_provider_defaults_to_landingai(monkeypatch):
-    from yinhu_brain.services.ingest.extractors.providers import factory
+    from yunwei_win.services.ingest.extractors.providers import factory
 
     monkeypatch.setattr(factory.settings, "extractor_provider", "landingai")
 
@@ -41,7 +41,7 @@ def test_get_extractor_provider_defaults_to_landingai(monkeypatch):
 
 
 def test_get_extractor_provider_can_select_deepseek(monkeypatch):
-    from yinhu_brain.services.ingest.extractors.providers import factory
+    from yunwei_win.services.ingest.extractors.providers import factory
 
     monkeypatch.setattr(factory.settings, "extractor_provider", "deepseek")
 
@@ -51,7 +51,7 @@ def test_get_extractor_provider_can_select_deepseek(monkeypatch):
 
 
 def test_get_extractor_provider_explicit_name_overrides_setting(monkeypatch):
-    from yinhu_brain.services.ingest.extractors.providers import factory
+    from yunwei_win.services.ingest.extractors.providers import factory
 
     monkeypatch.setattr(factory.settings, "extractor_provider", "landingai")
 

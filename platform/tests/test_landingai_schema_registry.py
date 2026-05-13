@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from yinhu_brain.services.ingest.landingai_schemas.registry import (
+from yunwei_win.services.ingest.landingai_schemas.registry import (
     PIPELINE_NAMES,
     load_schema_json,
     validate_landingai_schema,
