@@ -73,22 +73,23 @@ async def _attach_enterprise(request: Request, call_next):
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
-# yunwei-win-web/ is the /win/ SPA. Its dist/ ends up in two different
+# win-web/ is the /win/ SPA. Its dist/ ends up in two different
 # layouts depending on environment:
 #  - container:  /app/platform_app/main.py → parent.parent = /app
-#                → /app/yunwei-win-web/dist  (Dockerfile copies it there)
-#  - local dev:  <repo>/platform/platform_app/main.py → parent.parent.parent
-#                = <repo> → <repo>/apps/yunwei-win-web/dist
+#                → /app/win-web/dist  (Dockerfile copies it there)
+#  - local dev:  <repo>/services/platform-api/platform_app/main.py →
+#                parent.parent.parent.parent = <repo>
+#                → <repo>/apps/win-web/dist
 # We probe both candidates and pick the first that exists; tests can
 # monkeypatch _WIN_DIST to point at a fixture instead.
 def _resolve_win_dist() -> Path:
     here = Path(__file__).resolve()
-    # container layout: /app/yunwei-win-web/dist
-    container_dist = here.parent.parent / "yunwei-win-web" / "dist"
+    # container layout: /app/win-web/dist
+    container_dist = here.parent.parent / "win-web" / "dist"
     if container_dist.is_dir():
         return container_dist
-    # local dev layout: <repo>/apps/yunwei-win-web/dist
-    repo_dist = here.parent.parent.parent / "apps" / "yunwei-win-web" / "dist"
+    # local dev layout: <repo>/apps/win-web/dist
+    repo_dist = here.parent.parent.parent.parent / "apps" / "win-web" / "dist"
     if repo_dist.is_dir():
         return repo_dist
     # Neither exists yet (front-end not built); fall back to repo-root path

@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
 
-# Repo root: .../agent-platform/  (this file is .../platform/platform_app/settings.py)
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+# Repo root: .../agent-platform/  (this file is
+# .../services/platform-api/platform_app/settings.py)
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 class Settings:
