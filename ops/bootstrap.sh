@@ -12,9 +12,6 @@
 #   --with-runtime   Register the example yinhu dedicated runtime in
 #                    the runtime_registry (requires the runtime
 #                    container reachable at the configured URL).
-#   --legacy-tenant  Run the v2 tenant + HMAC provisioning path. Only
-#                    needed when keeping the `/<client>/<agent>/` HMAC
-#                    reverse proxy alive for a tenant.
 #
 # Prereqs:
 #   - .env populated with ADMIN_BOOTSTRAP_USER, ADMIN_BOOTSTRAP_PASSWORD,
@@ -24,13 +21,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 WITH_RUNTIME=0
-LEGACY_TENANT=0
 for arg in "$@"; do
     case "$arg" in
         --with-runtime) WITH_RUNTIME=1 ;;
-        --legacy-tenant) LEGACY_TENANT=1 ;;
         -h|--help)
-            sed -n '2,22p' "$0"
+            sed -n '2,18p' "$0"
             exit 0
             ;;
         *) echo "unknown arg: $arg" >&2; exit 2 ;;
@@ -94,41 +89,6 @@ runtime_registry.bind_runtime(
 )
 print('runtime bound: $ENTERPRISE_ID/$RUNTIME_CAPABILITY → $RUNTIME_ID')
 "
-fi
-
-if [ "$LEGACY_TENANT" -eq 1 ]; then
-    # legacy v2 path — only needed for the HMAC reverse proxy at
-    # /<client>/<agent>/. The shared `/win/` product does NOT need
-    # this; dedicated runtimes use --with-runtime above instead.
-    LEGACY_AGENT="${LEGACY_AGENT_ID:-super-xiaochen}"
-    LEGACY_DISPLAY="${LEGACY_AGENT_DISPLAY:-银湖石墨 - 超级小陈}"
-    LEGACY_URL="${LEGACY_AGENT_URL:-http://agent-yinhu-super-xiaochen:8000}"
-    AGENT_ENV="${LEGACY_AGENT_ENV:-agents/$ENTERPRISE_ID-$LEGACY_AGENT/.env}"
-
-    if [ ! -f "$AGENT_ENV" ]; then
-        echo "ERROR: $AGENT_ENV not found (required for --legacy-tenant)." >&2
-        exit 1
-    fi
-
-    echo "→ [legacy] adding tenant $ENTERPRISE_ID/$LEGACY_AGENT"
-    $COMPOSE run --rm platform-app \
-        python -m platform_app.admin add-tenant "$ENTERPRISE_ID" "$LEGACY_AGENT" \
-        --display-name "$LEGACY_DISPLAY" \
-        --container-url "$LEGACY_URL" \
-        | tee /tmp/tenant-out.txt
-
-    NEW_SECRET=$(awk -F= '/^HMAC_SECRET_CURRENT=/{print $2}' /tmp/tenant-out.txt)
-    NEW_KID=$(awk -F= '/^HMAC_KEY_ID_CURRENT=/{print $2}' /tmp/tenant-out.txt)
-    if [ -z "$NEW_SECRET" ] || [ -z "$NEW_KID" ]; then
-        echo "ERROR: could not parse HMAC values from add-tenant output." >&2
-        exit 1
-    fi
-    sed -i.bak \
-        -e "s|^HMAC_SECRET_CURRENT=.*|HMAC_SECRET_CURRENT=$NEW_SECRET|" \
-        -e "s|^HMAC_KEY_ID_CURRENT=.*|HMAC_KEY_ID_CURRENT=$NEW_KID|" \
-        "$AGENT_ENV"
-    rm -f "$AGENT_ENV.bak"
-    echo "  patched HMAC_SECRET_CURRENT / HMAC_KEY_ID_CURRENT in $AGENT_ENV"
 fi
 
 echo

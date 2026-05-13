@@ -103,19 +103,6 @@ runtime container. Register it via the runtime_registry:
        print(runtime_registry.get_runtime_for('yinhu', 'assistant'))"
    ```
 
-## Optional: legacy HMAC tenant
-
-Only needed when keeping the v2 reverse proxy at `/<client>/<agent>/`
-alive for a tenant. Requires a populated `agents/<client>-<agent>/.env`
-with placeholder HMAC values. Run:
-
-```bash
-./ops/bootstrap.sh --legacy-tenant
-```
-
-The script will call `platform-admin add-tenant`, capture the issued
-HMAC secret/kid, and patch them back into the agent `.env`.
-
 ## Tear down
 
 ```bash

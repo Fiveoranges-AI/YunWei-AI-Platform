@@ -129,10 +129,15 @@ Railway dashboard Start Command before promoting.
 - **HMAC proxy → runtime registry migration** — once dedicated-runtime
   routing is the only Pro/Max path, the `tenants` table and
   `/<client>/<agent>/` URL pattern can be retired. Tracked separately.
-- **`ops/bootstrap.sh` legacy tenant path** — the v2 `add-tenant` +
-  HMAC-patching flow is preserved behind a `--legacy-tenant` opt-in
-  flag. Default bootstrap now only seeds the admin user + enterprise +
-  membership. Dedicated runtimes register via `--with-runtime`, which
-  calls `runtime_registry.upsert_runtime` + `bind_runtime` directly.
-  Drop the `--legacy-tenant` branch when the HMAC reverse proxy is
-  retired.
+- **`ops/bootstrap.sh` legacy tenant path** — fully removed. The v2
+  `add-tenant` + HMAC-patching flow is no longer reachable from the
+  bootstrap script. If a v2 tenant is genuinely needed for the
+  `/<client>/<agent>/` HMAC reverse proxy (admin/debug only), invoke
+  `python -m platform_app.admin add-tenant` directly. Default
+  bootstrap seeds admin user + enterprise + membership; dedicated
+  runtimes register via `--with-runtime`.
+- **`agents/` directory** — archived to
+  `docs/migration/archive/agents/`. Held the per-tenant `.env.example`
+  for the HMAC proxy. Real `.env` files live on deploy hosts (not in
+  the repo), so production tenants are unaffected. Restore the
+  example by copying from the archive if a v2 tenant is provisioned.
