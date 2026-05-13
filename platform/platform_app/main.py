@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import admin_api, api, db, enterprise_api, firewall, proxy
+from . import admin_api, api, context as _context, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 from .settings import settings
@@ -48,31 +48,27 @@ app.include_router(_win_router, prefix="/win")
 
 @app.middleware("http")
 async def _attach_enterprise(request: Request, call_next):
-    """For /win/api/* requests, resolve the caller's enterprise from the
+    """For /win/api/* requests, resolve the caller's AuthContext from the
     app_session cookie and stamp it on request.state. yunwei_win.db reads
-    this to route the SQLAlchemy session to the right per-tenant database."""
+    ``request.state.enterprise_id`` to route the SQLAlchemy session to the
+    right per-tenant database.
+
+    The actual cookie → user → enterprise → plan resolution lives in
+    :func:`platform_app.context.require_auth_context` so that the shared
+    assistant and the runtime resolver can use the same hard boundary.
+    """
     if request.url.path.startswith("/win/api/"):
-        cookie = request.cookies.get("app_session")
-        if not cookie:
-            return JSONResponse(
-                {"error": "not_logged_in", "message": "请登录"}, status_code=401
-            )
-        from . import auth as _auth
-        user = _auth.current_user_from_request(cookie)
-        if not user:
-            return JSONResponse(
-                {"error": "not_logged_in", "message": "请登录"}, status_code=401
-            )
-        enterprises = db.list_user_enterprises(user["id"])
-        if not enterprises:
-            return JSONResponse(
-                {"error": "no_enterprise", "message": "当前账号未绑定企业"},
-                status_code=403,
-            )
-        # Spec: one user = one enterprise. If the data accidentally has more
-        # than one row, take the first deterministically (sorted by name).
-        request.state.enterprise_id = enterprises[0]["id"]
-        request.state.user_id = user["id"]
+        try:
+            ctx = _context.require_auth_context(request)
+        except HTTPException as exc:
+            # Preserve the legacy JSONResponse shape so unauthenticated
+            # callers see ``{"error": ..., "message": ...}`` rather than
+            # FastAPI's default ``{"detail": ...}`` envelope.
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+            return JSONResponse(detail, status_code=exc.status_code)
+        request.state.auth_context = ctx
+        request.state.enterprise_id = ctx.enterprise_id
+        request.state.user_id = ctx.user_id
     return await call_next(request)
 
 _STATIC = Path(__file__).parent.parent / "static"
