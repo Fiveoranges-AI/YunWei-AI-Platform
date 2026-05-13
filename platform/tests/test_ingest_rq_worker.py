@@ -18,18 +18,18 @@ def _clean_state():  # noqa: PT004 — yield-only override
     yield
 
 
-import yinhu_brain.models  # noqa: E402, F401 — register mappers
+import yunwei_win.models  # noqa: E402, F401 — register mappers
 from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 
-from yinhu_brain.db import Base  # noqa: E402
-from yinhu_brain.models.ingest_job import (  # noqa: E402
+from yunwei_win.db import Base  # noqa: E402
+from yunwei_win.models.ingest_job import (  # noqa: E402
     IngestBatch,
     IngestJob,
     IngestJobStage,
     IngestJobStatus,
 )
-from yinhu_brain.workers import ingest_rq as worker_module  # noqa: E402
+from yunwei_win.workers import ingest_rq as worker_module  # noqa: E402
 
 
 async def _make_engine():
@@ -70,10 +70,10 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
     engine = await _make_engine()
     _patch_engine_routing(monkeypatch, engine)
 
-    from yinhu_brain.models import Document, DocumentType
-    from yinhu_brain.services.ingest.auto import AutoIngestResult
-    from yinhu_brain.services.ingest.merge import MergeCandidates
-    from yinhu_brain.services.ingest.unified_schemas import (
+    from yunwei_win.models import Document, DocumentType
+    from yunwei_win.services.ingest.auto import AutoIngestResult
+    from yunwei_win.services.ingest.merge import MergeCandidates
+    from yunwei_win.services.ingest.unified_schemas import (
         IngestPlan,
         PipelineExtractResult,
         PipelineRoutePlan,

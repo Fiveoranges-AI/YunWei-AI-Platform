@@ -167,9 +167,10 @@ def get_enterprise_role(user_id: str, enterprise_id: str) -> str | None:
 
 def list_user_enterprises(user_id: str) -> list[dict]:
     """Return enterprises the user belongs to (as a member). Used by the
-    data center to populate the client switcher."""
+    data center to populate the client switcher and by ``context.require_auth_context``
+    to resolve the caller's plan + role."""
     rows = main().execute(
-        "SELECT e.id, e.display_name, e.legal_name, em.role "
+        "SELECT e.id, e.display_name, e.legal_name, e.plan, em.role "
         "FROM enterprises e "
         "JOIN enterprise_members em ON em.enterprise_id = e.id "
         "WHERE em.user_id=%s AND e.active=1 "

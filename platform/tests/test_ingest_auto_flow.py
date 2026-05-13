@@ -38,9 +38,9 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-import yinhu_brain.models  # noqa: F401 — register SQLAlchemy mappers
-from yinhu_brain.db import Base
-from yinhu_brain.models import (
+import yunwei_win.models  # noqa: F401 — register SQLAlchemy mappers
+from yunwei_win.db import Base
+from yunwei_win.models import (
     Contact,
     Contract,
     Customer,
@@ -53,13 +53,13 @@ from yinhu_brain.models import (
     DocumentReviewStatus,
     Order,
 )
-from yinhu_brain.services.ingest import auto as auto_module
-from yinhu_brain.services.ingest import evidence as evidence_module
-from yinhu_brain.services.ingest import planner as planner_module
-from yinhu_brain.services.ingest.auto import auto_ingest
-from yinhu_brain.services.ingest.auto_confirm import commit_auto_extraction
-from yinhu_brain.services.ingest.merge import merge_drafts
-from yinhu_brain.services.ingest.unified_schemas import (
+from yunwei_win.services.ingest import auto as auto_module
+from yunwei_win.services.ingest import evidence as evidence_module
+from yunwei_win.services.ingest import planner as planner_module
+from yunwei_win.services.ingest.auto import auto_ingest
+from yunwei_win.services.ingest.auto_confirm import commit_auto_extraction
+from yunwei_win.services.ingest.merge import merge_drafts
+from yunwei_win.services.ingest.unified_schemas import (
     AutoConfirmRequest,
     CommercialDraft,
     IdentityDraft,
@@ -95,7 +95,7 @@ async def _make_engine():
 
 def _patch_storage(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace storage.store_upload with a deterministic in-memory stub."""
-    from yinhu_brain.services.storage import StoredFile
+    from yunwei_win.services.storage import StoredFile
 
     def fake_store(content, original_filename, *, default_ext=""):
         suffix = (
@@ -470,7 +470,7 @@ def _stub_extractor_provider(
     distinguish LandingAI vs DeepSeek without inspecting code paths.
     """
 
-    from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
+    from yunwei_win.services.ingest.unified_schemas import PipelineExtractResult
 
     class _FakeProvider:
         async def extract_selected(self, input, progress=None):
@@ -638,7 +638,7 @@ async def test_auto_ingest_text_path_returns_draft_and_candidates(monkeypatch) -
             assert doc.raw_llm_response["route_plan"]["selected_pipelines"]
             # raw_llm_response.provider is stamped from settings.extractor_provider
             # so the audit row records which extractor implementation ran.
-            from yinhu_brain.config import settings as _settings
+            from yunwei_win.config import settings as _settings
 
             assert doc.raw_llm_response["provider"] == _settings.extractor_provider
     finally:
@@ -726,7 +726,7 @@ async def test_commit_auto_extraction_writes_all_tables() -> None:
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             doc = Document(
-                type=__import__("yinhu_brain.models", fromlist=["DocumentType"]).DocumentType.contract,
+                type=__import__("yunwei_win.models", fromlist=["DocumentType"]).DocumentType.contract,
                 file_url="/tmp/contract.pdf",
                 original_filename="contract.pdf",
                 file_sha256="0" * 64,
@@ -796,7 +796,7 @@ async def test_commit_auto_extraction_requires_customer_when_ops_present() -> No
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             doc = Document(
                 type=DocumentType.text_note,
@@ -848,8 +848,8 @@ def _build_app(engine):
     """
     from fastapi import FastAPI
 
-    from yinhu_brain.api.ingest import router
-    from yinhu_brain.db import get_session
+    from yunwei_win.api.ingest import router
+    from yunwei_win.db import get_session
 
     async def _override_session():
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -928,7 +928,7 @@ async def test_auto_confirm_endpoint_writes_entities(monkeypatch) -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             doc = Document(
                 type=DocumentType.contract,
@@ -981,7 +981,7 @@ async def test_auto_cancel_endpoint_marks_ignored() -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             doc = Document(
                 type=DocumentType.text_note,
@@ -1020,7 +1020,7 @@ async def test_auto_cancel_endpoint_409_when_already_confirmed() -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             doc = Document(
                 type=DocumentType.text_note,
@@ -1060,7 +1060,7 @@ async def test_auto_cancel_endpoint_409_when_already_confirmed() -> None:
 #    same test, same customer name in each, no cross-tenant leak).
 #
 # Legacy ``/contract`` + ``/business_card`` flows already have dedicated
-# tests in ``test_yinhu_brain_contract_flow.py`` and they ran green in the
+# tests in ``test_yunwei_win_contract_flow.py`` and they ran green in the
 # 305-pass baseline, so we don't re-test them here; we only verify the
 # auto pipeline doesn't break that surface by re-running the suite at the
 # end.
@@ -1250,7 +1250,7 @@ async def test_auto_endpoint_accepts_file_upload(monkeypatch) -> None:
     _stub_planner_full_fanout(monkeypatch)
     _stub_extractors(monkeypatch)
 
-    from yinhu_brain.services.ocr.base import OcrInput, OcrResult
+    from yunwei_win.services.ocr.base import OcrInput, OcrResult
 
     class _FakeProvider:
         async def parse(self, ocr_input: OcrInput) -> OcrResult:
@@ -1323,7 +1323,7 @@ async def test_auto_confirm_endpoint_rejects_already_confirmed() -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             doc = Document(
                 type=DocumentType.contract,
@@ -1376,7 +1376,7 @@ async def test_commit_auto_extraction_merges_into_existing_customer() -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             # Seed an existing customer.
             existing = Customer(
@@ -1458,7 +1458,7 @@ async def test_commit_bind_existing_preserves_existing_customer_master_fields() 
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import (
+            from yunwei_win.models import (
                 DocumentProcessingStatus,
                 DocumentType,
             )
@@ -1539,7 +1539,7 @@ async def test_commit_bind_existing_accepts_empty_ocr_full_name() -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import (
+            from yunwei_win.models import (
                 DocumentProcessingStatus,
                 DocumentType,
             )
@@ -1588,7 +1588,7 @@ async def test_commit_merge_still_updates_existing_customer_master_fields() -> N
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import (
+            from yunwei_win.models import (
                 DocumentProcessingStatus,
                 DocumentType,
             )
@@ -1641,7 +1641,7 @@ async def test_commit_auto_extraction_merge_requires_existing_id() -> None:
     engine = await _make_engine()
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
-            from yinhu_brain.models import DocumentType
+            from yunwei_win.models import DocumentType
 
             doc = Document(
                 type=DocumentType.contract,
@@ -1693,7 +1693,7 @@ async def test_auto_ingest_isolated_engines_do_not_leak_customers(monkeypatch) -
 
     This is a smoke test of the multi-tenant story for /auto — the
     real Postgres-backed isolation test in
-    ``test_yinhu_brain_tenant_isolation.py`` runs only when DATABASE_URL
+    ``test_yunwei_win_tenant_isolation.py`` runs only when DATABASE_URL
     points at a reachable Postgres; here we confirm the orchestrator
     itself doesn't introduce a cross-session backdoor.
     """
@@ -1748,7 +1748,7 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
     monkeypatch.setattr(auto_module.settings, "extractor_provider", "landingai")
 
     async def fake_collect_evidence(**kwargs):
-        from yinhu_brain.models import (
+        from yunwei_win.models import (
             Document,
             DocumentProcessingStatus,
             DocumentReviewStatus,
@@ -1768,7 +1768,7 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
         )
         kwargs["session"].add(doc)
         await kwargs["session"].flush()
-        from yinhu_brain.services.ingest.evidence import Evidence
+        from yunwei_win.services.ingest.evidence import Evidence
 
         return Evidence(
             document_id=doc.id,
@@ -1787,7 +1787,7 @@ async def test_auto_ingest_uses_landingai_schema_flow_when_enabled(monkeypatch) 
             document_summary="contract",
         )
 
-    from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
+    from yunwei_win.services.ingest.unified_schemas import PipelineExtractResult
 
     class _FakeLandingAIProvider:
         async def extract_selected(self, input, progress=None):

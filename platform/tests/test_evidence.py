@@ -7,7 +7,7 @@ without touching the network or the filesystem.
 
 The project-wide autouse fixture wants Postgres + Redis; we override it
 locally with a no-op because these tests use an in-memory SQLite engine,
-mirroring ``test_yinhu_brain_contract_flow.py``.
+mirroring ``test_yunwei_win_contract_flow.py``.
 """
 
 from __future__ import annotations
@@ -24,17 +24,17 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-import yinhu_brain.models  # noqa: F401 - register SQLAlchemy mappers
-from yinhu_brain.db import Base
-from yinhu_brain.models import (
+import yunwei_win.models  # noqa: F401 - register SQLAlchemy mappers
+from yunwei_win.db import Base
+from yunwei_win.models import (
     Document,
     DocumentProcessingStatus,
     DocumentReviewStatus,
     DocumentType,
 )
-from yinhu_brain.services.ingest import evidence as evidence_module
-from yinhu_brain.services.ingest.evidence import Evidence, collect_evidence
-from yinhu_brain.services.ocr.base import OcrInput, OcrResult
+from yunwei_win.services.ingest import evidence as evidence_module
+from yunwei_win.services.ingest.evidence import Evidence, collect_evidence
+from yunwei_win.services.ocr.base import OcrInput, OcrResult
 
 
 # ---------- helpers -------------------------------------------------------
@@ -57,7 +57,7 @@ def _patch_store_upload(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     calls: list[dict] = []
 
     def fake_store(content, original_filename, *, default_ext=""):
-        from yinhu_brain.services.storage import StoredFile
+        from yunwei_win.services.storage import StoredFile
 
         calls.append(
             {

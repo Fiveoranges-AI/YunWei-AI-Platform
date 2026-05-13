@@ -196,7 +196,7 @@ def test_register_followed_by_win_request():
     assert isinstance(r2.json(), list)
     # Cleanup the per-tenant DB we just provisioned to keep test idempotent.
     import asyncio
-    from yinhu_brain.db import dispose_all
+    from yunwei_win.db import dispose_all
     asyncio.get_event_loop().run_until_complete(dispose_all()) if False else asyncio.new_event_loop().run_until_complete(dispose_all())
     db.main().execute(
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "

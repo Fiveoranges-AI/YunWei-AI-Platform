@@ -4,17 +4,17 @@ import asyncio
 import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import admin_api, api, db, enterprise_api, firewall, proxy
+from . import admin_api, api, context as _context, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 from .settings import settings
-# yinhu_brain (智通客户) — vendored from yunwei-tools, mounted at /win/api/.
+# yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /win/api/.
 # Per-enterprise Postgres database; lazy-provisioned on first access.
-from yinhu_brain import router as _yinhu_router
-from yinhu_brain.db import dispose_all as _yinhu_dispose
+from yunwei_win import router as _win_router
+from yunwei_win.db import dispose_all as _win_dispose
 
 PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
 
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     yield
     health_task.cancel()
     scheduler_task.cancel()
-    await _yinhu_dispose()
+    await _win_dispose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -40,62 +40,65 @@ app.include_router(enterprise_api.router)
 app.include_router(daily_report_api.router)
 # /win/api/* — 智通客户 routes. The middleware below stamps
 # request.state.enterprise_id from the app_session cookie, which
-# yinhu_brain.db.get_session reads to pick the right per-tenant DB.
-# NB: yinhu_brain's inner routers already mount under /api/* (legacy from
+# yunwei_win.db.get_session reads to pick the right per-tenant DB.
+# NB: yunwei_win's inner routers already mount under /api/* (legacy from
 # yunwei-tools), so prefix is just /win/.
-app.include_router(_yinhu_router, prefix="/win")
+app.include_router(_win_router, prefix="/win")
 
 
 @app.middleware("http")
 async def _attach_enterprise(request: Request, call_next):
-    """For /win/api/* requests, resolve the caller's enterprise from the
-    app_session cookie and stamp it on request.state. yinhu_brain.db reads
-    this to route the SQLAlchemy session to the right per-tenant database."""
+    """For /win/api/* requests, resolve the caller's AuthContext from the
+    app_session cookie and stamp it on request.state. yunwei_win.db reads
+    ``request.state.enterprise_id`` to route the SQLAlchemy session to the
+    right per-tenant database.
+
+    The actual cookie → user → enterprise → plan resolution lives in
+    :func:`platform_app.context.require_auth_context` so that the shared
+    assistant and the runtime resolver can use the same hard boundary.
+    """
     if request.url.path.startswith("/win/api/"):
-        cookie = request.cookies.get("app_session")
-        if not cookie:
-            return JSONResponse(
-                {"error": "not_logged_in", "message": "请登录"}, status_code=401
-            )
-        from . import auth as _auth
-        user = _auth.current_user_from_request(cookie)
-        if not user:
-            return JSONResponse(
-                {"error": "not_logged_in", "message": "请登录"}, status_code=401
-            )
-        enterprises = db.list_user_enterprises(user["id"])
-        if not enterprises:
-            return JSONResponse(
-                {"error": "no_enterprise", "message": "当前账号未绑定企业"},
-                status_code=403,
-            )
-        # Spec: one user = one enterprise. If the data accidentally has more
-        # than one row, take the first deterministically (sorted by name).
-        request.state.enterprise_id = enterprises[0]["id"]
-        request.state.user_id = user["id"]
+        try:
+            ctx = _context.require_auth_context(request)
+        except HTTPException as exc:
+            # Preserve the legacy JSONResponse shape so unauthenticated
+            # callers see ``{"error": ..., "message": ...}`` rather than
+            # FastAPI's default ``{"detail": ...}`` envelope.
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+            return JSONResponse(detail, status_code=exc.status_code)
+        request.state.auth_context = ctx
+        request.state.enterprise_id = ctx.enterprise_id
+        request.state.user_id = ctx.user_id
     return await call_next(request)
 
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
-# app/dist/ holds the Phase 1+ chat UI build artifacts. Stage 1 of
-# platform/Dockerfile populates it; if index.html is missing (e.g. an old
-# image without the new stage), catch_all transparently falls through to
-# reverse_proxy, preserving pre-Phase-1 behavior. This is the deploy-safety
-# guarantee documented in 2026-05-07-platform-chat-ui-design.md.
-#
-# We compute index existence inside catch_all (not as a module-level
-# constant) so tests can monkeypatch _APP_DIST and have the change picked up
-# on the next request without touching a derived constant.
-_APP_DIST = Path(__file__).parent.parent.parent / "app" / "dist"
-# app-win/ lives INSIDE platform/ (one level up from platform_app), so:
-#  - container:  /app/platform_app/main.py → /app → /app/app-win/dist
-#  - local dev:  <repo>/platform/platform_app/main.py → <repo>/platform/ →
-#                <repo>/platform/app-win/dist
-_WIN_DIST = Path(__file__).resolve().parent.parent / "app-win" / "dist"
-# Subpaths under /<client>/<agent>/ that the platform serves from app/dist
-# instead of forwarding to the agent. Anything else proxies through.
-_APP_STATIC_PREFIXES: tuple[str, ...] = ("/assets/", "/base-href.js", "/favicon.ico")
+# yunwei-win-web/ is the /win/ SPA. Its dist/ ends up in two different
+# layouts depending on environment:
+#  - container:  /app/platform_app/main.py → parent.parent = /app
+#                → /app/yunwei-win-web/dist  (Dockerfile copies it there)
+#  - local dev:  <repo>/platform/platform_app/main.py → parent.parent.parent
+#                = <repo> → <repo>/apps/yunwei-win-web/dist
+# We probe both candidates and pick the first that exists; tests can
+# monkeypatch _WIN_DIST to point at a fixture instead.
+def _resolve_win_dist() -> Path:
+    here = Path(__file__).resolve()
+    # container layout: /app/yunwei-win-web/dist
+    container_dist = here.parent.parent / "yunwei-win-web" / "dist"
+    if container_dist.is_dir():
+        return container_dist
+    # local dev layout: <repo>/apps/yunwei-win-web/dist
+    repo_dist = here.parent.parent.parent / "apps" / "yunwei-win-web" / "dist"
+    if repo_dist.is_dir():
+        return repo_dist
+    # Neither exists yet (front-end not built); fall back to repo-root path
+    # so the win_root handler can return a clear "win_not_built" 503 instead
+    # of a misleading 500.
+    return repo_dist
+
+
+_WIN_DIST = _resolve_win_dist()
 
 
 _NO_STORE = {"Cache-Control": "no-store, must-revalidate"}
@@ -107,8 +110,13 @@ def index(request: Request):
     # for "/" must never be cached. Without this, a browser that loaded
     # login.html before login will keep serving the cached login.html
     # after login until the user manually refreshes (Cmd+Shift+R).
-    page = "agents.html" if request.cookies.get("app_session") else "login.html"
-    return FileResponse(_STATIC / page, headers=_NO_STORE)
+    #
+    # Logged-in users go to /win/ (the 智通客户 SPA, the customer-facing
+    # product). The legacy agents.html dashboard has been archived under
+    # docs/migration/archive/ and is no longer in the customer path.
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return RedirectResponse("/win/", status_code=303, headers=_NO_STORE)
 
 
 @app.api_route("/register", methods=["GET", "HEAD"])
@@ -205,26 +213,6 @@ async def catch_all(full_path: str, request: Request):
         )
     except firewall.FirewallReject as e:
         raise HTTPException(403, {"error": "cross_agent_blocked", "message": str(e)})
-
-    # Phase 1: serve the new chat UI from app/dist when populated. The
-    # exists() check is the deploy-safe fallback — if the platform image
-    # hasn't been rebuilt with the node stage yet, every request falls
-    # through to the existing reverse_proxy path below.
-    app_index = _APP_DIST / "index.html"
-    if request.method in ("GET", "HEAD") and app_index.exists():
-        if subpath in ("/", "/index.html"):
-            html = app_index.read_text(encoding="utf-8")
-            nonce = request.headers.get("x-csp-nonce", "")
-            if nonce:
-                html = html.replace("<script>", f'<script nonce="{nonce}">')
-                html = html.replace("<style>", f'<style nonce="{nonce}">')
-            return HTMLResponse(html, headers=_NO_STORE)
-        for prefix in _APP_STATIC_PREFIXES:
-            if subpath.startswith(prefix) or subpath == prefix.rstrip("/"):
-                asset = _APP_DIST / subpath.lstrip("/")
-                if not asset.is_file():
-                    raise HTTPException(404)
-                return FileResponse(asset)
 
     return await proxy.reverse_proxy(
         request, client_id=client_id, agent_id=agent_id, user=user, subpath=subpath,

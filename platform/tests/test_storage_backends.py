@@ -22,7 +22,7 @@ def _clean_state():
 def test_local_backend_returns_file_url(monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_BACKEND", "local")
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
-    from yinhu_brain.services.storage import store_upload, open_for_read
+    from yunwei_win.services.storage import store_upload, open_for_read
 
     out = store_upload(b"hello", "note.txt")
     assert out.path.startswith("file://")
@@ -34,7 +34,7 @@ def test_local_backend_returns_file_url(monkeypatch, tmp_path):
 def test_local_backend_materialize_returns_same_disk_path(monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_BACKEND", "local")
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
-    from yinhu_brain.services.storage import store_upload, materialize_to_local
+    from yunwei_win.services.storage import store_upload, materialize_to_local
 
     out = store_upload(b"%PDF-data", "doc.pdf")
     local = materialize_to_local(out.path)
@@ -46,7 +46,7 @@ def test_open_for_read_accepts_legacy_bare_filesystem_path(monkeypatch, tmp_path
     """Pre-Agent-B IngestJob rows may carry bare /data/... paths.
     open_for_read should still read those, not crash on the missing
     scheme."""
-    from yinhu_brain.services.storage import open_for_read
+    from yunwei_win.services.storage import open_for_read
 
     target = tmp_path / "legacy.bin"
     target.write_bytes(b"legacy")
@@ -65,7 +65,7 @@ def test_s3_backend_uses_boto3_put_object(monkeypatch):
         def put_object(self, *, Bucket, Key, Body):
             calls.append({"bucket": Bucket, "key": Key, "size": len(Body)})
 
-    import yinhu_brain.services.storage as storage_module
+    import yunwei_win.services.storage as storage_module
 
     def fake_client(service_name, **kw):
         assert service_name == "s3"
@@ -100,7 +100,7 @@ def test_s3_backend_open_for_read(monkeypatch):
     import boto3
     monkeypatch.setattr(boto3, "client", lambda *_a, **_k: FakeS3())
 
-    from yinhu_brain.services.storage import open_for_read
+    from yunwei_win.services.storage import open_for_read
 
     assert open_for_read("s3://test-bucket/files/abc.pdf") == b"remote-bytes"
 
@@ -108,7 +108,7 @@ def test_s3_backend_open_for_read(monkeypatch):
 def test_s3_backend_missing_bucket_raises(monkeypatch):
     monkeypatch.setenv("STORAGE_BACKEND", "s3")
     monkeypatch.delenv("S3_BUCKET", raising=False)
-    from yinhu_brain.services.storage import store_upload
+    from yunwei_win.services.storage import store_upload
 
     with pytest.raises(RuntimeError, match="S3_BUCKET"):
         store_upload(b"x", "x.bin")

@@ -30,13 +30,13 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
     yield
 
 
-from yinhu_brain.config import settings
-from yinhu_brain.services.ingest.extractors.providers import deepseek as deepseek_module
-from yinhu_brain.services.ingest.extractors.providers.base import ExtractionInput
-from yinhu_brain.services.ingest.extractors.providers.deepseek import (
+from yunwei_win.config import settings
+from yunwei_win.services.ingest.extractors.providers import deepseek as deepseek_module
+from yunwei_win.services.ingest.extractors.providers.base import ExtractionInput
+from yunwei_win.services.ingest.extractors.providers.deepseek import (
     DeepSeekSchemaExtractorProvider,
 )
-from yinhu_brain.services.ingest.unified_schemas import (
+from yunwei_win.services.ingest.unified_schemas import (
     PipelineExtractResult,
     PipelineSelection,
 )

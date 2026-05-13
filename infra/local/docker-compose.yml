@@ -1,0 +1,48 @@
+services:
+  platform-app:
+    build:
+      context: ../..
+      dockerfile: platform/Dockerfile
+    container_name: platform-app
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      PLATFORM_DB_PATH: /data/platform.db
+      PROXY_LOG_DB_PATH: /data/proxy_log.db
+    volumes:
+      - ../../data:/data
+    networks:
+      - cf-tunnel
+    expose:
+      - "80"
+    command: uvicorn platform_app.main:app --host 0.0.0.0 --port 80 --workers 1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost/').status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    # token mode: no config.yml mounted; routes configured in CF dashboard.
+    # cloudflared reads TUNNEL_TOKEN from env (injected via env_file at
+    # runtime), avoiding compose-level ${VAR} interpolation that needs the
+    # .env file to be in compose's "project directory" (= infra/local/).
+    env_file: ../../.env
+    command: tunnel --no-autoupdate run
+    networks:
+      - cf-tunnel
+    depends_on:
+      - platform-app
+
+# Dedicated runtimes (Pro/Max) are NOT part of the default local stack.
+# They run as separate Railway services (or local containers) and are
+# wired in via the platform_app runtime_registry table. For an example
+# of a dedicated runtime compose service, see
+# runtimes/examples/yinhu-super-xiaochen.compose.yml.
+
+networks:
+  cf-tunnel:
+    name: cf-tunnel

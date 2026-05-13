@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from yinhu_brain.services.ingest.landingai_normalize import normalize_pipeline_results
-from yinhu_brain.services.ingest.unified_schemas import PipelineExtractResult
+from yunwei_win.services.ingest.landingai_normalize import normalize_pipeline_results
+from yunwei_win.services.ingest.unified_schemas import PipelineExtractResult
 
 
 def test_normalize_identity_and_contract_order_into_unified_draft():

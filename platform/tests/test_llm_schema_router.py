@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from yinhu_brain.services.ingest import llm_schema_router as router_module
-from yinhu_brain.services.ingest.llm_schema_router import (
+from yunwei_win.services.ingest import llm_schema_router as router_module
+from yunwei_win.services.ingest.llm_schema_router import (
     SCHEMA_ROUTE_TOOL_NAME,
     _coerce_plan,
     _failopen_plan,
     route_schemas,
 )
-from yinhu_brain.services.ingest.landingai_schemas.registry import PIPELINE_NAMES
-from yinhu_brain.services.llm import LLMCallFailed
+from yunwei_win.services.ingest.landingai_schemas.registry import PIPELINE_NAMES
+from yunwei_win.services.llm import LLMCallFailed
 
 
 @pytest.fixture(autouse=True)

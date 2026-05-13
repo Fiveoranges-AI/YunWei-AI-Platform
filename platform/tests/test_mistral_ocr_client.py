@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from yinhu_brain.config import settings
-from yinhu_brain.services import mistral_ocr_client
+from yunwei_win.config import settings
+from yunwei_win.services import mistral_ocr_client
 
 
 class _FakeResponse:

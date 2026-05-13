@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from yinhu_brain.services.ingest.pipeline_router import route_pipelines
+from yunwei_win.services.ingest.pipeline_router import route_pipelines
 
 
 @pytest.mark.asyncio

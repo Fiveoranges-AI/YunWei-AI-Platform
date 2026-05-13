@@ -29,9 +29,9 @@ def _clean_state():  # noqa: PT004
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-import yinhu_brain.models  # noqa: F401 — register SQLAlchemy mappers
-from yinhu_brain.db import Base, get_session
-from yinhu_brain.models import (
+import yunwei_win.models  # noqa: F401 — register SQLAlchemy mappers
+from yunwei_win.db import Base, get_session
+from yunwei_win.models import (
     Contact,
     ContactRole,
     Contract,
@@ -70,7 +70,7 @@ async def _make_engine():
 def _build_app(engine):
     from fastapi import FastAPI
 
-    from yinhu_brain.api.customer_management import router
+    from yunwei_win.api.customer_management import router
 
     async def _override_session():
         async with AsyncSession(engine, expire_on_commit=False) as session:

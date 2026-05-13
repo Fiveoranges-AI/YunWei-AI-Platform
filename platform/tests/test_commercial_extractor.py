@@ -33,23 +33,23 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-import yinhu_brain.models  # noqa: F401 — register SQLAlchemy mappers
-from yinhu_brain.db import Base
-from yinhu_brain.models import (
+import yunwei_win.models  # noqa: F401 — register SQLAlchemy mappers
+from yunwei_win.db import Base
+from yunwei_win.models import (
     Document,
     DocumentProcessingStatus,
     DocumentReviewStatus,
     DocumentType,
 )
-from yinhu_brain.services.ingest.extractors import commercial as commercial_module
-from yinhu_brain.services.ingest.extractors.commercial import (
+from yunwei_win.services.ingest.extractors import commercial as commercial_module
+from yunwei_win.services.ingest.extractors.commercial import (
     COMMERCIAL_TOOL_NAME,
     _validate_milestones,
     _validate_non_commercial_warning,
     commercial_tool,
     extract_commercial,
 )
-from yinhu_brain.services.ingest.unified_schemas import CommercialDraft
+from yunwei_win.services.ingest.unified_schemas import CommercialDraft
 
 
 # ---------- helpers -------------------------------------------------------

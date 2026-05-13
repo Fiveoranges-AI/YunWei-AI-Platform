@@ -28,16 +28,16 @@ def _clean_state():  # noqa: PT004 — yield-only no-op replacement fixture
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-import yinhu_brain.models  # noqa: F401 — register SQLAlchemy mappers
-from yinhu_brain.db import Base
-from yinhu_brain.models import (
+import yunwei_win.models  # noqa: F401 — register SQLAlchemy mappers
+from yunwei_win.db import Base
+from yunwei_win.models import (
     Document,
     DocumentProcessingStatus,
     DocumentReviewStatus,
     DocumentType,
 )
-from yinhu_brain.services.ingest import planner as planner_module
-from yinhu_brain.services.ingest.planner import (
+from yunwei_win.services.ingest import planner as planner_module
+from yunwei_win.services.ingest.planner import (
     PLANNER_TOOL_NAME,
     _build_activation_list,
     _heuristic_targets,
@@ -46,13 +46,13 @@ from yinhu_brain.services.ingest.planner import (
     _score_dimension,
     plan_extraction,
 )
-from yinhu_brain.services.ingest.planner import (
+from yunwei_win.services.ingest.planner import (
     _IDENTITY_PATTERNS,
     _COMMERCIAL_PATTERNS,
     _OPS_PATTERNS,
 )
-from yinhu_brain.services.ingest.unified_schemas import IngestPlan
-from yinhu_brain.services.llm import LLMCallFailed
+from yunwei_win.services.ingest.unified_schemas import IngestPlan
+from yunwei_win.services.llm import LLMCallFailed
 
 
 # ---------- helpers -------------------------------------------------------

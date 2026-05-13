@@ -25,7 +25,8 @@ def _clean_state():
     with _db.main()._get().cursor() as cur:
         cur.execute(
             "TRUNCATE api_keys, platform_sessions, agent_grants, "
-            "enterprise_members, tenants, enterprises, users, "
+            "enterprise_members, runtime_bindings, runtimes, "
+            "tenants, enterprises, users, "
             "proxy_log, bronze_files, silver_mappings, "
             "daily_reports, daily_report_subscriptions, invite_codes "
             "RESTART IDENTITY CASCADE"

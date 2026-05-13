@@ -17,21 +17,21 @@ def _clean_state():  # noqa: PT004 — yield-only override
     yield
 
 
-import yinhu_brain.models  # noqa: E402, F401 — register mappers
+import yunwei_win.models  # noqa: E402, F401 — register mappers
 from fastapi import FastAPI, Request  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 
-from yinhu_brain import router as yinhu_router  # noqa: E402
-from yinhu_brain.db import Base, get_session  # noqa: E402
-from yinhu_brain.models.ingest_job import (  # noqa: E402
+from yunwei_win import router as yinhu_router  # noqa: E402
+from yunwei_win.db import Base, get_session  # noqa: E402
+from yunwei_win.models.ingest_job import (  # noqa: E402
     IngestBatch,
     IngestJob,
     IngestJobStage,
     IngestJobStatus,
 )
-from yinhu_brain.services.ingest import job_queue as job_queue_module  # noqa: E402
+from yunwei_win.services.ingest import job_queue as job_queue_module  # noqa: E402
 
 
 async def _make_engine():
@@ -58,7 +58,7 @@ def _stub_queue(monkeypatch):
 
     monkeypatch.setattr(job_queue_module, "enqueue_ingest_job", fake_enqueue)
     # The api module imported the helper by name — patch the bound reference too.
-    from yinhu_brain.api import ingest as ingest_api
+    from yunwei_win.api import ingest as ingest_api
 
     monkeypatch.setattr(ingest_api, "enqueue_ingest_job", fake_enqueue)
     return calls
@@ -291,7 +291,7 @@ def test_rq_id_uses_only_letters_digits_dashes_underscores():
     failed every real enqueue with 'Job ID must only contain letters,
     numbers, underscores and dashes'. SCYN250620合同.pdf surfaced it."""
     import re
-    from yinhu_brain.services.ingest.job_queue import _rq_id_for
+    from yunwei_win.services.ingest.job_queue import _rq_id_for
 
     rid = _rq_id_for("abc12345-6789-4def-0123-456789abcdef", 3)
     assert re.fullmatch(r"[A-Za-z0-9_-]+", rid), rid
