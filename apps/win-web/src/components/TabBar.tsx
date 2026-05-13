@@ -25,13 +25,7 @@ type Props = {
 
 export function TabBar({ active, onChange, onAdd }: Props) {
   return (
-    <div
-      className="tabbar"
-      style={{
-        flexShrink: 0,
-        paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
-      }}
-    >
+    <div className="tabbar" style={{ flexShrink: 0 }}>
       {LEFT.map((it) => (
         <TabItem key={it.id} item={it} active={active === it.id} onClick={() => onChange(it.id)} />
       ))}
@@ -41,9 +35,8 @@ export function TabBar({ active, onChange, onAdd }: Props) {
         className="tab"
         aria-label="添加资料"
         onClick={() => (onAdd ? onAdd() : onChange("upload"))}
-        style={{ paddingTop: 0 }}
       >
-        <div className="tab-plus">{I.plus(22, "#fff")}</div>
+        <div className="tab-plus">{I.plus(20, "#fff")}</div>
       </button>
 
       {RIGHT.map((it) => (
@@ -64,20 +57,17 @@ function TabItem({
 }) {
   return (
     <button className={`tab ${active ? "active" : ""}`} onClick={onClick}>
-      <div
+      <span
         style={{
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "4px 10px",
-          borderRadius: 10,
-          background: active ? "var(--brand-50)" : "transparent",
           color: active ? "var(--brand-500)" : "var(--ink-500)",
         }}
       >
         {item.icon(20)}
-      </div>
-      <div style={{ fontSize: 10, fontWeight: 600, marginTop: 1 }}>{item.sub}</div>
+      </span>
+      <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1 }}>{item.sub}</span>
     </button>
   );
 }

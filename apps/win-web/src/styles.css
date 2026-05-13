@@ -32,9 +32,11 @@
   --brand-100: #dcebf7;
   --brand-50:  #eff6fc;
 
-  /* logo navy accent — used by the rail */
-  --navy-900: #0b1f3a;
-  --navy-700: #16335a;
+  /* logo navy accent — used by the rail.
+     Slightly desaturated slate-navy so it sits next to the white content
+     area without feeling like a hard black block. */
+  --navy-900: #1d2b44;
+  --navy-700: #2a3c5c;
 
   /* AI accent — lighter cyan-blue */
   --ai-900: #0c3d70;
@@ -213,10 +215,12 @@ body {
 .sep { height: 1px; background: var(--ink-100); margin: 0; }
 .sep-dash { height: 1px; border-top: 1px dashed var(--ink-100); margin: 0; }
 
-/* Bottom tab bar */
+/* Bottom tab bar — compact, vertically-centered icon + label */
 .tabbar {
-  height: 84px; padding: 8px 8px 24px;
-  background: rgba(255,255,255,0.90);
+  height: 60px;
+  padding: 4px 8px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  background: rgba(255,255,255,0.92);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 1px solid rgba(15,23,42,0.06);
@@ -226,9 +230,10 @@ body {
 
 .tab {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px; padding: 4px 0; cursor: pointer;
-  color: var(--ink-400); font-size: 11px; font-weight: 500;
+  gap: 3px; padding: 0; cursor: pointer;
+  color: var(--ink-500); font-size: 12.5px; font-weight: 600;
   background: none; border: none;
+  letter-spacing: 0.01em;
 }
 .tab.active { color: var(--brand-500); }
 
