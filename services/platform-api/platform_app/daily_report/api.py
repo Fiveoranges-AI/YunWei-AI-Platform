@@ -6,12 +6,11 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from .. import api as platform_api, db
+from ..integrations import get_integration
 from . import orchestrator, storage
 from .pushers.dingtalk import DingTalkPusher
 
 router = APIRouter()
-
-_pusher = DingTalkPusher()
 
 
 class RegenerateBody(BaseModel):
@@ -73,9 +72,14 @@ async def regenerate(request: Request, tenant: str, body: RegenerateBody):
     storage.delete_by_tenant_date(tenant_id=tenant, report_date=rd)
     # Look up active subscription for this tenant (single recipient in MVP).
     sub = next((s for s in storage.list_enabled_subscriptions() if s.tenant_id == tenant), None)
+    pusher = None
+    if sub is not None:
+        integration = get_integration(sub.tenant_id, "dingtalk")
+        if integration is not None and integration.active:
+            pusher = DingTalkPusher(integration.config)
     rid = await _orchestrator_run(
         tenant_id=tenant, report_date=rd,
-        pusher=_pusher if sub else None, subscription=sub,
+        pusher=pusher, subscription=sub if pusher else None,
     )
     return {"report_id": rid}
 

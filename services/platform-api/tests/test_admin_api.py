@@ -293,3 +293,114 @@ def test_set_platform_admin_flag(client, platform_admin):
     )
     assert r2.status_code == 200
     assert db.is_platform_admin("u_alice") is False
+
+
+# ─── enterprise integrations / DingTalk ─────────────────────────
+
+_DINGTALK_BODY = {
+    "client_id": "dt_cli",
+    "client_secret": "dt_secret_abcd1234",
+    "robot_code": "dt_robot",
+}
+
+
+def test_set_dingtalk_integration_requires_admin(client, regular_user):
+    _seed_enterprise("yinhu", with_tenant=False)
+    r = client.put(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        json=_DINGTALK_BODY,
+        cookies={"app_session": regular_user},
+    )
+    assert r.status_code == 403
+
+
+def test_set_dingtalk_integration_unauthed(client):
+    db.init()
+    r = client.put(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        json=_DINGTALK_BODY,
+    )
+    assert r.status_code == 401
+
+
+def test_set_dingtalk_integration_writes_row(client, platform_admin):
+    _seed_enterprise("yinhu", with_tenant=False)
+    r = client.put(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        json=_DINGTALK_BODY,
+        cookies={"app_session": platform_admin},
+    )
+    assert r.status_code == 200
+    from platform_app import integrations
+    got = integrations.get_integration("yinhu", "dingtalk")
+    assert got is not None
+    assert got.config["client_id"] == "dt_cli"
+    assert got.active is True
+
+
+def test_set_dingtalk_integration_404_when_enterprise_missing(client, platform_admin):
+    db.init()
+    r = client.put(
+        "/api/admin/enterprises/nope/integrations/dingtalk",
+        json=_DINGTALK_BODY,
+        cookies={"app_session": platform_admin},
+    )
+    assert r.status_code == 404
+
+
+def test_set_dingtalk_integration_rejects_missing_fields(client, platform_admin):
+    _seed_enterprise("yinhu", with_tenant=False)
+    r = client.put(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        json={"client_id": "x"},  # missing client_secret + robot_code
+        cookies={"app_session": platform_admin},
+    )
+    assert r.status_code == 400
+
+
+def test_get_dingtalk_integration_unconfigured(client, platform_admin):
+    _seed_enterprise("yinhu", with_tenant=False)
+    r = client.get(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        cookies={"app_session": platform_admin},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"configured": False}
+
+
+def test_get_dingtalk_integration_masks_secret(client, platform_admin):
+    _seed_enterprise("yinhu", with_tenant=False)
+    client.put(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        json=_DINGTALK_BODY,
+        cookies={"app_session": platform_admin},
+    )
+    r = client.get(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        cookies={"app_session": platform_admin},
+    )
+    body = r.json()
+    assert body["configured"] is True
+    assert body["active"] is True
+    assert body["client_id"] == "dt_cli"
+    assert body["robot_code"] == "dt_robot"
+    assert body["client_secret_last4"] == "1234"
+    assert "dt_secret_abcd1234" not in r.text  # full secret never leaks
+
+
+def test_disable_dingtalk_integration(client, platform_admin):
+    _seed_enterprise("yinhu", with_tenant=False)
+    client.put(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        json=_DINGTALK_BODY,
+        cookies={"app_session": platform_admin},
+    )
+    r = client.delete(
+        "/api/admin/enterprises/yinhu/integrations/dingtalk",
+        cookies={"app_session": platform_admin},
+    )
+    assert r.status_code == 200
+    from platform_app import integrations
+    got = integrations.get_integration("yinhu", "dingtalk")
+    assert got is not None
+    assert got.active is False

@@ -4,15 +4,35 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytest
 from platform_app.daily_report import scheduler, storage
-from platform_app import db
+from platform_app import db, integrations
+
+
+def _seed_yinhu_enterprise() -> None:
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, "
+        "onboarding_stage, created_at) "
+        "VALUES ('yinhu','yinhu','Yinhu','trial','active',0)"
+    )
 
 
 def _seed_yinhu_daily_report_tenant() -> None:
+    _seed_yinhu_enterprise()
     db.main().execute(
         "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
         "hmac_secret_current, hmac_key_id_current, tenant_uid, created_at) "
         "VALUES ('yinhu','daily-report','Daily Report',"
         " 'http://x','secret','k1','yinhu-daily-uid',0)"
+    )
+
+
+def _seed_yinhu_dingtalk_integration() -> None:
+    integrations.upsert_integration(
+        enterprise_id="yinhu", kind="dingtalk",
+        config={
+            "client_id": "cli_test",
+            "client_secret": "sec_test",
+            "robot_code": "robot_test",
+        },
     )
 
 
@@ -42,9 +62,21 @@ def test_compute_next_fire_skips_weekend():
     assert nxt == datetime(2026, 5, 11, 7, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
 
 
+async def _run_scheduler_for(seconds: float, monkeypatch) -> None:
+    monkeypatch.setattr(scheduler, "_TICK_SECONDS", 0.05)
+    task = asyncio.create_task(scheduler.run_forever())
+    await asyncio.sleep(seconds)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @pytest.mark.asyncio
-async def test_loop_fires_orchestrator_when_due(monkeypatch):
+async def test_loop_fires_orchestrator_when_due_with_integration(monkeypatch):
     _seed_yinhu_daily_report_tenant()
+    _seed_yinhu_dingtalk_integration()
     storage.create_subscription(
         tenant_id="yinhu", recipient_label="许总",
         push_channel="dingtalk", push_target="userid_xu",
@@ -52,23 +84,67 @@ async def test_loop_fires_orchestrator_when_due(monkeypatch):
         sections_enabled=["sales"],
     )
 
-    fired: list[tuple] = []
+    fired: list[dict] = []
 
     async def fake_run(**kw):
         fired.append(kw)
         return "rid-fake"
 
     monkeypatch.setattr(scheduler, "_orchestrator_run", fake_run)
-    # Tick faster than 60s for test.
-    monkeypatch.setattr(scheduler, "_TICK_SECONDS", 0.05)
-
-    task = asyncio.create_task(scheduler.run_forever())
-    await asyncio.sleep(0.3)
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    await _run_scheduler_for(0.3, monkeypatch)
 
     assert len(fired) >= 1
     assert fired[0]["tenant_id"] == "yinhu"
+    # Pusher was constructed from the DB integration row, not a global.
+    from platform_app.daily_report.pushers.dingtalk import DingTalkPusher
+    assert isinstance(fired[0]["pusher"], DingTalkPusher)
+    assert fired[0]["pusher"]._robot_code == "robot_test"
+
+
+@pytest.mark.asyncio
+async def test_loop_skips_when_no_integration(monkeypatch):
+    """Subscription whose enterprise has zero DingTalk creds is skipped silently."""
+    _seed_yinhu_daily_report_tenant()
+    # No integrations.upsert_integration() call.
+    storage.create_subscription(
+        tenant_id="yinhu", recipient_label="许总",
+        push_channel="dingtalk", push_target="userid_xu",
+        push_cron="* * * * *",
+        sections_enabled=["sales"],
+    )
+
+    fired: list[dict] = []
+
+    async def fake_run(**kw):
+        fired.append(kw)
+        return "rid-fake"
+
+    monkeypatch.setattr(scheduler, "_orchestrator_run", fake_run)
+    await _run_scheduler_for(0.3, monkeypatch)
+
+    assert fired == []
+
+
+@pytest.mark.asyncio
+async def test_loop_skips_when_integration_inactive(monkeypatch):
+    """Inactive integration row is treated like no row at all."""
+    _seed_yinhu_daily_report_tenant()
+    _seed_yinhu_dingtalk_integration()
+    integrations.disable_integration(enterprise_id="yinhu", kind="dingtalk")
+    storage.create_subscription(
+        tenant_id="yinhu", recipient_label="许总",
+        push_channel="dingtalk", push_target="userid_xu",
+        push_cron="* * * * *",
+        sections_enabled=["sales"],
+    )
+
+    fired: list[dict] = []
+
+    async def fake_run(**kw):
+        fired.append(kw)
+        return "rid-fake"
+
+    monkeypatch.setattr(scheduler, "_orchestrator_run", fake_run)
+    await _run_scheduler_for(0.3, monkeypatch)
+
+    assert fired == []

@@ -3,6 +3,10 @@
 Croniter computes next fire time per subscription; one async loop sleeps until
 the soonest fire then dispatches orchestrator.run. Subscriptions are reloaded
 from the DB once per loop iteration so adds/removes pick up without restart.
+
+DingTalk credentials are looked up per (subscription.tenant_id) from
+``enterprise_integrations`` immediately before each fire — subscriptions
+whose enterprise has no active integration are skipped silently.
 """
 from __future__ import annotations
 import asyncio
@@ -11,9 +15,9 @@ from zoneinfo import ZoneInfo
 from croniter import croniter
 from . import orchestrator, storage
 from .pushers.dingtalk import DingTalkPusher
+from ..integrations import get_integration
 
 _TICK_SECONDS: float = 60.0  # default cap; tests override
-_pusher = DingTalkPusher()
 
 
 def compute_next_fire(sub: storage.Subscription, *, now: datetime) -> datetime:
@@ -67,9 +71,21 @@ async def _tick_once() -> None:
 
 async def _dispatch(sub: storage.Subscription) -> None:
     today = date.today()
+    # tenant_id on a subscription IS the enterprise id (= legacy client_id).
+    integration = get_integration(sub.tenant_id, "dingtalk")
+    if integration is None or not integration.active:
+        # No DingTalk creds configured for this enterprise — skip push but
+        # still log so ops sees the subscription is stranded.
+        print(
+            f"[daily-report scheduler] skip {sub.id}: "
+            f"no active dingtalk integration for enterprise={sub.tenant_id}",
+            flush=True,
+        )
+        return
+    pusher = DingTalkPusher(integration.config)
     await _orchestrator_run(
         tenant_id=sub.tenant_id,
         report_date=today,
-        pusher=_pusher,
+        pusher=pusher,
         subscription=sub,
     )

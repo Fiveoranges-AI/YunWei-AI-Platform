@@ -256,3 +256,45 @@ Infra files updated by the move:
 Phase 2-4 (URL contract, `platform-web` Next.js portal, optional
 Python service split) are still proposals; see
 [`docs/architecture/repo-structure-v2.md`](../architecture/repo-structure-v2.md).
+
+## Migrating DingTalk creds to per-enterprise
+
+Branch `feat/per-enterprise-dingtalk` removes the four platform-wide
+`DINGTALK_*` env vars in favour of a per-enterprise row in the new
+`enterprise_integrations` table (migration 011). The DingTalkPusher
+constructor now takes a `config` dict; the daily-report scheduler reads
+the row at fire time. Subscriptions whose enterprise has no active
+integration row are skipped silently — so daily report push stops
+working on every tenant the moment migration 011 lands, until ops seeds
+each enterprise's creds.
+
+**Seed the existing yinhu integration once after deploy:**
+
+```sql
+-- One-shot. Replace <CLIENT_ID> / <CLIENT_SECRET> / <ROBOT_CODE> with the
+-- values previously set in DINGTALK_CLIENT_ID / DINGTALK_CLIENT_SECRET /
+-- DINGTALK_ROBOT_CODE on the platform-api service.
+INSERT INTO enterprise_integrations
+  (enterprise_id, kind, config_json, active, created_at)
+VALUES (
+  'yinhu',
+  'dingtalk',
+  '{"client_id":"<CLIENT_ID>","client_secret":"<CLIENT_SECRET>","robot_code":"<ROBOT_CODE>"}',
+  1,
+  EXTRACT(EPOCH FROM NOW())::bigint
+)
+ON CONFLICT (enterprise_id, kind) DO NOTHING;
+```
+
+After seeding, remove the four `DINGTALK_*` env vars from the
+platform-api Railway service. The dropped `DINGTALK_AGENT_ID` was
+unused in the pusher code path and is not part of the new config
+schema.
+
+Ongoing rotations / new tenants go through the admin API:
+
+- `PUT  /api/admin/enterprises/{id}/integrations/dingtalk`
+- `GET  /api/admin/enterprises/{id}/integrations/dingtalk` (masked, secret last 4 only)
+- `DELETE /api/admin/enterprises/{id}/integrations/dingtalk`
+
+All three require `users.is_platform_admin = 1` on the caller.
