@@ -16,7 +16,7 @@ set -a
 source .env
 set +a
 
-COMPOSE="docker compose -f ops/docker-compose.yml"
+COMPOSE="docker compose -f infra/local/docker-compose.yml"
 AGENT_ENV="agents/yinhu-super-xiaochen/.env"
 
 if [ ! -f "$AGENT_ENV" ]; then

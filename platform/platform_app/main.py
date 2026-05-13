@@ -74,16 +74,6 @@ async def _attach_enterprise(request: Request, call_next):
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
-# app/dist/ holds the Phase 1+ chat UI build artifacts. Stage 1 of
-# platform/Dockerfile populates it; if index.html is missing (e.g. an old
-# image without the new stage), catch_all transparently falls through to
-# reverse_proxy, preserving pre-Phase-1 behavior. This is the deploy-safety
-# guarantee documented in 2026-05-07-platform-chat-ui-design.md.
-#
-# We compute index existence inside catch_all (not as a module-level
-# constant) so tests can monkeypatch _APP_DIST and have the change picked up
-# on the next request without touching a derived constant.
-_APP_DIST = Path(__file__).parent.parent.parent / "app" / "dist"
 # yunwei-win-web/ is the /win/ SPA. Its dist/ ends up in two different
 # layouts depending on environment:
 #  - container:  /app/platform_app/main.py → parent.parent = /app
@@ -109,9 +99,6 @@ def _resolve_win_dist() -> Path:
 
 
 _WIN_DIST = _resolve_win_dist()
-# Subpaths under /<client>/<agent>/ that the platform serves from app/dist
-# instead of forwarding to the agent. Anything else proxies through.
-_APP_STATIC_PREFIXES: tuple[str, ...] = ("/assets/", "/base-href.js", "/favicon.ico")
 
 
 _NO_STORE = {"Cache-Control": "no-store, must-revalidate"}
@@ -125,9 +112,8 @@ def index(request: Request):
     # after login until the user manually refreshes (Cmd+Shift+R).
     #
     # Logged-in users go to /win/ (the 智通客户 SPA, the customer-facing
-    # product). The legacy agents.html dashboard is no longer in the
-    # customer path; it stays on disk for now and may be archived in a
-    # follow-up task.
+    # product). The legacy agents.html dashboard has been archived under
+    # docs/migration/archive/ and is no longer in the customer path.
     if not request.cookies.get("app_session"):
         return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
     return RedirectResponse("/win/", status_code=303, headers=_NO_STORE)
@@ -227,26 +213,6 @@ async def catch_all(full_path: str, request: Request):
         )
     except firewall.FirewallReject as e:
         raise HTTPException(403, {"error": "cross_agent_blocked", "message": str(e)})
-
-    # Phase 1: serve the new chat UI from app/dist when populated. The
-    # exists() check is the deploy-safe fallback — if the platform image
-    # hasn't been rebuilt with the node stage yet, every request falls
-    # through to the existing reverse_proxy path below.
-    app_index = _APP_DIST / "index.html"
-    if request.method in ("GET", "HEAD") and app_index.exists():
-        if subpath in ("/", "/index.html"):
-            html = app_index.read_text(encoding="utf-8")
-            nonce = request.headers.get("x-csp-nonce", "")
-            if nonce:
-                html = html.replace("<script>", f'<script nonce="{nonce}">')
-                html = html.replace("<style>", f'<style nonce="{nonce}">')
-            return HTMLResponse(html, headers=_NO_STORE)
-        for prefix in _APP_STATIC_PREFIXES:
-            if subpath.startswith(prefix) or subpath == prefix.rstrip("/"):
-                asset = _APP_DIST / subpath.lstrip("/")
-                if not asset.is_file():
-                    raise HTTPException(404)
-                return FileResponse(asset)
 
     return await proxy.reverse_proxy(
         request, client_id=client_id, agent_id=agent_id, user=user, subpath=subpath,

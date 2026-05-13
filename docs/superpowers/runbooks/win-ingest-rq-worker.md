@@ -35,14 +35,14 @@ Same image as `platform-app`. In Railway:
 3. Settings → Deploy → **Custom Start Command**:
 
    ```
-   python -m yinhu_brain.workers.ingest_rq_worker
+   python -m yunwei_win.workers.ingest_rq_worker
    ```
 
-   (Use `python -m` instead of the bare `yinhu-ingest-worker` console
-   script so CWD=`/app` gets on `sys.path` and prompts at `/app/prompts`
-   resolve via `Path(__file__).parents[N]`. The console script also
-   works once `find_prompt` is in place, but `python -m` is the safer
-   shape that matches how `uvicorn` starts the web service.)
+   (Use `python -m` instead of the bare `yunwei-win-ingest-worker`
+   console script so CWD=`/app` gets on `sys.path` and prompts at
+   `/app/prompts` resolve via `Path(__file__).parents[N]`. The console
+   script also works once `find_prompt` is in place, but `python -m` is
+   the safer shape that matches how `uvicorn` starts the web service.)
 
 4. Settings → Variables: copy all variables from `platform-app`, in
    particular:

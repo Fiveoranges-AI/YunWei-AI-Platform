@@ -1,0 +1,42 @@
+# Example: dedicated runtime for the 银湖 (yinhu) tenant.
+#
+# Dedicated runtimes are Pro/Max-tier per-tenant containers that serve
+# `POST /assistant/chat` and a health endpoint. They are addressed via
+# the platform_app runtime_registry table (see runtimes/README.md);
+# their URLs are server-side only and never exposed to the SPA.
+#
+# To run locally alongside infra/local/docker-compose.yml, copy this
+# service into a separate compose file (e.g. infra/local/runtime-yinhu.yml)
+# and register the runtime via the admin API or a one-shot bind script:
+#
+#   from platform_app.runtime_registry import upsert_runtime, bind_runtime
+#   upsert_runtime(
+#       runtime_id="rt_yinhu_super_xiaochen",
+#       mode="dedicated",
+#       provider="super-xiaochen",
+#       endpoint_url="http://agent-yinhu-super-xiaochen:8000",
+#       version="v1",
+#   )
+#   bind_runtime(
+#       enterprise_id="yinhu",
+#       capability="assistant",
+#       runtime_id="rt_yinhu_super_xiaochen",
+#   )
+
+services:
+  agent-yinhu-super-xiaochen:
+    build: /Users/eason/yunwei-workspaces/yinhu-rebuild/generated
+    container_name: agent-yinhu-super-xiaochen
+    restart: unless-stopped
+    env_file:
+      - ../../agents/yinhu-super-xiaochen/.env
+    volumes:
+      - /Users/eason/yunwei-workspaces/yinhu-rebuild/.yunwei-cache/canary:/data
+    networks:
+      - cf-tunnel
+    expose:
+      - "8000"
+
+networks:
+  cf-tunnel:
+    external: true

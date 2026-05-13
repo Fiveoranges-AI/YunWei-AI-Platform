@@ -1,14 +1,16 @@
 services:
   platform-app:
-    build: ../platform
+    build:
+      context: ../..
+      dockerfile: platform/Dockerfile
     container_name: platform-app
     restart: unless-stopped
-    env_file: ../.env
+    env_file: ../../.env
     environment:
       PLATFORM_DB_PATH: /data/platform.db
       PROXY_LOG_DB_PATH: /data/proxy_log.db
     volumes:
-      - ../data:/data
+      - ../../data:/data
     networks:
       - cf-tunnel
     expose:
@@ -20,19 +22,6 @@ services:
       timeout: 5s
       retries: 3
 
-  agent-yinhu-super-xiaochen:
-    build: /Users/eason/yunwei-workspaces/yinhu-rebuild/generated
-    container_name: agent-yinhu-super-xiaochen
-    restart: unless-stopped
-    env_file:
-      - ../agents/yinhu-super-xiaochen/.env
-    volumes:
-      - /Users/eason/yunwei-workspaces/yinhu-rebuild/.yunwei-cache/canary:/data
-    networks:
-      - cf-tunnel
-    expose:
-      - "8000"
-
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
@@ -40,13 +29,19 @@ services:
     # token mode: no config.yml mounted; routes configured in CF dashboard.
     # cloudflared reads TUNNEL_TOKEN from env (injected via env_file at
     # runtime), avoiding compose-level ${VAR} interpolation that needs the
-    # .env file to be in compose's "project directory" (= ops/, not us).
-    env_file: ../.env
+    # .env file to be in compose's "project directory" (= infra/local/).
+    env_file: ../../.env
     command: tunnel --no-autoupdate run
     networks:
       - cf-tunnel
     depends_on:
       - platform-app
+
+# Dedicated runtimes (Pro/Max) are NOT part of the default local stack.
+# They run as separate Railway services (or local containers) and are
+# wired in via the platform_app runtime_registry table. For an example
+# of a dedicated runtime compose service, see
+# runtimes/examples/yinhu-super-xiaochen.compose.yml.
 
 networks:
   cf-tunnel:
