@@ -4,7 +4,7 @@ import asyncio
 import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from . import admin_api, api, db, enterprise_api, firewall, proxy
@@ -127,8 +127,14 @@ def index(request: Request):
     # for "/" must never be cached. Without this, a browser that loaded
     # login.html before login will keep serving the cached login.html
     # after login until the user manually refreshes (Cmd+Shift+R).
-    page = "agents.html" if request.cookies.get("app_session") else "login.html"
-    return FileResponse(_STATIC / page, headers=_NO_STORE)
+    #
+    # Logged-in users go to /win/ (the 智通客户 SPA, the customer-facing
+    # product). The legacy agents.html dashboard is no longer in the
+    # customer path; it stays on disk for now and may be archived in a
+    # follow-up task.
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return RedirectResponse("/win/", status_code=303, headers=_NO_STORE)
 
 
 @app.api_route("/register", methods=["GET", "HEAD"])
