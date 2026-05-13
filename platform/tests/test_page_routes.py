@@ -71,6 +71,25 @@ def test_me_includes_platform_admin_and_enterprises(client, logged_in):
     assert body["enterprises"] == []
 
 
+def test_win_root_serves_spa_when_authed(client, logged_in):
+    """/win/ should return the Win SPA shell (title + root div) when the
+    user is logged in and the front-end has been built. If the dist/ dir
+    is missing (CI without a build), accept the 503 win_not_built marker —
+    we just want to verify the route is wired up and not 500ing."""
+    from platform_app import main as _main
+
+    r = client.get("/win/", cookies={"app_session": logged_in})
+    if (_main._WIN_DIST / "index.html").is_file():
+        assert r.status_code == 200
+        # Win SPA markers: <title>智通客户 ...</title> + <div id="root">
+        assert b"\xe6\x99\xba\xe9\x80\x9a\xe5\xae\xa2\xe6\x88\xb7" in r.content
+        assert b'<div id="root">' in r.content
+    else:
+        # Front-end not built in this environment. Route must still respond
+        # cleanly (503), not crash.
+        assert r.status_code == 503
+
+
 def test_me_marks_platform_admin(client):
     db.init()
     db.main().execute(

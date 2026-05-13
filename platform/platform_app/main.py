@@ -88,11 +88,31 @@ app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 # constant) so tests can monkeypatch _APP_DIST and have the change picked up
 # on the next request without touching a derived constant.
 _APP_DIST = Path(__file__).parent.parent.parent / "app" / "dist"
-# app-win/ lives INSIDE platform/ (one level up from platform_app), so:
-#  - container:  /app/platform_app/main.py → /app → /app/app-win/dist
-#  - local dev:  <repo>/platform/platform_app/main.py → <repo>/platform/ →
-#                <repo>/platform/app-win/dist
-_WIN_DIST = Path(__file__).resolve().parent.parent / "app-win" / "dist"
+# yunwei-win-web/ is the /win/ SPA. Its dist/ ends up in two different
+# layouts depending on environment:
+#  - container:  /app/platform_app/main.py → parent.parent = /app
+#                → /app/yunwei-win-web/dist  (Dockerfile copies it there)
+#  - local dev:  <repo>/platform/platform_app/main.py → parent.parent.parent
+#                = <repo> → <repo>/apps/yunwei-win-web/dist
+# We probe both candidates and pick the first that exists; tests can
+# monkeypatch _WIN_DIST to point at a fixture instead.
+def _resolve_win_dist() -> Path:
+    here = Path(__file__).resolve()
+    # container layout: /app/yunwei-win-web/dist
+    container_dist = here.parent.parent / "yunwei-win-web" / "dist"
+    if container_dist.is_dir():
+        return container_dist
+    # local dev layout: <repo>/apps/yunwei-win-web/dist
+    repo_dist = here.parent.parent.parent / "apps" / "yunwei-win-web" / "dist"
+    if repo_dist.is_dir():
+        return repo_dist
+    # Neither exists yet (front-end not built); fall back to repo-root path
+    # so the win_root handler can return a clear "win_not_built" 503 instead
+    # of a misleading 500.
+    return repo_dist
+
+
+_WIN_DIST = _resolve_win_dist()
 # Subpaths under /<client>/<agent>/ that the platform serves from app/dist
 # instead of forwarding to the agent. Anything else proxies through.
 _APP_STATIC_PREFIXES: tuple[str, ...] = ("/assets/", "/base-href.js", "/favicon.ico")
