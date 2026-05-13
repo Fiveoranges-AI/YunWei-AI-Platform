@@ -11,7 +11,7 @@ from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 # yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /api/win/.
 # Per-enterprise Postgres database; lazy-provisioned on first access.
-from yunwei_win import router as _win_router
+from yunwei_win.routes import router as _win_router
 from yunwei_win.db import dispose_all as _win_dispose
 
 

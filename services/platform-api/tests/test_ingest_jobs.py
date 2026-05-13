@@ -23,7 +23,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 
-from yunwei_win import router as yinhu_router  # noqa: E402
+from yunwei_win.routes import router as yinhu_router  # noqa: E402
 from yunwei_win.db import Base, get_session  # noqa: E402
 from yunwei_win.models.ingest_job import (  # noqa: E402
     IngestBatch,

@@ -10,12 +10,41 @@ transitions on the ``IngestJob`` row plus the cancel and failure paths.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import subprocess
+import sys
+
 import pytest
 
 
 @pytest.fixture(autouse=True)
 def _clean_state():  # noqa: PT004 — yield-only override
     yield
+
+
+def test_worker_entrypoint_imports_without_cookie_secret():
+    env = os.environ.copy()
+    env.pop("COOKIE_SECRET", None)
+    env.setdefault("DATABASE_URL", "postgresql://postgres:test@localhost:5433/test")
+    env.setdefault("REDIS_URL", "redis://localhost:6380")
+    service_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import yunwei_win.workers.ingest_rq_worker; print('ok')",
+        ],
+        cwd=service_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
 
 
 import yunwei_win.models  # noqa: E402, F401 — register mappers

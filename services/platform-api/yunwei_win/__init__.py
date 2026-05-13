@@ -4,27 +4,26 @@ Originally `/Users/eason/yunwei-tools/yinhu-brain/backend/app/`. Vendored here
 so platform_app can include its routes directly (no separate FastAPI app, no
 HMAC, no reverse proxy).
 
-Usage from platform_app::
-
-    from yunwei_win import router as win_router
-    app.include_router(win_router, prefix="/api/win")
-
 Per-enterprise database isolation: see ``yunwei_win.db`` — each enterprise
 gets its own Postgres database, lazily provisioned on first access.
+
+Keep this package import-light. Worker entrypoints import submodules such as
+``yunwei_win.workers.ingest_rq_worker`` and must not eagerly import the web
+router or platform app settings.
 """
-from fastapi import APIRouter
 
-from yunwei_win.api.ask import router as _ask_router
-from yunwei_win.api.customer_management import router as _customer_management_router
-from yunwei_win.api.customer_profile import router as _customer_profile_router
-from yunwei_win.api.ingest import router as _ingest_router
-from yunwei_win.api.read import router as _read_router
-from yunwei_win.assistant.router import router as _assistant_router
+__all__ = ["create_router", "router"]
 
-router = APIRouter()
-router.include_router(_ingest_router)
-router.include_router(_read_router)
-router.include_router(_ask_router)
-router.include_router(_assistant_router)
-router.include_router(_customer_profile_router)
-router.include_router(_customer_management_router)
+
+def create_router():
+    from yunwei_win.routes import create_router as _create_router
+
+    return _create_router()
+
+
+def __getattr__(name: str):
+    if name == "router":
+        from yunwei_win.routes import router
+
+        return router
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
