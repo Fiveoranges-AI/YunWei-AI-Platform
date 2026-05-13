@@ -24,6 +24,26 @@ health probe polls this and flips the `runtimes.health` column; an
 A `200` status code with the JSON body above is enough — additional
 fields are ignored.
 
+**Probe semantics** (`platform_app.health.probe_all_runtimes_once`):
+
+- Frequency: every `settings.health_probe_interval_seconds` (default
+  30s, env `HEALTH_PROBE_INTERVAL_SECONDS`). The loop driver
+  `probe_loop()` is started from `platform_app.main` lifespan; one
+  uvicorn worker covers both the legacy `tenants` probe and the
+  runtime registry probe.
+- Timeout per probe: 5 seconds (shared `httpx.AsyncClient`).
+- Status mapping:
+  - HTTP 2xx + `{"status": "ok"}` → `healthy`
+  - HTTP 2xx + `{"status": "degraded"}` → `degraded`
+  - HTTP 2xx + `{"status": "down"}` → `unhealthy`
+  - HTTP non-2xx, timeout, DNS/connect error → `unhealthy`
+  - HTTP 2xx + unrecognised body / non-JSON → `unknown`
+    (conservative: we do **not** flip `unhealthy` for a body we can't
+    parse, so a runtime with a custom `/healthz` shape keeps serving
+    traffic until we either fix the shape or add it to the mapping).
+- One bad runtime never aborts the round — each row is wrapped in
+  try/except both for the HTTP call and the `UPDATE`.
+
 ### `POST /assistant/chat`
 
 Request body:
