@@ -26,6 +26,7 @@ def _clean_state():
         cur.execute(
             "TRUNCATE api_keys, platform_sessions, agent_grants, "
             "enterprise_members, runtime_bindings, runtimes, "
+            "enterprise_integrations, "
             "tenants, enterprises, users, "
             "proxy_log, bronze_files, silver_mappings, "
             "daily_reports, daily_report_subscriptions, invite_codes "

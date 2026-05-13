@@ -1,19 +1,29 @@
-"""DingTalk corp app pusher. Sends the daily report markdown card to a userid."""
+"""DingTalk corp app pusher. Sends the daily report markdown card to a userid.
+
+One pusher instance is constructed per dispatch from the calling
+enterprise's ``enterprise_integrations`` row (kind = 'dingtalk').
+Token cache is scoped to the instance — callers control its lifetime.
+"""
 from __future__ import annotations
 import time
 import httpx
 from .base import Pusher, PushResult
 from ..storage import Subscription
-from ... import settings as _settings_mod
 
 _TOKEN_URL = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
 _SEND_URL = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
 
 
 class DingTalkPusher(Pusher):
-    """One pusher instance per platform process. Token cache is in-memory."""
+    """One pusher instance per enterprise. Token cache scoped to this instance.
 
-    def __init__(self) -> None:
+    ``config`` keys: ``client_id``, ``client_secret``, ``robot_code``.
+    """
+
+    def __init__(self, config: dict) -> None:
+        self._client_id = config["client_id"]
+        self._client_secret = config["client_secret"]
+        self._robot_code = config["robot_code"]
         self._access_token: str | None = None
         self._token_expires_at: float = 0.0
 
@@ -22,8 +32,8 @@ class DingTalkPusher(Pusher):
             return self._access_token
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(_TOKEN_URL, json={
-                "appKey": _settings_mod.settings.dingtalk_client_id,
-                "appSecret": _settings_mod.settings.dingtalk_client_secret,
+                "appKey": self._client_id,
+                "appSecret": self._client_secret,
             })
             resp.raise_for_status()
             data = resp.json()
@@ -42,7 +52,7 @@ class DingTalkPusher(Pusher):
         token = await self._get_access_token()
         body = self._truncate(markdown_body, link_url)
         payload = {
-            "robotCode": _settings_mod.settings.dingtalk_robot_code,
+            "robotCode": self._robot_code,
             "userIds": [subscription.push_target],
             "msgKey": "sampleActionCard",
             "msgParam": (

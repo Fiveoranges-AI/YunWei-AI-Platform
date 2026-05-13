@@ -1,25 +1,31 @@
-"""DingTalkPusher tests — all DingTalk HTTP calls mocked via respx."""
+"""DingTalkPusher tests — all DingTalk HTTP calls mocked via respx.
+
+Pusher now takes its credentials as a constructor argument (was global env
+before per-enterprise integration storage). Tests build a config dict
+directly instead of monkeypatching settings.
+"""
 import time
 import pytest
 import httpx
 import respx
 from platform_app.daily_report.pushers.dingtalk import DingTalkPusher
+from platform_app.daily_report.storage import Subscription
 
 
-def _make_pusher(monkeypatch) -> DingTalkPusher:
-    monkeypatch.setenv("DINGTALK_CLIENT_ID", "cli_test")
-    monkeypatch.setenv("DINGTALK_CLIENT_SECRET", "sec_test")
-    monkeypatch.setenv("DINGTALK_AGENT_ID", "agent_test")
-    monkeypatch.setenv("DINGTALK_ROBOT_CODE", "robot_test")
-    # Reload settings so env changes take effect.
-    import importlib, platform_app.settings as s
-    importlib.reload(s)
-    return DingTalkPusher()
+_CONFIG = {
+    "client_id": "cli_test",
+    "client_secret": "sec_test",
+    "robot_code": "robot_test",
+}
+
+
+def _make_pusher() -> DingTalkPusher:
+    return DingTalkPusher(_CONFIG)
 
 
 @pytest.mark.asyncio
-async def test_access_token_fetched_and_cached(monkeypatch):
-    p = _make_pusher(monkeypatch)
+async def test_access_token_fetched_and_cached():
+    p = _make_pusher()
     with respx.mock(assert_all_called=True) as mock:
         token_route = mock.post(
             "https://api.dingtalk.com/v1.0/oauth2/accessToken"
@@ -33,8 +39,8 @@ async def test_access_token_fetched_and_cached(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_access_token_refetches_after_expiry(monkeypatch):
-    p = _make_pusher(monkeypatch)
+async def test_access_token_refetches_after_expiry():
+    p = _make_pusher()
     with respx.mock(assert_all_called=True) as mock:
         mock.post("https://api.dingtalk.com/v1.0/oauth2/accessToken").mock(
             side_effect=[
@@ -49,9 +55,6 @@ async def test_access_token_refetches_after_expiry(monkeypatch):
         assert t == "TOK2"
 
 
-from platform_app.daily_report.storage import Subscription
-
-
 def _sub() -> Subscription:
     return Subscription(
         id="sub-1", tenant_id="yinhu", recipient_label="许总",
@@ -63,8 +66,8 @@ def _sub() -> Subscription:
 
 
 @pytest.mark.asyncio
-async def test_push_sends_markdown_card_to_userid(monkeypatch):
-    p = _make_pusher(monkeypatch)
+async def test_push_sends_markdown_card_to_userid():
+    p = _make_pusher()
     with respx.mock(assert_all_called=True) as mock:
         mock.post("https://api.dingtalk.com/v1.0/oauth2/accessToken").mock(
             return_value=httpx.Response(200, json={"accessToken": "TOK", "expireIn": 7200})
@@ -86,8 +89,30 @@ async def test_push_sends_markdown_card_to_userid(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_push_failure_returns_error(monkeypatch):
-    p = _make_pusher(monkeypatch)
+async def test_push_uses_constructor_credentials():
+    """Two pushers with different configs hit DingTalk with their own appKey/robotCode."""
+    p_a = DingTalkPusher({"client_id": "cli_A", "client_secret": "sec_A", "robot_code": "robot_A"})
+    p_b = DingTalkPusher({"client_id": "cli_B", "client_secret": "sec_B", "robot_code": "robot_B"})
+    with respx.mock(assert_all_called=True) as mock:
+        token = mock.post("https://api.dingtalk.com/v1.0/oauth2/accessToken").mock(
+            return_value=httpx.Response(200, json={"accessToken": "TOK", "expireIn": 7200})
+        )
+        send = mock.post("https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend").mock(
+            return_value=httpx.Response(200, json={"processQueryKey": "ok"})
+        )
+        await p_a.push(subscription=_sub(), markdown_body="x", link_url="y", title="t")
+        await p_b.push(subscription=_sub(), markdown_body="x", link_url="y", title="t")
+    token_bodies = [c.request.read().decode() for c in token.calls]
+    assert any("cli_A" in b and "sec_A" in b for b in token_bodies)
+    assert any("cli_B" in b and "sec_B" in b for b in token_bodies)
+    send_bodies = [c.request.read().decode() for c in send.calls]
+    assert any("robot_A" in b for b in send_bodies)
+    assert any("robot_B" in b for b in send_bodies)
+
+
+@pytest.mark.asyncio
+async def test_push_failure_returns_error():
+    p = _make_pusher()
     with respx.mock() as mock:
         mock.post("https://api.dingtalk.com/v1.0/oauth2/accessToken").mock(
             return_value=httpx.Response(200, json={"accessToken": "TOK", "expireIn": 7200})
@@ -104,8 +129,8 @@ async def test_push_failure_returns_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_push_truncates_long_body(monkeypatch):
-    p = _make_pusher(monkeypatch)
+async def test_push_truncates_long_body():
+    p = _make_pusher()
     big = "x" * 6000
     with respx.mock() as mock:
         mock.post("https://api.dingtalk.com/v1.0/oauth2/accessToken").mock(

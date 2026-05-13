@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 import uuid
 from fastapi import APIRouter, Body, HTTPException, Path, Request
-from . import auth, db
+from . import auth, db, integrations
 from .api import _user_from_request
 
 router = APIRouter(prefix="/api/admin")
@@ -378,3 +378,67 @@ def set_platform_admin(
     if not res:
         raise HTTPException(404, {"error": "user_not_found"})
     return {"ok": True, "is_platform_admin": is_admin}
+
+
+# ─── enterprise integrations (DingTalk, ...) ────────────────────
+
+@router.put("/enterprises/{enterprise_id}/integrations/dingtalk")
+def set_dingtalk_integration(
+    request: Request,
+    enterprise_id: str = Path(..., pattern=r"^[a-z0-9_-]{1,64}$"),
+    body: dict = Body(...),
+) -> dict:
+    """Upsert this enterprise's DingTalk corp-app credentials.
+
+    Body keys (all required, all strings):
+        client_id, client_secret, robot_code
+    """
+    _require_platform_admin(request)
+    _get_enterprise_or_404(enterprise_id)
+    missing = [k for k in ("client_id", "client_secret", "robot_code")
+               if not body.get(k)]
+    if missing:
+        raise HTTPException(400, {"error": "missing_fields", "fields": missing})
+    integrations.upsert_integration(
+        enterprise_id=enterprise_id,
+        kind="dingtalk",
+        config={
+            "client_id": body["client_id"],
+            "client_secret": body["client_secret"],
+            "robot_code": body["robot_code"],
+        },
+    )
+    return {"ok": True}
+
+
+@router.get("/enterprises/{enterprise_id}/integrations/dingtalk")
+def get_dingtalk_integration(
+    request: Request,
+    enterprise_id: str = Path(..., pattern=r"^[a-z0-9_-]{1,64}$"),
+) -> dict:
+    """Return masked DingTalk integration status. Secret is never returned in plain."""
+    _require_platform_admin(request)
+    _get_enterprise_or_404(enterprise_id)
+    integration = integrations.get_integration(enterprise_id, "dingtalk")
+    if integration is None:
+        return {"configured": False}
+    cfg = integration.config
+    secret = cfg.get("client_secret") or ""
+    return {
+        "configured": True,
+        "active": integration.active,
+        "client_id": cfg.get("client_id"),
+        "client_secret_last4": secret[-4:] if secret else "",
+        "robot_code": cfg.get("robot_code"),
+    }
+
+
+@router.delete("/enterprises/{enterprise_id}/integrations/dingtalk")
+def disable_dingtalk_integration(
+    request: Request,
+    enterprise_id: str = Path(..., pattern=r"^[a-z0-9_-]{1,64}$"),
+) -> dict:
+    _require_platform_admin(request)
+    _get_enterprise_or_404(enterprise_id)
+    integrations.disable_integration(enterprise_id=enterprise_id, kind="dingtalk")
+    return {"ok": True}
