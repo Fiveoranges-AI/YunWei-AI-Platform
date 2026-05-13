@@ -194,4 +194,34 @@ export const I = {
       <path d="M6 4h12v17l-6-4-6 4V4z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   ),
+  layers: (s = 16, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M12 3l9 5-9 5-9-5 9-5z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 13l9 5 9-5M3 18l9 5 9-5" stroke={c} strokeWidth="1.6" strokeLinejoin="round" opacity="0.6" />
+    </svg>
+  ),
+  mic: (s = 22, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <rect x="9" y="3" width="6" height="12" rx="3" stroke={c} strokeWidth="1.6" />
+      <path d="M5 11a7 7 0 0014 0M12 18v3" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  shield: (s = 16, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6l8-3z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M9 12l2 2 4-4" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  lock: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <rect x="4" y="10" width="16" height="11" rx="2" stroke={c} strokeWidth="1.6" />
+      <path d="M8 10V7a4 4 0 018 0v3" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  clock: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.6" />
+      <path d="M12 7v5l3 2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
 } as const satisfies Record<string, IconFn>;

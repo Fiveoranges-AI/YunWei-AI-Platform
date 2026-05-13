@@ -3,12 +3,20 @@ import { AppShell } from "./components/AppShell";
 import { CustomerListScreen } from "./screens/CustomerList";
 import { CustomerDetailScreen } from "./screens/CustomerDetail";
 import { UploadScreen } from "./screens/Upload";
+import { InboxScreen } from "./screens/Inbox";
 import { ReviewScreen } from "./screens/Review";
 import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
 
-export type ScreenName = "list" | "detail" | "upload" | "review" | "ask" | "profile";
-export type TabName = "customers" | "upload" | "ask" | "profile";
+export type ScreenName =
+  | "list"
+  | "detail"
+  | "upload"
+  | "inbox"
+  | "review"
+  | "ask"
+  | "profile";
+export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -21,6 +29,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
   list: "customers",
   detail: undefined,
   upload: "upload",
+  inbox: "inbox",
   review: undefined,
   ask: "ask",
   profile: "profile",
@@ -28,6 +37,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
   customers: "list",
+  inbox: "inbox",
   upload: "upload",
   ask: "ask",
   profile: "profile",
@@ -55,7 +65,7 @@ export function App() {
   const current = stack[stack.length - 1];
 
   return (
-    <AppShell activeTab={activeTab} onTabChange={setTab}>
+    <AppShell activeTab={activeTab} onTabChange={setTab} currentScreen={current.name} onAdd={() => go("upload")}>
       <CurrentScreen entry={current} go={go} />
     </AppShell>
   );
@@ -69,6 +79,8 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
       return <CustomerDetailScreen go={go} params={entry.params ?? {}} />;
     case "upload":
       return <UploadScreen go={go} />;
+    case "inbox":
+      return <InboxScreen go={go} params={entry.params ?? {}} />;
     case "review":
       return <ReviewScreen go={go} params={entry.params ?? {}} />;
     case "ask":

@@ -1,48 +1,29 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { deleteAllCustomers, getMe, listCustomers } from "../api/client";
-import { AISummary } from "../components/AISummary";
-import { MiniStat } from "../components/MiniStat";
+import { useEffect, useState } from "react";
+import { deleteAllCustomers, getCustomer, listCustomers } from "../api/client";
+import { CustomerDetailPane } from "../components/CustomerDetailPane";
 import type { CustomerDetail } from "../data/types";
 import { I } from "../icons";
-import { useIsDesktop } from "../lib/breakpoints";
+import { useIsDesktop, useIsTablet } from "../lib/breakpoints";
 import { onCustomersChanged } from "../lib/customerRefresh";
-import { fmtCNYRaw } from "../lib/format";
+import { fmtCNYBig } from "../lib/format";
 import type { GoFn } from "../App";
 
+type FilterId = "all" | "key" | "warn" | "lead";
+
 export function CustomerListScreen({ go }: { go: GoFn }) {
+  const isDesktop = useIsDesktop();
+  const isTablet = useIsTablet();
+  const isWide = isDesktop || isTablet;
+
   const [customers, setCustomers] = useState<CustomerDetail[]>([]);
   const [q, setQ] = useState("");
-  const [displayName, setDisplayName] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterId>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<CustomerDetail | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const isDesktop = useIsDesktop();
-
-  async function handleClearAll() {
-    if (customers.length === 0) return;
-    if (
-      !window.confirm(
-        `这将删除全部 ${customers.length} 个客户，包括他们的合同、订单、联系人、任务和风险记录。原始上传文档保留作为审计。继续吗？`,
-      )
-    )
-      return;
-    const typed = window.prompt(`再次确认：输入「清空全部客户」以继续。`);
-    if (typed !== "清空全部客户") {
-      if (typed !== null) window.alert("输入不匹配，已取消。");
-      return;
-    }
-    setBulkDeleting(true);
-    setBulkError(null);
-    try {
-      await deleteAllCustomers();
-      setCustomers([]);
-    } catch (e) {
-      setBulkError(e instanceof Error ? e.message : "清空失败");
-    } finally {
-      setBulkDeleting(false);
-    }
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +37,7 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
           if (cancelled || id !== requestId) return;
           setCustomers(rows);
           setLoadError(null);
+          if (!selectedId && rows.length > 0) setSelectedId(rows[0].id);
         })
         .catch((e) => {
           if (cancelled || id !== requestId) return;
@@ -75,155 +57,232 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
       stopListening();
       window.removeEventListener("focus", onFocus);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Lazy-load the full detail for the selected customer (desktop right pane).
   useEffect(() => {
-    // Greeting uses the platform's logged-in user. /api/me lives on the
-    // platform host (same origin as /win/), returns { display_name, ... }.
+    if (!isWide || !selectedId) {
+      setSelectedDetail(null);
+      return;
+    }
     let cancelled = false;
-    getMe()
-      .then((body) => {
-        if (cancelled) return;
-        const name = (body.display_name || body.username || "").trim();
-        if (name) setDisplayName(name);
+    getCustomer(selectedId)
+      .then((c) => {
+        if (!cancelled) setSelectedDetail(c ?? null);
       })
       .catch(() => {
-        /* silently fall back to nameless greeting */
+        if (!cancelled) setSelectedDetail(null);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedId, isWide]);
 
-  const filtered = customers.filter((c) => q === "" || c.name.includes(q));
-  const featured = filtered[0];
-  const rest = filtered.slice(1);
+  async function handleClearAll() {
+    if (customers.length === 0) return;
+    if (
+      !window.confirm(
+        `这将删除全部 ${customers.length} 个客户，包括他们的合同、订单、联系人、任务和风险记录。原始上传文档保留作为审计。继续吗？`,
+      )
+    )
+      return;
+    const typed = window.prompt(`再次确认：输入「清空全部客户」以继续。`);
+    if (typed !== "清空全部客户") {
+      if (typed !== null) window.alert("输入不匹配，已取消。");
+      return;
+    }
+    setBulkDeleting(true);
+    setBulkError(null);
+    try {
+      await deleteAllCustomers();
+      setCustomers([]);
+      setSelectedId(null);
+      setSelectedDetail(null);
+    } catch (e) {
+      setBulkError(e instanceof Error ? e.message : "清空失败");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
+  const filtered = customers.filter((c) => {
+    if (q && !c.name.includes(q)) return false;
+    if (filter === "all") return true;
+    if (filter === "key") return c.tag === "重点客户";
+    if (filter === "warn") return c.tag === "注意客户" || c.risk?.level === "high";
+    if (filter === "lead") return c.tag === "潜在客户";
+    return true;
+  });
+
+  const filters: { id: FilterId; label: string; count: number }[] = [
+    { id: "all", label: "全部", count: customers.length },
+    { id: "key", label: "重点", count: customers.filter((c) => c.tag === "重点客户").length },
+    {
+      id: "warn",
+      label: "注意",
+      count: customers.filter((c) => c.tag === "注意客户" || c.risk?.level === "high").length,
+    },
+    { id: "lead", label: "潜在", count: customers.filter((c) => c.tag === "潜在客户").length },
+  ];
+
+  // ──────────────── Desktop / tablet — two pane ────────────────
+  if (isWide) {
+    return (
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        {/* Left list pane */}
+        <div
+          style={{
+            width: 380,
+            flexShrink: 0,
+            borderRight: "1px solid var(--ink-100)",
+            display: "flex",
+            flexDirection: "column",
+            background: "#fff",
+          }}
+        >
+          <FilterStrip filter={filter} setFilter={setFilter} filters={filters} />
+
+          {bulkError && (
+            <div
+              style={{
+                margin: 12,
+                fontSize: 12,
+                color: "var(--risk-700)",
+                background: "var(--risk-100)",
+                border: "1px solid #f4cfcf",
+                padding: "8px 10px",
+                borderRadius: 8,
+              }}
+            >
+              {bulkError}
+            </div>
+          )}
+
+          <div className="scroll" style={{ flex: 1 }}>
+            {loading && <EmptyHint text="读取真实客户档案…" />}
+            {loadError && (
+              <EmptyHint text={`客户列表加载失败：${loadError}`} />
+            )}
+            {!loading && !loadError && filtered.length === 0 && (
+              <EmptyHint
+                text={q ? "没有匹配的客户" : "还没有客户档案"}
+                cta={
+                  q
+                    ? undefined
+                    : { label: "上传第一份资料", onClick: () => go("upload") }
+                }
+              />
+            )}
+            {filtered.map((c) => (
+              <CustomerRow
+                key={c.id}
+                customer={c}
+                active={c.id === selectedId}
+                onClick={() => setSelectedId(c.id)}
+              />
+            ))}
+          </div>
+
+          {customers.length > 0 && (
+            <div
+              style={{
+                padding: "10px 16px",
+                borderTop: "1px solid var(--ink-100)",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <button
+                onClick={handleClearAll}
+                disabled={bulkDeleting}
+                style={{
+                  height: 28,
+                  padding: "0 12px",
+                  borderRadius: 8,
+                  background: "transparent",
+                  border: "1px solid var(--ink-100)",
+                  color: "var(--ink-500)",
+                  cursor: bulkDeleting ? "not-allowed" : "pointer",
+                  fontFamily: "var(--font)",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  opacity: bulkDeleting ? 0.6 : 1,
+                }}
+              >
+                {bulkDeleting ? "清空中…" : "清空全部"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right detail pane */}
+        {selectedDetail ? (
+          <CustomerDetailPane
+            customer={selectedDetail}
+            onAsk={() => go("ask", { id: selectedDetail.id })}
+            onEdit={() => go("detail", { id: selectedDetail.id })}
+            compact={isTablet}
+          />
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--ink-400)",
+              fontSize: 13.5,
+              background: "var(--surface-2)",
+            }}
+          >
+            {selectedId ? "客户档案加载中…" : "选择左侧客户查看完整档案"}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ──────────────── Mobile — list-first with drill-in ────────────────
   return (
     <div className="screen" style={{ background: "var(--bg)" }}>
-      {/* Header — greeting + search */}
-      <div
-        style={{
-          padding: isDesktop ? "20px 32px 12px" : "8px 16px 8px",
-          maxWidth: isDesktop ? 1280 : undefined,
-          width: "100%",
-          margin: "0 auto",
-        }}
-      >
+      <div style={{ padding: "12px 16px 8px" }}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginTop: 4,
+            marginBottom: 12,
           }}
         >
-          <div>
-            <div style={{ color: "var(--ink-500)", fontSize: 13 }}>你好，</div>
-            <div
-              style={{
-                fontSize: isDesktop ? 28 : 22,
-                fontWeight: 700,
-                color: "var(--ink-900)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              {displayName || "—"}
-            </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--ink-900)", letterSpacing: "-0.01em" }}>
+            客户
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {customers.length > 0 && (
-              <button
-                onClick={handleClearAll}
-                disabled={bulkDeleting}
-                style={{
-                  height: 32,
-                  padding: "0 12px",
-                  borderRadius: 16,
-                  background: "transparent",
-                  border: "1px solid var(--ink-100)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--ink-500)",
-                  cursor: bulkDeleting ? "not-allowed" : "pointer",
-                  fontFamily: "var(--font)",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  opacity: bulkDeleting ? 0.6 : 1,
-                }}
-                aria-label="清空全部客户"
-              >
-                {bulkDeleting ? "清空中…" : "清空"}
-              </button>
-            )}
+          {customers.length > 0 && (
             <button
+              onClick={handleClearAll}
+              disabled={bulkDeleting}
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                background: "var(--surface)",
-                border: "1px solid var(--ink-100)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "var(--shadow-card)",
-                color: "var(--ink-700)",
-                cursor: "pointer",
-              }}
-              aria-label="search"
-            >
-              {I.search(18)}
-            </button>
-          </div>
-        </div>
-        {bulkError && (
-          <div
-            style={{
-              marginTop: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-              fontSize: 12,
-              color: "var(--risk-700)",
-              background: "var(--risk-100)",
-              border: "1px solid #f4cfcf",
-              padding: "6px 10px",
-              borderRadius: 10,
-            }}
-          >
-            <span>{bulkError}</span>
-            <button
-              onClick={() => setBulkError(null)}
-              style={{
-                border: "none",
+                height: 32,
+                padding: "0 12px",
+                borderRadius: 16,
                 background: "transparent",
-                color: "var(--risk-700)",
-                cursor: "pointer",
+                border: "1px solid var(--ink-100)",
+                color: "var(--ink-500)",
+                cursor: bulkDeleting ? "not-allowed" : "pointer",
                 fontFamily: "var(--font)",
                 fontSize: 12,
                 fontWeight: 600,
+                opacity: bulkDeleting ? 0.6 : 1,
               }}
-              aria-label="dismiss"
             >
-              关闭
+              {bulkDeleting ? "清空中…" : "清空"}
             </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      <div
-        className="scroll"
-        style={{
-          flex: 1,
-          padding: isDesktop ? "8px 32px 40px" : "4px 16px 100px",
-          width: "100%",
-          maxWidth: isDesktop ? 1280 : undefined,
-          margin: "0 auto",
-        }}
-      >
-        {/* Search input */}
+        {/* Search */}
         <div
           style={{
             display: "flex",
@@ -231,13 +290,12 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
             gap: 8,
             background: "var(--surface)",
             borderRadius: 14,
-            padding: "11px 14px",
+            padding: "10px 14px",
             border: "1px solid var(--ink-100)",
-            marginBottom: 16,
             boxShadow: "var(--shadow-card-soft)",
           }}
         >
-          <span style={{ color: "var(--ink-400)" }}>{I.search(18)}</span>
+          <span style={{ color: "var(--ink-400)", display: "flex" }}>{I.search(18)}</span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -252,241 +310,350 @@ export function CustomerListScreen({ go }: { go: GoFn }) {
               color: "var(--ink-800)",
             }}
           />
-          <span className="pill pill-ai" style={{ fontSize: 11, padding: "3px 8px" }}>
-            {I.spark(11)} AI
-          </span>
         </div>
 
-        {/* AI 今日要点 */}
-        <AISummary style={{ marginBottom: 16 }}>
-          {renderListInsight(customers, loading)}
-        </AISummary>
-
-        {loadError && <ListStateCard tone="risk" title="客户列表加载失败" detail={loadError} />}
-
-        {!loadError && !loading && filtered.length === 0 && (
-          <ListStateCard
-            tone="empty"
-            title={q ? "没有匹配的客户" : "还没有客户档案"}
-            detail={q ? "换个关键词再试试。" : "上传合同或名片后，客户会出现在这里。"}
-            actionLabel={q ? undefined : "上传资料"}
-            onAction={q ? undefined : () => go("upload")}
-          />
-        )}
-
-        {/* Featured customer */}
-        {!loadError && featured && (
-          <FeaturedCustomerCard
-            customer={featured}
-            onClick={() => go("detail", { id: featured.id })}
-          />
-        )}
-
-        {/* Other customers */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr",
-            gap: isDesktop ? 14 : 10,
-          }}
-        >
-          {!loadError && rest.map((c) => (
-            <CompactCustomerCard
-              key={c.id}
-              customer={c}
-              onClick={() => go("detail", { id: c.id })}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function renderListInsight(customers: CustomerDetail[], loading: boolean): ReactNode {
-  if (loading) return "正在读取真实客户档案…";
-  if (!customers.length) return "当前还没有客户档案。上传合同或名片后，AI 会自动整理客户、联系人和后续事项。";
-
-  const receivable = customers.reduce((sum, c) => sum + (c.metrics?.receivable ?? 0), 0);
-  const tasks = customers.reduce((sum, c) => sum + (c.metrics?.tasks ?? 0), 0);
-  const highRisk = customers.filter((c) => c.risk?.level === "high").length;
-  const parts = [
-    receivable > 0 ? `未收款 ${fmtCNYRaw(receivable)}` : null,
-    tasks > 0 ? `待办 ${tasks} 项` : null,
-    highRisk > 0 ? `高风险客户 ${highRisk} 个` : null,
-  ].filter(Boolean);
-
-  return (
-    <>
-      <span style={{ fontWeight: 600 }}>当前 {customers.length} 个客户档案：</span>{" "}
-      {parts.length ? parts.join("；") : "暂无待办、风险或未收款。"}
-    </>
-  );
-}
-
-function ListStateCard({
-  tone,
-  title,
-  detail,
-  actionLabel,
-  onAction,
-}: {
-  tone: "risk" | "empty";
-  title: string;
-  detail: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  const isRisk = tone === "risk";
-  return (
-    <div
-      className="card"
-      style={{
-        padding: 16,
-        marginBottom: 12,
-        border: isRisk ? "1px solid #f4cfcf" : "1px solid var(--ink-100)",
-        background: isRisk ? "var(--risk-100)" : "var(--surface)",
-      }}
-    >
-      <div style={{ fontSize: 15, fontWeight: 700, color: isRisk ? "var(--risk-700)" : "var(--ink-900)" }}>
-        {title}
-      </div>
-      <div style={{ fontSize: 13, color: isRisk ? "var(--risk-700)" : "var(--ink-500)", marginTop: 6 }}>
-        {detail}
-      </div>
-      {actionLabel && onAction && (
-        <button className="btn btn-primary" onClick={onAction} style={{ marginTop: 12 }}>
-          {I.cloud(16, "#fff")}
-          <span>{actionLabel}</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
-function FeaturedCustomerCard({
-  customer,
-  onClick,
-}: {
-  customer: CustomerDetail;
-  onClick: () => void;
-}) {
-  return (
-    <div
-      className="card"
-      style={{ padding: 16, marginBottom: 12, cursor: "pointer" }}
-      onClick={onClick}
-    >
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-            <div
-              style={{
-                fontSize: 17,
-                fontWeight: 700,
-                color: "var(--ink-900)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              {customer.name}
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: "var(--ink-500)" }}>
-            最近更新 · {customer.updated}
-          </div>
-        </div>
-      </div>
-
-      {/* AI summary inline */}
-      <div
-        style={{
-          marginTop: 12,
-          padding: "10px 12px",
-          background: "var(--ai-50)",
-          borderRadius: 12,
-          border: "1px solid #e7ecfb",
-          display: "flex",
-          gap: 8,
-          alignItems: "flex-start",
-        }}
-      >
-        <span style={{ color: "var(--ai-500)", marginTop: 2 }}>{I.spark(13)}</span>
-        <div style={{ fontSize: 13, lineHeight: 1.55, color: "var(--ink-800)" }}>
-          {customer.aiSummary}
-        </div>
-      </div>
-
-      {/* Mini stats */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          marginTop: 12,
-          paddingTop: 12,
-          borderTop: "1px dashed var(--ink-100)",
-        }}
-      >
-        <MiniStat label="未收款" value={fmtCNYRaw(customer.metrics.receivable)} tone="warn" />
-        <div style={{ width: 1, background: "var(--ink-100)" }} />
-        <MiniStat label="合同" value={customer.metrics.contracts} />
-        <div style={{ width: 1, background: "var(--ink-100)" }} />
-        <MiniStat label="待办" value={customer.metrics.tasks} tone="ai" />
-        <div style={{ width: 1, background: "var(--ink-100)" }} />
-        <MiniStat label="联系人" value={customer.metrics.contacts} />
-      </div>
-    </div>
-  );
-}
-
-function CompactCustomerCard({
-  customer,
-  onClick,
-}: {
-  customer: CustomerDetail;
-  onClick: () => void;
-}) {
-  return (
-    <div
-      className="card"
-      style={{ padding: 14, cursor: "pointer" }}
-      onClick={onClick}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
-              {customer.name}
-            </div>
-            <span className="pill pill-ink" style={{ fontSize: 10, padding: "2px 7px" }}>
-              {customer.tag}
-            </span>
-          </div>
+        {bulkError && (
           <div
             style={{
+              marginTop: 8,
               fontSize: 12,
-              color: "var(--ink-500)",
-              marginTop: 2,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
+              color: "var(--risk-700)",
+              background: "var(--risk-100)",
+              border: "1px solid #f4cfcf",
+              padding: "6px 10px",
+              borderRadius: 8,
             }}
           >
-            <span style={{ color: "var(--ai-500)" }}>{I.spark(11)}</span>
+            {bulkError}
+          </div>
+        )}
+      </div>
+
+      <div className="scroll" style={{ flex: 1, padding: "0 16px 100px" }}>
+        {loading && (
+          <div style={{ padding: 24, textAlign: "center", color: "var(--ink-400)", fontSize: 13 }}>
+            读取真实客户档案…
+          </div>
+        )}
+        {loadError && (
+          <div className="card" style={{ padding: 16, color: "var(--risk-700)" }}>
+            客户列表加载失败：{loadError}
+          </div>
+        )}
+        {!loading && !loadError && filtered.length === 0 && (
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
+              {q ? "没有匹配的客户" : "还没有客户档案"}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--ink-500)", marginTop: 6 }}>
+              {q ? "换个关键词再试试。" : "上传合同或名片后，客户会出现在这里。"}
+            </div>
+            {!q && (
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: 12 }}
+                onClick={() => go("upload")}
+              >
+                {I.cloud(16, "#fff")}
+                <span>上传资料</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {filtered.map((c) => (
+          <MobileCustomerCard
+            key={c.id}
+            customer={c}
+            onClick={() => go("detail", { id: c.id })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────── pieces ────────────────
+
+function FilterStrip({
+  filter,
+  setFilter,
+  filters,
+}: {
+  filter: FilterId;
+  setFilter: (f: FilterId) => void;
+  filters: { id: FilterId; label: string; count: number }[];
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 22,
+        padding: "14px 24px 0",
+        borderBottom: "1px solid var(--ink-100)",
+      }}
+    >
+      {filters.map((t) => {
+        const active = t.id === filter;
+        return (
+          <button
+            key={t.id}
+            onClick={() => setFilter(t.id)}
+            style={{
+              padding: "4px 0 12px",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              color: active ? "var(--ink-900)" : "var(--ink-400)",
+              fontWeight: active ? 700 : 500,
+              fontSize: 13,
+              borderBottom: active ? "2px solid var(--ink-900)" : "2px solid transparent",
+              marginBottom: -1,
+              fontFamily: "var(--font)",
+            }}
+          >
+            {t.label}
             <span
+              className="num"
               style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                fontSize: 10.5,
+                fontWeight: 600,
+                color: active ? "var(--ink-500)" : "var(--ink-300)",
               }}
             >
-              {customer.aiSummary.slice(0, 30)}…
+              {t.count}
             </span>
-          </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CustomerRow({
+  customer,
+  active,
+  onClick,
+}: {
+  customer: CustomerDetail;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const dot =
+    customer.risk?.level === "high" ? "#EF4444" :
+    customer.risk?.level === "med" ? "#F59E0B" :
+    customer.tag === "潜在客户" ? "#2D9BD8" : "#10B981";
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "13px 24px",
+        background: active ? "var(--brand-50)" : "transparent",
+        border: "none",
+        borderBottom: "1px solid var(--ink-100)",
+        borderLeft: active ? "2px solid var(--brand-500)" : "2px solid transparent",
+        paddingLeft: active ? 22 : 24,
+        cursor: "pointer",
+        textAlign: "left",
+        fontFamily: "var(--font)",
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 9,
+          flexShrink: 0,
+          background: customer.color || "#1F5FA3",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11.5,
+          fontWeight: 700,
+        }}
+      >
+        {customer.monogram}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span
+            style={{
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: "var(--ink-900)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {customer.name}
+          </span>
+          <span
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: 3,
+              background: dot,
+              flexShrink: 0,
+            }}
+          />
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, color: "var(--ink-400)" }}>{customer.updated}</div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--ink-500)",
+            marginTop: 3,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {customer.aiSummary.slice(0, 36)}{customer.aiSummary.length > 36 ? "…" : ""}
         </div>
       </div>
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        {customer.metrics.receivable > 0 ? (
+          <div className="num" style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-900)" }}>
+            ¥ {fmtCNYBig(customer.metrics.receivable)}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "var(--ink-300)" }}>—</div>
+        )}
+        <div style={{ fontSize: 10.5, color: "var(--ink-400)", marginTop: 2 }}>{customer.updated}</div>
+      </div>
+    </button>
+  );
+}
+
+function MobileCustomerCard({
+  customer,
+  onClick,
+}: {
+  customer: CustomerDetail;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="card"
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: 14,
+        marginBottom: 10,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        fontFamily: "var(--font)",
+      }}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          flexShrink: 0,
+          background: customer.color || "#1F5FA3",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 13,
+          fontWeight: 700,
+        }}
+      >
+        {customer.monogram}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-900)" }}>
+            {customer.name}
+          </span>
+          <span className="pill pill-ink" style={{ fontSize: 10, padding: "2px 7px" }}>
+            {customer.tag}
+          </span>
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--ink-500)",
+            marginTop: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span style={{ color: "var(--ai-500)", display: "flex" }}>{I.spark(11)}</span>
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {customer.aiSummary.slice(0, 36)}{customer.aiSummary.length > 36 ? "…" : ""}
+          </span>
+        </div>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        {customer.metrics.receivable > 0 && (
+          <div className="num" style={{ fontSize: 13, fontWeight: 600, color: "var(--warn-700)" }}>
+            ¥ {fmtCNYBig(customer.metrics.receivable)}
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 2 }}>
+          {customer.updated}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function EmptyHint({
+  text,
+  cta,
+}: {
+  text: string;
+  cta?: { label: string; onClick: () => void };
+}) {
+  return (
+    <div
+      style={{
+        padding: "40px 24px",
+        textAlign: "center",
+        color: "var(--ink-400)",
+        fontSize: 13,
+      }}
+    >
+      <div>{text}</div>
+      {cta && (
+        <button
+          onClick={cta.onClick}
+          style={{
+            marginTop: 12,
+            padding: "8px 14px",
+            borderRadius: 10,
+            background: "var(--ink-900)",
+            color: "#fff",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: "var(--font)",
+          }}
+        >
+          {cta.label}
+        </button>
+      )}
     </div>
   );
 }
