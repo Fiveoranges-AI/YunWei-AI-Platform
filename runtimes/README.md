@@ -88,6 +88,24 @@ Until that lands, dedicated runtimes must:
 2. Reject any request that doesn't carry an `X-User-Id` header set by
    the platform.
 
+### Identity headers (current contract)
+
+Every `POST /assistant/chat` from the platform carries:
+
+- `X-Platform-Service: yunwei-win` — identifies the caller as the
+  `yunwei_win` service. Runtimes MAY use this to reject calls that
+  didn't come from a known platform service once more callers exist.
+- `X-User-Id: <platform user id>` — opaque per-user identifier the
+  runtime SHOULD record in its audit log. The platform does not send
+  `X-Enterprise-Id`: a dedicated runtime is bound 1:1 to an enterprise
+  via the registry, and enterprise scope is enforced server-side
+  *before* the runtime is called. Treating a header as the source of
+  tenant truth would defeat that gate.
+
+Future HMAC support will add `X-Auth-Timestamp`, `X-Auth-Nonce`, and
+`X-Auth-Signature` (see `platform_app/hmac_sign.py`); the identity
+headers above will remain.
+
 ## Registering a runtime
 
 ```python
