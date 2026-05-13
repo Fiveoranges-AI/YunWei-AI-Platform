@@ -227,7 +227,7 @@ def redeem_invite_and_register(
     email: str | None,
     enterprise_id: str,
 ) -> None:
-    """Atomic flow for /api/register: redeem the invite + create the user
+    """Atomic flow for /api/auth/register: redeem the invite + create the user
     + create the per-user enterprise + add membership row. All-or-nothing.
 
     Raises InviteError on user-fixable failures (bad code, already used,
