@@ -3,9 +3,10 @@
 The platform v3 stack on Railway is **two services backed by the same
 Docker image**, both built from `platform/Dockerfile`:
 
-1. **`platform-app`** — FastAPI web service. Serves `/`, `/win/`,
-   `/win/api/*`, `/api/auth/*`, `/api/admin/*`, and the legacy
-   `/<client>/<agent>/` HMAC reverse proxy.
+1. **`platform-app`** — FastAPI web service. Serves the canonical v3
+   surface: page routes (`/`, `/login`, `/register`, `/admin`, `/win/`)
+   and the `/api/*` browser API (`/api/auth/*`, `/api/me`, `/api/win/*`,
+   `/api/admin/*`, `/api/enterprise/*`). No legacy reverse proxy.
 2. **`win-ingest-worker`** — long-running RQ worker that drains the
    `yunwei_win` ingest queue. No HTTP listener.
 

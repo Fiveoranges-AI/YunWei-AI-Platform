@@ -6,9 +6,11 @@ The platform routes between them via the `runtime_registry` table in the
 platform metadata database (see `platform_app/runtime_registry.py`).
 
 Customer-facing code never sees a dedicated runtime URL. The Win SPA
-calls `POST /win/api/assistant/chat` on the platform; the platform
-resolves the runtime binding for the caller's enterprise and forwards
-server-side. A runtime URL leaking to the browser is a security bug.
+calls `POST /api/win/assistant/chat` on the platform (same origin); the
+platform resolves the runtime binding for the caller's enterprise and
+forwards to the runtime **server-side only**. Runtime URLs never appear
+in a browser request, a page URL, or any `/api/*` response — a runtime
+URL leaking to the browser is a security bug.
 
 ## Endpoints
 
@@ -85,14 +87,14 @@ Status codes:
 
 ## Auth
 
-The current `POST /win/api/assistant/chat` → dedicated-runtime hop uses
-a private network (Railway internal DNS or a VPC peering); the runtime
-trusts the platform on the basis of network reachability.
+The current `POST /api/win/assistant/chat` → dedicated-runtime hop is
+server-to-server only and uses a private network (Railway internal DNS
+or a VPC peering); the runtime trusts the platform on the basis of
+network reachability.
 
 When dedicated runtimes are exposed over the public internet (or a
-shared network), they must adopt the same HMAC scheme that
-`platform_app/proxy.py` uses for the customer-agent gateway. The
-signing module is `platform_app/hmac_sign.py`:
+shared network), they must adopt the HMAC scheme defined in
+`platform_app/hmac_sign.py`:
 
 - Headers: `X-Tenant-Client`, `X-Tenant-Agent`, `X-User-Id`,
   `X-User-Name`, `X-User-Role`, `X-Auth-Timestamp`, `X-Auth-Nonce`,
@@ -152,7 +154,7 @@ runtime. `capability` is currently always `assistant` but will expand
 ## Why no customer-facing URL
 
 The customer's only entry point is the Win SPA at `/win/`, which makes
-same-origin XHRs to `/win/api/*`. The platform decides per request
+same-origin XHRs to `/api/win/*`. The platform decides per request
 whether to use the shared assistant or forward to a dedicated runtime.
 
 This means:
@@ -160,7 +162,7 @@ This means:
 - A dedicated runtime can move (different host, different port,
   different region) without any SPA change.
 - The runtime never sees an end-user cookie or session, so a runtime
-  compromise can't impersonate the user against `/win/api/*`.
+  compromise can't impersonate the user against `/api/win/*`.
 - Entitlement enforcement (`platform_app.entitlements`) happens once,
   server-side, on the platform — runtimes don't need to re-implement
   plan checks.

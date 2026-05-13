@@ -1,4 +1,4 @@
-"""POST /api/ask — natural-language Q&A."""
+"""POST /api/win/ask — natural-language Q&A."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
 
 
-@router.post("/api/ask")
+@router.post("/ask")
 async def ask(
     payload: AskRequest,
     session: AsyncSession = Depends(get_session),

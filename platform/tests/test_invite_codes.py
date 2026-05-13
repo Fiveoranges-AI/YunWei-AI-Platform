@@ -2,11 +2,11 @@
 
 Covers:
   - GET /api/invite/{code} validity probing (each failure mode)
-  - POST /api/register happy path → user + enterprise + member + session
+  - POST /api/auth/register happy path → user + enterprise + member + session
   - Double-redeem fails atomically
   - Revoked / expired codes rejected
   - Username/format/password validation
-  - /api/register also wires up the user so /win/api/* gets 200 instead
+  - /api/auth/register also wires up the user so /api/win/* gets 200 instead
     of 401 (proves the middleware sees the new enterprise)
 """
 from __future__ import annotations
@@ -67,7 +67,7 @@ def test_register_happy_path_creates_everything():
         "display_name": "Alice 测试",
         "email": "alice@example.com",
     }
-    r = c.post("/api/register", json=body)
+    r = c.post("/api/auth/register", json=body)
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["ok"] is True
@@ -118,11 +118,11 @@ def test_register_double_use_same_code():
         "code": code, "username": "first", "password": "passwd1234",
         "display_name": "First", "email": None,
     }
-    assert c.post("/api/register", json=body).status_code == 200
+    assert c.post("/api/auth/register", json=body).status_code == 200
 
     body["username"] = "second"
     body["display_name"] = "Second"
-    r = c.post("/api/register", json=body)
+    r = c.post("/api/auth/register", json=body)
     assert r.status_code == 409
     assert r.json()["detail"]["error"] == "code_redeemed"
 
@@ -131,7 +131,7 @@ def test_register_revoked_code():
     code = _mint_code()
     db.revoke_invite(code)
     c = _client()
-    r = c.post("/api/register", json={
+    r = c.post("/api/auth/register", json={
         "code": code, "username": "bob", "password": "passwd1234",
         "display_name": "Bob",
     })
@@ -144,13 +144,13 @@ def test_register_username_collision():
     c1 = _mint_code()
     c2 = _mint_code()
     c = _client()
-    r1 = c.post("/api/register", json={
+    r1 = c.post("/api/auth/register", json={
         "code": c1, "username": "carol", "password": "passwd1234",
         "display_name": "Carol",
     })
     assert r1.status_code == 200
 
-    r2 = c.post("/api/register", json={
+    r2 = c.post("/api/auth/register", json={
         "code": c2, "username": "carol", "password": "passwd1234",
         "display_name": "Carol-2",
     })
@@ -171,18 +171,18 @@ def test_register_username_collision():
 ])
 def test_register_validation_errors(body, expected):
     c = _client()
-    r = c.post("/api/register", json=body)
+    r = c.post("/api/auth/register", json=body)
     assert r.status_code == 400
     assert r.json()["detail"]["error"] == expected
 
 
 def test_register_followed_by_win_request():
-    """Full flow: register, then call /win/api/customers using the same
+    """Full flow: register, then call /api/win/customers using the same
     cookie. The middleware should resolve the new enterprise and provision
     its tenant DB lazily; the response should be a 200 with an empty list."""
     code = _mint_code()
     c = _client()
-    r = c.post("/api/register", json={
+    r = c.post("/api/auth/register", json={
         "code": code, "username": "dawn", "password": "passwd1234",
         "display_name": "Dawn",
     })
@@ -191,7 +191,7 @@ def test_register_followed_by_win_request():
     # the session cookie explicitly.
     sid = r.cookies.get("app_session")
     assert sid
-    r2 = c.get("/win/api/customers", cookies={"app_session": sid})
+    r2 = c.get("/api/win/customers", cookies={"app_session": sid})
     assert r2.status_code == 200, r2.text
     assert isinstance(r2.json(), list)
     # Cleanup the per-tenant DB we just provisioned to keep test idempotent.

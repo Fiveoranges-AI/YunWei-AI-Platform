@@ -7,7 +7,7 @@ HMAC, no reverse proxy).
 Usage from platform_app::
 
     from yunwei_win import router as win_router
-    app.include_router(win_router, prefix="/win/api")
+    app.include_router(win_router, prefix="/api/win")
 
 Per-enterprise database isolation: see ``yunwei_win.db`` — each enterprise
 gets its own Postgres database, lazily provisioned on first access.

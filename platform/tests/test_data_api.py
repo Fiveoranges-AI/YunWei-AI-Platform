@@ -249,17 +249,7 @@ def test_bronze_unknown_source_type_400(client, user_with_acl):
     assert r.status_code == 400
 
 
-# ─── /data page route ───────────────────────────────────────────
-
-def test_data_page_redirects_to_login_when_unauth(client):
-    r = client.get("/data", follow_redirects=False)
-    # main.py serves login.html (200) when no session cookie — same pattern as "/"
-    assert r.status_code == 200
-    assert b"login" in r.content.lower() or b"\xe7\x99\xbb\xe5\xbd\x95" in r.content  # 登录
-
-
-def test_data_page_serves_console_when_authed(client, user_with_acl):
-    _, sid = user_with_acl
-    r = client.get("/data", cookies={"app_session": sid})
-    assert r.status_code == 200
-    assert b"data-layer" in r.content or b"\xe6\x95\xb0\xe6\x8d\xae\xe4\xb8\xad\xe5\xbf\x83" in r.content  # 数据中心
+# The ``/data`` HTML page was removed during the URL canonicalize work
+# (replaced by the 智通客户 SPA at ``/win/``). The 404 contract for that
+# legacy route is pinned in ``test_url_contract.py``; the data-layer
+# JSON API at ``/api/data/*`` is what we exercise above.

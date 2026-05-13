@@ -1,6 +1,6 @@
 """Shared assistant endpoint for Free/Lite/Pro users.
 
-Mounted at ``/win/api/assistant/chat``. Reads enterprise scope from the
+Mounted at ``/api/win/assistant/chat``. Reads enterprise scope from the
 server-side ``request.state.auth_context`` only; the request body is
 never trusted to carry a tenant ID.
 

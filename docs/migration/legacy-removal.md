@@ -141,3 +141,77 @@ Railway dashboard Start Command before promoting.
   for the HMAC proxy. Real `.env` files live on deploy hosts (not in
   the repo), so production tenants are unaffected. Restore the
   example by copying from the archive if a v2 tenant is provisioned.
+
+## URL surface canonicalization (post-PR #77)
+
+Follow-up to PR #77. The browser-facing URL surface was canonicalized
+onto a single `/api/*` prefix, the Win product API was re-mounted, and
+the remaining legacy HMAC reverse-proxy code was deleted outright. No
+backwards-compat shims, no redirects: every legacy URL listed below
+returns 404.
+
+### Canonical browser API contract
+
+| URL                       | Owner                          |
+| ------------------------- | ------------------------------ |
+| `POST /api/auth/login`    | `platform_app.api`             |
+| `POST /api/auth/logout`   | `platform_app.api`             |
+| `POST /api/auth/register` | `platform_app.api`             |
+| `GET  /api/me`            | `platform_app.api`             |
+| `/api/win/*`              | `yunwei_win` (mounted)         |
+| `/api/admin/*`            | `platform_app.admin_api`       |
+| `/api/enterprise/*`       | `platform_app.enterprise_api`  |
+
+`/api/enterprise/*` is the current caller's enterprise + member API.
+It is pure API — there is no `/enterprise/:id` page route and there
+never will be.
+
+Page routes (everything outside `/api/*`) are the closed set: `/`,
+`/login`, `/register`, `/admin`, `/win/`. Anything else 404s.
+
+### URLs that were deleted
+
+All of the following return 404 on every method:
+
+- `/win/api/*` — Win product API; replaced by `/api/win/*`.
+- `/<client>/<agent>/*` — legacy HMAC customer-agent reverse proxy.
+- `/api/agents` — admin list for the above proxy.
+- `/data` — legacy data-layer admin page.
+- `/enterprise/:id` — legacy admin page route.
+- `/auth/login`, `/auth/logout` — moved under `/api/auth/`.
+- `/api/register` — renamed to `/api/auth/register` for symmetry.
+
+### Files that were deleted
+
+- `platform/platform_app/proxy.py` — the entire HMAC reverse-proxy
+  module (Agent A). The `proxy_log` table and `tenants` table reads
+  from it are gone with it. `hmac_sign.py` survives as the signing kit
+  for future dedicated-runtime auth.
+- `platform/static/data.html` — orphan page for the deleted `/data`
+  route (Agent C).
+- `platform/static/enterprise.html` — orphan page for the deleted
+  `/enterprise/:id` route. Removed in this commit; the file had no
+  remaining references after PR #77.
+
+### `db.py` docstring
+
+`redeem_invite_and_register` in `platform/platform_app/db.py` had a
+docstring referencing the old `/api/register` URL; updated in this
+commit to `/api/auth/register`.
+
+### `.gitignore`
+
+Stale `app/` build-artifact ignore rules removed (the directory was
+deleted earlier in v3).
+
+### What did **not** change
+
+- `yunwei_win` package internals — the URL move is a mount-prefix
+  change on the platform side; the routers inside `yunwei_win/api/`
+  keep their relative paths.
+- Runtime contract — dedicated runtimes still receive
+  `POST /assistant/chat` server-to-server. The runtime URL is still
+  never visible to the browser. See `runtimes/README.md`.
+- `apps/yunwei-win-web` SPA build — the frontend already moved to the
+  new URLs in PR #77 (`refactor(win-web): point frontend at /api/win
+  and new page routes`).

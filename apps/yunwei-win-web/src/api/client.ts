@@ -1,4 +1,4 @@
-// Backend API client for /win/api/. The backend (yunwei_win, integrated
+// Backend API client for /api/win/. The backend (yunwei_win, integrated
 // into platform_app) returns the raw yunwei-tools shape; this module
 // translates each response into the design's shape (CustomerListItem,
 // CustomerDetail, etc.). Mock fallback is limited to Vite dev mode; production
@@ -33,7 +33,7 @@ import type {
 import { fmtRelative } from "../lib/format";
 import { markCustomersChanged } from "../lib/customerRefresh";
 
-const API_BASE = "/win/api";
+const API_BASE = "/api/win";
 const MOCK_DELAY_MS = 200;
 const USE_MOCK_FALLBACK = import.meta.env.DEV;
 

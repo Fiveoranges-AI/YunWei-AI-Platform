@@ -1,4 +1,4 @@
-"""Routing-policy tests for POST /win/api/assistant/chat (Task 7).
+"""Routing-policy tests for POST /api/win/assistant/chat (Task 7).
 
 These tests focus on the *decision*: does the request go to the shared
 QA service (Free/Lite + Pro-without-binding), or does it forward to a
@@ -49,7 +49,7 @@ def _mint_code() -> str:
 def _register(c: TestClient, username: str) -> tuple[str, str]:
     code = _mint_code()
     r = c.post(
-        "/api/register",
+        "/api/auth/register",
         json={
             "code": code,
             "username": username,
@@ -176,7 +176,7 @@ def test_pro_with_binding_forwards_to_dedicated_runtime(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "pro question", "customer_id": "all"},
             cookies={"app_session": sid},
         )
@@ -213,7 +213,7 @@ def test_pro_without_binding_uses_shared_assistant(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "pro no binding"},
             cookies={"app_session": sid},
         )
@@ -250,7 +250,7 @@ def test_dedicated_runtime_error_falls_back_to_shared(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "with broken runtime"},
             cookies={"app_session": sid},
         )
@@ -291,7 +291,7 @@ def test_lite_with_binding_still_uses_shared(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "lite question"},
             cookies={"app_session": sid},
         )
@@ -326,7 +326,7 @@ def test_unhealthy_runtime_skips_dedicated_and_uses_shared(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "unhealthy runtime"},
             cookies={"app_session": sid},
         )

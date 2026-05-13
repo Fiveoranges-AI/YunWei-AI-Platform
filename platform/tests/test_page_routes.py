@@ -1,8 +1,13 @@
-"""Page route smoke tests for /admin and /enterprise/<id>.
+"""Page route smoke tests for /admin and the /win SPA.
 
 The HTML payloads are not fully exercised here — we just confirm the
 routes serve the expected static file when the user is logged in and
 fall through to the login page otherwise.
+
+Routes that used to exist but no longer do (``/data``,
+``/enterprise/<id>``, the ``/<client>/<agent>`` HMAC catch-all,
+``/api/agents``) have their 404 contract pinned in
+``test_url_contract.py``.
 """
 from __future__ import annotations
 import time
@@ -32,7 +37,7 @@ def logged_in():
 def test_admin_page_serves_login_when_unauthed(client):
     db.init()
     r = client.get("/admin")
-    # login.html marker (登录 in UTF-8) — same fall-through as / and /data
+    # login.html marker (登录 in UTF-8) — same fall-through as /.
     assert r.status_code == 200
     assert b"\xe7\x99\xbb\xe5\xbd\x95" in r.content or b"login" in r.content.lower()
 
@@ -67,31 +72,21 @@ def test_admin_page_serves_dashboard_when_authed(client, logged_in):
     assert b"\xe5\xb9\xb3\xe5\x8f\xb0\xe7\xae\xa1\xe7\x90\x86\xe5\x90\x8e\xe5\x8f\xb0" in r.content
 
 
-def test_enterprise_page_serves_when_authed(client, logged_in):
-    r = client.get("/enterprise/yinhu", cookies={"app_session": logged_in})
-    assert r.status_code == 200
-    # Marker (企业资料)
-    assert b"\xe4\xbc\x81\xe4\xb8\x9a\xe8\xb5\x84\xe6\x96\x99" in r.content
-
-
-def test_enterprise_page_does_not_get_eaten_by_agent_proxy(client, logged_in):
-    """The customer-agent catch-all matches /<client>/<agent>/.../ —
-    /enterprise/<id> is two segments and would match unless our explicit
-    route runs first. Regression test for that ordering."""
-    r = client.get("/enterprise/yinhu", cookies={"app_session": logged_in})
-    assert r.status_code == 200
-    # Should NOT be the proxy 403 (cross_agent_blocked) or 404
-    assert b"cross_agent_blocked" not in r.content
-
-
 def test_me_includes_platform_admin_and_enterprises(client, logged_in):
-    """/api/me payload now exposes is_platform_admin + enterprises so
-    the agents.html nav can hide/show the platform admin link."""
+    """/api/me payload exposes is_platform_admin + enterprises so the
+    chrome can hide/show the platform admin link.
+
+    A logged-in user with no enterprise membership must still get a 200
+    (we don't want to lock out mid-onboarding users). ``enterprise_id``
+    and ``entitlements`` are ``None`` in that case — see
+    ``test_url_contract.py`` for the enterprise-bound contract."""
     r = client.get("/api/me", cookies={"app_session": logged_in})
     assert r.status_code == 200
     body = r.json()
     assert body["is_platform_admin"] is False
     assert body["enterprises"] == []
+    assert body["enterprise_id"] is None
+    assert body["entitlements"] is None
 
 
 def test_win_root_serves_spa_when_authed(client, logged_in):

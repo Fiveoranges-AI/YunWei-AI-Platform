@@ -2,10 +2,10 @@
 
 Covered surface:
 
-- PATCH  /api/customers/{id}
-- PUT    /api/customers/{id}/contacts
-- DELETE /api/customers/{id}
-- DELETE /api/customers?confirm=...
+- PATCH  /customers/{id}
+- PUT    /customers/{id}/contacts
+- DELETE /customers/{id}
+- DELETE /customers?confirm=...
 
 Uses the same in-memory SQLite pattern as ``test_ingest_auto_flow.py``: we
 override the autouse Postgres-truncating fixture, enable SQLite foreign-key
@@ -106,7 +106,7 @@ async def _seed_customer(
         return c.id
 
 
-# ---------- PATCH /api/customers/{id} ------------------------------------
+# ---------- PATCH /customers/{id} ------------------------------------
 
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_patch_customer_updates_fields() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.patch(
-                f"/api/customers/{customer_id}",
+                f"/customers/{customer_id}",
                 json={
                     "full_name": "新名称有限公司",
                     "short_name": "新简称",
@@ -158,7 +158,7 @@ async def test_patch_customer_404_missing() -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             unknown = "00000000-0000-0000-0000-000000000000"
             resp = await client.patch(
-                f"/api/customers/{unknown}",
+                f"/customers/{unknown}",
                 json={"full_name": "X"},
             )
             assert resp.status_code == 404
@@ -177,7 +177,7 @@ async def test_patch_customer_rejects_empty_full_name() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.patch(
-                f"/api/customers/{customer_id}",
+                f"/customers/{customer_id}",
                 json={"full_name": ""},
             )
             assert resp.status_code == 400
@@ -192,7 +192,7 @@ async def test_patch_customer_rejects_empty_full_name() -> None:
         await engine.dispose()
 
 
-# ---------- PUT /api/customers/{id}/contacts -----------------------------
+# ---------- PUT /customers/{id}/contacts -----------------------------
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_put_contacts_creates_updates_deletes() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.put(
-                f"/api/customers/{customer_id}/contacts",
+                f"/customers/{customer_id}/contacts",
                 json={
                     "contacts": [
                         {
@@ -321,7 +321,7 @@ async def test_put_contacts_rejects_empty_name() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.put(
-                f"/api/customers/{customer_id}/contacts",
+                f"/customers/{customer_id}/contacts",
                 json={
                     "contacts": [
                         {"name": "李工", "role": "buyer"},
@@ -344,7 +344,7 @@ async def test_put_contacts_rejects_empty_name() -> None:
         await engine.dispose()
 
 
-# ---------- DELETE /api/customers/{id} -----------------------------------
+# ---------- DELETE /customers/{id} -----------------------------------
 
 
 @pytest.mark.asyncio
@@ -415,7 +415,7 @@ async def test_delete_single_customer_cascades() -> None:
         app = _build_app(engine)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.delete(f"/api/customers/{cid}")
+            resp = await client.delete(f"/customers/{cid}")
             assert resp.status_code == 200, resp.text
             body = resp.json()
             assert body["customer_id"] == str(cid)
@@ -478,13 +478,13 @@ async def test_delete_customer_404() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             unknown = "00000000-0000-0000-0000-000000000000"
-            resp = await client.delete(f"/api/customers/{unknown}")
+            resp = await client.delete(f"/customers/{unknown}")
             assert resp.status_code == 404
     finally:
         await engine.dispose()
 
 
-# ---------- DELETE /api/customers (bulk) ---------------------------------
+# ---------- DELETE /customers (bulk) ---------------------------------
 
 
 @pytest.mark.asyncio
@@ -499,14 +499,14 @@ async def test_delete_all_requires_confirm() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             # Missing confirm
-            resp = await client.delete("/api/customers")
+            resp = await client.delete("/customers")
             assert resp.status_code == 400
             # Wrong confirm
-            resp = await client.delete("/api/customers?confirm=nope")
+            resp = await client.delete("/customers?confirm=nope")
             assert resp.status_code == 400
             # Right confirm
             resp = await client.delete(
-                "/api/customers?confirm=DELETE_ALL_IMPORTED_CUSTOMERS"
+                "/customers?confirm=DELETE_ALL_IMPORTED_CUSTOMERS"
             )
             assert resp.status_code == 200
             body = resp.json()
@@ -557,7 +557,7 @@ async def test_delete_all_clears_multiple() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.delete(
-                "/api/customers?confirm=DELETE_ALL_IMPORTED_CUSTOMERS"
+                "/customers?confirm=DELETE_ALL_IMPORTED_CUSTOMERS"
             )
             assert resp.status_code == 200, resp.text
             body = resp.json()

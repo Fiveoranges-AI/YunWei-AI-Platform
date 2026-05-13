@@ -188,7 +188,7 @@ const api = (path, opts={}) => fetch(path, { credentials: 'same-origin', ...opts
 
 const state = { view: 'enterprises', items: [], selectedId: null, filter: '' };
 
-function logout() { fetch('/auth/logout', { method: 'POST' }).then(() => location.href = '/'); }
+function logout() { fetch('/api/auth/logout', { method: 'POST' }).then(() => location.href = '/'); }
 function toast(msg, isErr=false) {
   const t = document.getElementById('toast');
   t.textContent = msg;

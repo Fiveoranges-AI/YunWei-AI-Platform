@@ -1,4 +1,4 @@
-"""Tests for the async RQ-backed /api/ingest/jobs API (Agent A surface).
+"""Tests for the async RQ-backed /api/win/ingest/jobs API (Agent A surface).
 
 We don't actually start an RQ worker; we stub ``enqueue_ingest_job`` so the
 API can demonstrate enqueue-on-success / failure-on-redis-down without
@@ -77,8 +77,8 @@ def _build_app(engine) -> FastAPI:
             yield session
 
     app.dependency_overrides[get_session] = session_dep
-    # Mirrors platform_app/main.py: yinhu router is mounted at /win.
-    app.include_router(yinhu_router, prefix="/win")
+    # Mirrors platform_app/main.py: yinhu router is mounted at /api/win.
+    app.include_router(yinhu_router, prefix="/api/win")
     return app
 
 
@@ -94,7 +94,7 @@ async def test_create_jobs_returns_batch_id_and_persists_rows(monkeypatch, tmp_p
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                "/win/api/ingest/jobs",
+                "/api/win/ingest/jobs",
                 files=[("files", ("a.pdf", b"%PDF-fake", "application/pdf"))],
                 data={"source_hint": "file"},
             )
@@ -125,7 +125,7 @@ async def test_create_jobs_supports_text_only(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                "/win/api/ingest/jobs",
+                "/api/win/ingest/jobs",
                 data={"text": "hello world", "source_hint": "pasted_text"},
             )
             assert res.status_code == 200, res.text
@@ -146,7 +146,7 @@ async def test_create_jobs_rejects_empty(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                "/win/api/ingest/jobs", data={"source_hint": "file"}
+                "/api/win/ingest/jobs", data={"source_hint": "file"}
             )
             assert res.status_code == 400
     finally:
@@ -181,8 +181,8 @@ async def test_list_jobs_split_by_active_and_history(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            active = (await ac.get("/win/api/ingest/jobs?status=active")).json()
-            history = (await ac.get("/win/api/ingest/jobs?status=history")).json()
+            active = (await ac.get("/api/win/ingest/jobs?status=active")).json()
+            history = (await ac.get("/api/win/ingest/jobs?status=history")).json()
             assert [j["original_filename"] for j in active] == ["run.pdf"]
             assert [j["original_filename"] for j in history] == ["old.pdf"]
     finally:
@@ -211,7 +211,7 @@ async def test_get_job_returns_result_json_for_extracted(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.get(f"/win/api/ingest/jobs/{jid}")
+            res = await ac.get(f"/api/win/ingest/jobs/{jid}")
             assert res.status_code == 200, res.text
             body = res.json()
             assert body["status"] == "extracted"
@@ -244,7 +244,7 @@ async def test_retry_failed_job_reenqueues(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.post(f"/win/api/ingest/jobs/{jid}/retry")
+            res = await ac.post(f"/api/win/ingest/jobs/{jid}/retry")
             assert res.status_code == 200, res.text
             body = res.json()
             assert body["status"] == "queued"
@@ -275,7 +275,7 @@ async def test_cancel_queued_job_marks_canceled(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.post(f"/win/api/ingest/jobs/{jid}/cancel")
+            res = await ac.post(f"/api/win/ingest/jobs/{jid}/cancel")
             assert res.status_code == 200, res.text
             assert res.json()["status"] == "canceled"
     finally:
@@ -316,7 +316,7 @@ async def test_enqueue_signature_includes_enterprise_id(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                "/win/api/ingest/jobs",
+                "/api/win/ingest/jobs",
                 files=[("files", ("a.pdf", b"%PDF-fake", "application/pdf"))],
                 data={"source_hint": "file"},
             )
@@ -367,7 +367,7 @@ async def test_watchdog_resets_stale_running_jobs(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.get("/win/api/ingest/jobs?status=active")
+            res = await ac.get("/api/win/ingest/jobs?status=active")
             assert res.status_code == 200, res.text
             body = res.json()
             assert len(body) == 1
@@ -409,13 +409,13 @@ async def test_clear_history_default_only_deletes_failed(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.delete("/win/api/ingest/jobs/history")
+            res = await ac.delete("/api/win/ingest/jobs/history")
             assert res.status_code == 200, res.text
             body = res.json()
             assert body["deleted"] == 1
             assert body["status_filter"] == "failed"
 
-            history = (await ac.get("/win/api/ingest/jobs?status=history")).json()
+            history = (await ac.get("/api/win/ingest/jobs?status=history")).json()
             statuses = sorted(j["status"] for j in history)
             # failed is gone; confirmed + canceled remain
             assert statuses == ["canceled", "confirmed"]
@@ -460,11 +460,11 @@ async def test_clear_history_all_wipes_every_terminal_state(monkeypatch, tmp_pat
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.delete("/win/api/ingest/jobs/history?status=all")
+            res = await ac.delete("/api/win/ingest/jobs/history?status=all")
             assert res.status_code == 200, res.text
             assert res.json()["deleted"] == 3
 
-            active = (await ac.get("/win/api/ingest/jobs?status=active")).json()
+            active = (await ac.get("/api/win/ingest/jobs?status=active")).json()
             assert len(active) == 1
             assert active[0]["status"] == "running"
     finally:

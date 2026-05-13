@@ -9,11 +9,6 @@ __pycache__/
 *.db-wal
 .worktrees/
 
-# app/ (platform chat UI — Phase 1+) build artifacts. Stage 1 of platform/
-# Dockerfile rebuilds dist/ from source.
-/app/node_modules/
-/app/dist/
-
 # apps/yunwei-win-web/ (智通客户 — served at /win/) build artifacts.
 # Railway's build context is repo root, so the Dockerfile copies from
 # apps/yunwei-win-web/ in stage 1.

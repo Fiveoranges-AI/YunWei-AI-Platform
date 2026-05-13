@@ -58,8 +58,8 @@ Once the stack is up, seed the admin user + enterprise + membership:
 ```
 
 This is the minimal v3 path. It does **not** provision any
-dedicated runtime or legacy HMAC tenant — the shared `/win/` product
-works against `platform-app` alone.
+dedicated runtime — the shared `/win/` product works against
+`platform-app` alone.
 
 Vars consulted from `.env`:
 
@@ -159,7 +159,7 @@ See `runtimes/README.md` for the runtime contract.
 - **Worker fails with "command not found"** — start command is still
   the legacy `yinhu-ingest-worker`. The console script renamed in v3;
   it is now `yunwei-win-ingest-worker`.
-- **Login works but `/win/api/customers` returns 403 no_enterprise** —
+- **Login works but `/api/win/customers` returns 403 no_enterprise** —
   the cookie is valid but no `enterprise_members` row exists for the
   user. Either register via the invite-code flow (it auto-creates the
   enterprise) or `INSERT` a membership manually.

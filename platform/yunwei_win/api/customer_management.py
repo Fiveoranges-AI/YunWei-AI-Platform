@@ -2,10 +2,10 @@
 
 These are operator-facing maintenance endpoints for the Win UI:
 
-- PATCH  /api/customers/{customer_id}             — update top-level fields
-- PUT    /api/customers/{customer_id}/contacts    — full contact-list replace
-- DELETE /api/customers/{customer_id}             — cascade delete one customer
-- DELETE /api/customers?confirm=...               — bulk wipe (gated by confirm)
+- PATCH  /api/win/customers/{customer_id}             — update top-level fields
+- PUT    /api/win/customers/{customer_id}/contacts    — full contact-list replace
+- DELETE /api/win/customers/{customer_id}             — cascade delete one customer
+- DELETE /api/win/customers?confirm=...               — bulk wipe (gated by confirm)
 
 The cascade for a single delete touches: customers, contacts, orders, contracts,
 field_provenance (manually — entity_id is not a real FK), and every
@@ -95,10 +95,10 @@ class ContactsPutRequest(BaseModel):
     contacts: list[ContactUpsertItem]
 
 
-# ---------- PATCH /api/customers/{id} ------------------------------------
+# ---------- PATCH /api/win/customers/{id} --------------------------------
 
 
-@router.patch("/api/customers/{customer_id}")
+@router.patch("/customers/{customer_id}")
 async def patch_customer(
     customer_id: UUID,
     payload: CustomerPatchRequest,
@@ -128,10 +128,10 @@ async def patch_customer(
     return _customer_dict(customer)
 
 
-# ---------- PUT /api/customers/{id}/contacts -----------------------------
+# ---------- PUT /api/win/customers/{id}/contacts -------------------------
 
 
-@router.put("/api/customers/{customer_id}/contacts")
+@router.put("/customers/{customer_id}/contacts")
 async def put_contacts(
     customer_id: UUID,
     payload: ContactsPutRequest,
@@ -374,10 +374,10 @@ async def _delete_customer_cascade(
     }
 
 
-# ---------- DELETE /api/customers (bulk) — declared BEFORE the {id} route -
+# ---------- DELETE /api/win/customers (bulk) — declared BEFORE the {id} route -
 
 
-@router.delete("/api/customers")
+@router.delete("/customers")
 async def delete_all_customers(
     confirm: str = Query(default=""),
     session: AsyncSession = Depends(get_session),
@@ -415,10 +415,10 @@ async def delete_all_customers(
     }
 
 
-# ---------- DELETE /api/customers/{id} -----------------------------------
+# ---------- DELETE /api/win/customers/{id} -------------------------------
 
 
-@router.delete("/api/customers/{customer_id}")
+@router.delete("/customers/{customer_id}")
 async def delete_customer(
     customer_id: UUID,
     session: AsyncSession = Depends(get_session),

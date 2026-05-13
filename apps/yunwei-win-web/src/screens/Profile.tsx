@@ -27,7 +27,7 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
 
   async function handleLogout() {
     try {
-      await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
+      await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     } catch {
       /* ignore — clear the cookie locally regardless and let the platform
          re-prompt at "/" */

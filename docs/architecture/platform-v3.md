@@ -4,8 +4,9 @@ Platform v3 is the post-restructure topology: one platform control plane,
 one customer-facing product backend (`yunwei_win`, branded 智通客户), a
 shared Free/Lite assistant, and optional per-tenant dedicated runtimes
 bound through the runtime registry. The legacy `/<client>/<agent>/` chat
-dashboard scaffold has been archived; it is no longer in the customer
-path.
+dashboard scaffold and its HMAC reverse proxy have been deleted; the
+customer path is now `/` → `/win/` with a single canonical browser API
+surface under `/api/*`.
 
 ## Components
 
@@ -18,26 +19,24 @@ tenant-agnostic or cross-tenant:
   double-submit, password hashing.
 - **Auth context** (`context.py`) — resolves the
   `(user_id, enterprise_id, plan)` triple from the session cookie and
-  attaches it to `request.state` for every `/win/api/*` call.
+  attaches it to `request.state` for every `/api/win/*` call.
 - **Entitlements** (`entitlements.py`) — plan-tier checks
   (`can_use_shared_assistant`, `can_use_dedicated_runtime`, etc.).
-- **Enterprise / member admin** (`enterprise_api.py`, `admin_api.py`,
-  `admin.py`).
+- **Platform admin API** (`admin_api.py`) — `/api/admin/*`, cross-tenant
+  ops (enterprises, users, agent grants).
+- **Enterprise API** (`enterprise_api.py`) — `/api/enterprise/*`, the
+  current caller's enterprise + member operations. Pure API; no page
+  routes.
 - **Runtime registry** (`runtime_registry.py`) — maps
   `(enterprise_id, capability)` → runtime endpoint.
-- **HMAC sign / verify** (`hmac_sign.py`) — signing kit for the
-  customer-agent reverse proxy and (future) dedicated-runtime hops.
-- **Reverse proxy gateway** (`proxy.py`) — the legacy
-  `/<client>/<agent>/` path; still wired up for admin / debug, no
-  longer the customer entry point.
 - **Daily report scheduler + pushers** (`daily_report/`).
 - **Platform metadata DB** (`db.py`) — users, enterprises, sessions,
-  invite codes, runtimes, runtime_bindings, proxy_log, daily_report
-  state. One Postgres database shared across all tenants.
+  invite codes, runtimes, runtime_bindings, daily_report state. One
+  Postgres database shared across all tenants.
 
 ### `yunwei_win` — product backend (智通客户)
 
-Lives at `platform/yunwei_win/`, mounted at `/win/api/*`. Owns the
+Lives at `platform/yunwei_win/`, mounted at `/api/win/*`. Owns the
 customer-facing product surface:
 
 - **Customer profile** (`api/customers.py`, `models/customer.py`).
@@ -73,15 +72,43 @@ platform — see `runtimes/README.md`.
 
 - **Platform metadata DB** — single Postgres, owned by `platform_app`.
   Contains users / sessions / enterprises / runtimes / runtime_bindings /
-  proxy_log / daily_report state.
+  daily_report state.
 - **Per-tenant business DB** — one Postgres per enterprise, owned by
   `yunwei_win`. Contains customers / documents / ingest_jobs /
   customer_memory.
-- **Redis** — shared. Holds HMAC nonces (replay-prevention) and the
-  `win-ingest` RQ queue.
+- **Redis** — shared. Holds session/CSRF state and the `win-ingest` RQ
+  queue.
 - **Object storage** — S3-compatible (Cloudflare R2 recommended) for
   staged ingest files. `STORAGE_BACKEND=s3` per
   `docs/superpowers/runbooks/win-ingest-rq-worker.md`.
+
+## Browser-facing API contract
+
+Every URL the browser is allowed to call lives under `/api/*` on the
+same origin as the SPA. There are exactly four families:
+
+| Prefix              | Owner                   | Purpose                                        |
+| ------------------- | ----------------------- | ---------------------------------------------- |
+| `/api/auth/*`       | `platform_app.api`      | `login`, `logout`, `register` (session cookie) |
+| `/api/me`           | `platform_app.api`      | Current session identity                       |
+| `/api/win/*`        | `yunwei_win` (mounted)  | Product API for 智通客户 SPA                   |
+| `/api/admin/*`      | `platform_app.admin_api`| Platform admin (cross-tenant)                  |
+| `/api/enterprise/*` | `platform_app.enterprise_api` | Current user's enterprise (pure API, no page) |
+
+Concretely the browser sees:
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `POST /api/auth/register`
+- `GET  /api/me`
+- `GET|POST /api/win/...` (assistant chat, customers, ingest, …)
+- `GET|POST /api/admin/...` (admin-only)
+- `GET|POST /api/enterprise/...` (current-user-scoped)
+
+Page routes are intentionally tiny: `/`, `/login`, `/register`,
+`/admin`, `/win/`. There is no `/<client>/<agent>/`, no `/data` page,
+no `/enterprise/:id` page, no `/win/api/*`. Anything outside `/api/*`
+and the named pages 404s.
 
 ## Request flow — Win assistant chat
 
@@ -100,7 +127,7 @@ platform_app.main.win_root
     │  serves apps/yunwei-win-web/dist/index.html
     ▼
 SPA boots, calls
-POST /win/api/assistant/chat           (same origin, X-CSRF-Token)
+POST /api/win/assistant/chat           (same origin, X-CSRF-Token)
     │
     ▼
 platform_app.main._attach_enterprise   (middleware)
@@ -135,7 +162,7 @@ flowchart TD
     A[Browser] -->|GET /| B(platform_app index)
     B -->|303 /win/| C(platform_app win_root)
     C -->|SPA shell| A
-    A -->|POST /win/api/assistant/chat| D(platform middleware)
+    A -->|POST /api/win/assistant/chat| D(platform middleware)
     D -->|AuthContext| E(yunwei_win router)
     E -->|entitlements check| F{Pro/Max binding?}
     F -- yes --> G[runtime_registry]
@@ -175,6 +202,9 @@ example.
   runtime client (`yunwei_win.assistant.dedicated`), runtime registry
   (`platform_app.runtime_registry`), entitlements
   (`platform_app.entitlements`).
-- Legacy `/<client>/<agent>/` HMAC gateway — kept (`platform_app.proxy`)
-  but no longer the primary path. It is still exposed for admin / debug
-  and for the existing `/api/agents` admin surface.
+- Win product API moved from `/win/api/*` to `/api/win/*`. Auth moved
+  from `/auth/login` / `/auth/logout` / `/api/register` to
+  `/api/auth/login` / `/api/auth/logout` / `/api/auth/register`. The
+  legacy `/<client>/<agent>/` HMAC reverse proxy (`platform_app.proxy`)
+  and its `/api/agents` companion were deleted in full — see
+  `docs/migration/legacy-removal.md`.
