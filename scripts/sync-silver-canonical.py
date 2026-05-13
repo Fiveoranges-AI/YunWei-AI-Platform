@@ -5,8 +5,8 @@ docs/data-layer.md §5.3, §11.1: kernel owns the schema; platform sync-copies
 it. Run after pulling kernel changes.
 
 Usage:
-    KERNEL_REPO=/path/to/YunWei-AI-Kernel ops/sync_silver_canonical.py
-    ops/sync_silver_canonical.py --kernel-path /path/to/kernel
+    KERNEL_REPO=/path/to/YunWei-AI-Kernel scripts/sync-silver-canonical.py
+    scripts/sync-silver-canonical.py --kernel-path /path/to/kernel
 """
 from __future__ import annotations
 import argparse
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEST = REPO_ROOT / "platform" / "platform_app" / "data_layer" / "silver-canonical.yaml"
+DEST = REPO_ROOT / "services" / "platform-api" / "platform_app" / "data_layer" / "silver-canonical.yaml"
 REL_SRC = Path("kernel/lakehouse/silver-canonical.yaml")
 
 

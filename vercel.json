@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd landing && npm ci",
-  "buildCommand": "cd landing && npm run build",
-  "outputDirectory": "landing/dist/public",
+  "installCommand": "cd apps/marketing-web && npm ci",
+  "buildCommand": "cd apps/marketing-web && npm run build",
+  "outputDirectory": "apps/marketing-web/dist/public",
   "framework": null
 }

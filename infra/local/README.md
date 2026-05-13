@@ -31,7 +31,7 @@ services:
   platform-app:
     build:
       context: ../..              # repo root
-      dockerfile: platform/Dockerfile
+      dockerfile: services/platform-api/Dockerfile
     env_file: ../../.env
     volumes:
       - ../../data:/data
@@ -54,7 +54,7 @@ port on the host — connect via the tunnel hostname.
 Once the stack is up, seed the admin user + enterprise + membership:
 
 ```bash
-./ops/bootstrap.sh
+./scripts/bootstrap-dev.sh
 ```
 
 This is the minimal v3 path. It does **not** provision any
@@ -81,7 +81,7 @@ runtime container. Register it via the runtime_registry:
 2. Re-run bootstrap with `--with-runtime`:
 
    ```bash
-   ./ops/bootstrap.sh --with-runtime
+   ./scripts/bootstrap-dev.sh --with-runtime
    ```
 
    Override the defaults with env vars when needed:
@@ -126,7 +126,7 @@ docker compose -f infra/local/docker-compose.yml run --rm \
 Or run it natively from the repo:
 
 ```bash
-cd platform && ./.venv/bin/yunwei-win-ingest-worker
+cd services/platform-api && ./.venv/bin/yunwei-win-ingest-worker
 ```
 
 Both modes need the same `REDIS_URL` as `platform-app` so they see the
@@ -143,7 +143,7 @@ end-to-end locally:
 1. Start the local stack as above.
 2. Start the runtime stack separately, joining it to the
    `cf-tunnel` external network.
-3. Register it via `./ops/bootstrap.sh --with-runtime` (see
+3. Register it via `./scripts/bootstrap-dev.sh --with-runtime` (see
    *Optional: register a dedicated runtime* above) — that writes the
    row into `runtimes` + `runtime_bindings` for you.
 
@@ -152,10 +152,9 @@ See `runtimes/README.md` for the runtime contract.
 ## Troubleshooting
 
 - **`/win/` returns 503** — frontend was not built. Run
-  `cd apps/yunwei-win-web && npm run build` or rebuild the Docker
-  image. The dev fallback path is
-  `apps/yunwei-win-web/dist`; the container path is
-  `/app/yunwei-win-web/dist`.
+  `cd apps/win-web && npm run build` or rebuild the Docker image. The
+  dev fallback path is `apps/win-web/dist`; the container path is
+  `/app/win-web/dist`.
 - **Worker fails with "command not found"** — start command is still
   the legacy `yinhu-ingest-worker`. The console script renamed in v3;
   it is now `yunwei-win-ingest-worker`.
