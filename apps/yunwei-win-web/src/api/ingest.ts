@@ -1,4 +1,4 @@
-// POST /win/api/ingest/auto — unified planner-driven file/text intake.
+// POST /api/win/ingest/auto — unified planner-driven file/text intake.
 //
 // The legacy per-kind endpoints (/contract, /business_card, /wechat_screenshot)
 // have been replaced by a single `/auto` route. The backend planner inspects
@@ -22,7 +22,7 @@ import type {
   SchemaSummaryItem,
 } from "../data/types";
 
-const API_BASE = "/win/api/ingest";
+const API_BASE = "/api/win/ingest";
 
 // ───────────── Backend payload shapes (mirror unified_schemas.py) ─────────────
 
