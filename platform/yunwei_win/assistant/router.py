@@ -5,10 +5,12 @@ Mounted by ``yunwei_win`` under ``/win/api/assistant``. The middleware in
 for every ``/win/api/*`` request, so we read enterprise scope from there
 and refuse to honour any tenant ID supplied in the request body.
 
-For Pro/Max users this is the same shared QA path Free/Lite use; the
-dedicated-runtime resolver (Task 7) will eventually short-circuit this
-for tenants that have a per-tenant runtime, but Task 5 only adds the
-endpoint.
+Pro/Max enterprises with an ``assistant`` runtime binding are forwarded
+to their dedicated runtime via :mod:`yunwei_win.assistant.dedicated`;
+everyone else (trial / lite, or Pro without a binding, or a binding
+flagged ``unhealthy``) goes through the shared QA service. A dedicated
+runtime hiccup falls back transparently so a runtime outage never leaves
+Pro users without an answer.
 """
 from __future__ import annotations
 
@@ -18,7 +20,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from platform_app import runtime_registry
 from platform_app.entitlements import entitlements_for
+from yunwei_win.assistant.dedicated import (
+    DedicatedRuntimeError,
+    ask_dedicated_runtime,
+)
 from yunwei_win.assistant.service import answer_shared_assistant
 from yunwei_win.db import get_session
 from yunwei_win.services.llm import LLMCallFailed
@@ -66,6 +73,31 @@ async def chat(
                 "message": "当前套餐未开通问答",
             },
         )
+
+    # Pro/Max: try the dedicated per-tenant runtime first. On any
+    # transport / 5xx failure we fall back to the shared assistant so a
+    # runtime hiccup never leaves Pro users without an answer. The
+    # runtime endpoint URL stays server-side — the SPA never sees it.
+    if ent.can_use_dedicated_runtime:
+        runtime = runtime_registry.get_runtime_for(
+            ctx.enterprise_id, "assistant"
+        )
+        if runtime is not None and runtime.health != "unhealthy":
+            try:
+                return await ask_dedicated_runtime(
+                    runtime.endpoint_url,
+                    question=payload.question,
+                    customer_id=payload.customer_id,
+                    user_id=ctx.user_id,
+                )
+            except DedicatedRuntimeError:
+                # Log without the endpoint URL to keep infra details
+                # out of error-tracking dashboards that ship to vendors.
+                logger.warning(
+                    "dedicated runtime unavailable for enterprise=%s, "
+                    "falling back to shared assistant",
+                    ctx.enterprise_id,
+                )
 
     try:
         result = await answer_shared_assistant(
