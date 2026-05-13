@@ -1,7 +1,7 @@
 """Server-side auth + enterprise context.
 
 This is the single source of truth for ``user_id`` / ``enterprise_id`` /
-``plan`` / ``role`` used by ``/win/api/*``, the shared assistant, and the
+``plan`` / ``role`` used by ``/api/win/*``, the shared assistant, and the
 runtime resolver. Data isolation must never be derived from a request
 body or LLM tool argument; everything reads from this context.
 

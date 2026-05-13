@@ -1,8 +1,8 @@
-"""POST /api/assistant/chat — shared assistant endpoint.
+"""POST /api/win/assistant/chat — shared assistant endpoint.
 
-Mounted by ``yunwei_win`` under ``/win/api/assistant``. The middleware in
+Mounted by ``yunwei_win`` under ``/api/win/assistant``. The middleware in
 ``platform_app.main`` has already attached ``request.state.auth_context``
-for every ``/win/api/*`` request, so we read enterprise scope from there
+for every ``/api/win/*`` request, so we read enterprise scope from there
 and refuse to honour any tenant ID supplied in the request body.
 
 Pro/Max enterprises with an ``assistant`` runtime binding are forwarded
@@ -31,7 +31,7 @@ from yunwei_win.db import get_session
 from yunwei_win.services.llm import LLMCallFailed
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/assistant")
+router = APIRouter(prefix="/assistant")
 
 
 class AssistantChatRequest(BaseModel):
@@ -59,7 +59,7 @@ async def chat(
     ctx = getattr(request.state, "auth_context", None)
     if ctx is None:
         # Belt-and-braces: middleware should have rejected this already,
-        # but if /win/api/assistant ever moves we want a hard failure.
+        # but if /api/win/assistant ever moves we want a hard failure.
         raise HTTPException(
             status_code=401,
             detail={"error": "not_logged_in", "message": "请登录"},

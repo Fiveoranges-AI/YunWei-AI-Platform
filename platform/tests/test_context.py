@@ -26,7 +26,7 @@ def _fake_request(*, cookie: str | None) -> Request:
     scope = {
         "type": "http",
         "method": "GET",
-        "path": "/win/api/customers",
+        "path": "/api/win/customers",
         "headers": headers,
     }
     return Request(scope)

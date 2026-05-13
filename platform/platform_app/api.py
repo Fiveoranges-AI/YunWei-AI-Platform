@@ -4,6 +4,8 @@ import re
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from . import auth, db
+from .context import AuthContext
+from .entitlements import entitlements_for
 from .settings import settings
 
 router = APIRouter()
@@ -22,39 +24,68 @@ def _user_from_request(request: Request) -> dict:
 
 @router.get("/api/me")
 def me(request: Request):
-    user = _user_from_request(request)
+    """Return the caller's identity + enterprise context + entitlements.
+
+    Auth surface for the SaaS chrome:
+      - ``id`` / ``username`` / ``display_name``: from the session cookie.
+      - ``is_platform_admin`` / ``enterprises``: classic platform-admin flag
+        and the list of enterprises the user is a member of (used by the
+        login-landing chrome to render an enterprise picker).
+      - ``enterprise_id`` / ``enterprise_plan`` / ``enterprise_role``: the
+        active tenant (first enterprise, matching ``require_auth_context``).
+        ``None`` if the user has no enterprise membership yet.
+      - ``entitlements``: capability flags derived from the active plan;
+        ``None`` when the user has no enterprise.
+
+    Unlike the ``/api/win/*`` middleware, this handler is tolerant of the
+    no-enterprise case so the chrome can still render something useful
+    for users mid-onboarding. Unauthenticated callers get the legacy
+    ``{"error": ..., "message": ...}`` envelope (not FastAPI's default
+    ``{"detail": ...}``).
+    """
+    cookie = request.cookies.get("app_session")
+    user = auth.current_user_from_request(cookie)
+    if not user:
+        return JSONResponse(
+            {"error": "not_logged_in", "message": "请登录"},
+            status_code=401,
+        )
+    enterprises = db.list_user_enterprises(user["id"])
+    active = enterprises[0] if enterprises else None
+    enterprise_id = active["id"] if active else None
+    enterprise_plan = (active.get("plan") if active else None) or None
+    enterprise_role = (active.get("role") if active else None) or None
+
+    entitlements_payload: dict | None = None
+    if active is not None:
+        ctx = AuthContext(
+            user_id=user["id"],
+            username=user["username"],
+            display_name=user["display_name"],
+            session_id=user["session_id"],
+            enterprise_id=active["id"],
+            enterprise_plan=enterprise_plan or "trial",
+            enterprise_role=enterprise_role or "member",
+        )
+        ent = entitlements_for(ctx)
+        entitlements_payload = {
+            "runtime_mode": ent.runtime_mode,
+            "can_use_shared_assistant": ent.can_use_shared_assistant,
+            "can_use_dedicated_runtime": ent.can_use_dedicated_runtime,
+            "allowed_tools": list(ent.allowed_tools),
+        }
+
     return {
         "id": user["id"],
         "username": user["username"],
         "display_name": user["display_name"],
         "is_platform_admin": db.is_platform_admin(user["id"]),
-        "enterprises": db.list_user_enterprises(user["id"]),
+        "enterprises": enterprises,
+        "enterprise_id": enterprise_id,
+        "enterprise_plan": enterprise_plan,
+        "enterprise_role": enterprise_role,
+        "entitlements": entitlements_payload,
     }
-
-
-@router.get("/api/agents")
-def agents(request: Request):
-    user = _user_from_request(request)
-    # Visible agents = enterprise membership ∪ per-agent grants.
-    rows = db.main().execute(
-        "SELECT t.client_id, t.agent_id, t.display_name, t.icon_url, "
-        "       t.description, t.health "
-        "FROM tenants t "
-        "WHERE t.active=1 AND ("
-        "  t.client_id IN (SELECT enterprise_id FROM enterprise_members WHERE user_id=%s) "
-        "  OR (t.client_id, t.agent_id) IN ("
-        "       SELECT client_id, agent_id FROM agent_grants WHERE user_id=%s)"
-        ") "
-        "ORDER BY t.display_name",
-        (user["id"], user["id"]),
-    ).fetchall()
-    return {"agents": [
-        {"client": r["client_id"], "agent": r["agent_id"],
-         "display_name": r["display_name"], "icon": r["icon_url"],
-         "description": r["description"], "health": r["health"],
-         "url": f"/{r['client_id']}/{r['agent_id']}/"}
-        for r in rows
-    ]}
 
 
 @router.post("/auth/login")

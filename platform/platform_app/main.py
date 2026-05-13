@@ -1,22 +1,18 @@
 """FastAPI 入口 + 路由分发。"""
 from __future__ import annotations
 import asyncio
-import re
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import admin_api, api, context as _context, db, enterprise_api, firewall, proxy
+from . import admin_api, api, context as _context, db, enterprise_api
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
-from .settings import settings
-# yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /win/api/.
+# yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /api/win/.
 # Per-enterprise Postgres database; lazy-provisioned on first access.
 from yunwei_win import router as _win_router
 from yunwei_win.db import dispose_all as _win_dispose
-
-PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
 
 
 @asynccontextmanager
@@ -38,17 +34,15 @@ app.include_router(data_api.router)
 app.include_router(admin_api.router)
 app.include_router(enterprise_api.router)
 app.include_router(daily_report_api.router)
-# /win/api/* — 智通客户 routes. The middleware below stamps
+# /api/win/* — 智通客户 routes. The middleware below stamps
 # request.state.enterprise_id from the app_session cookie, which
 # yunwei_win.db.get_session reads to pick the right per-tenant DB.
-# NB: yunwei_win's inner routers already mount under /api/* (legacy from
-# yunwei-tools), so prefix is just /win/.
-app.include_router(_win_router, prefix="/win")
+app.include_router(_win_router, prefix="/api/win")
 
 
 @app.middleware("http")
 async def _attach_enterprise(request: Request, call_next):
-    """For /win/api/* requests, resolve the caller's AuthContext from the
+    """For /api/win/* requests, resolve the caller's AuthContext from the
     app_session cookie and stamp it on request.state. yunwei_win.db reads
     ``request.state.enterprise_id`` to route the SQLAlchemy session to the
     right per-tenant database.
@@ -56,8 +50,13 @@ async def _attach_enterprise(request: Request, call_next):
     The actual cookie → user → enterprise → plan resolution lives in
     :func:`platform_app.context.require_auth_context` so that the shared
     assistant and the runtime resolver can use the same hard boundary.
+
+    Only ``/api/win/*`` needs a hard enterprise binding here — admin /
+    enterprise / ``/api/me`` endpoints either run their own auth check
+    (``_require_platform_admin`` / ``_require_member``) or are tolerant
+    of the no-enterprise case (the chrome's ``/api/me`` call).
     """
-    if request.url.path.startswith("/win/api/"):
+    if request.url.path.startswith("/api/win/"):
         try:
             ctx = _context.require_auth_context(request)
         except HTTPException as exc:
@@ -125,13 +124,6 @@ def register_page():
     return FileResponse(_STATIC / "register.html", headers=_NO_STORE)
 
 
-@app.api_route("/data", methods=["GET", "HEAD"])
-def data_console(request: Request):
-    if not request.cookies.get("app_session"):
-        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
-    return FileResponse(_STATIC / "data.html", headers=_NO_STORE)
-
-
 @app.api_route("/admin", methods=["GET", "HEAD"])
 def admin_dashboard(request: Request):
     if not request.cookies.get("app_session"):
@@ -139,18 +131,8 @@ def admin_dashboard(request: Request):
     return FileResponse(_STATIC / "admin.html", headers=_NO_STORE)
 
 
-# Must be declared *before* the customer-agent catch-all below — otherwise
-# /enterprise/<id> would match the {client}/{agent} pattern and get
-# reverse-proxied as if it were a tenant request.
-@app.api_route("/enterprise/{enterprise_id}", methods=["GET", "HEAD"])
-def enterprise_page(enterprise_id: str, request: Request):
-    if not request.cookies.get("app_session"):
-        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
-    return FileResponse(_STATIC / "enterprise.html", headers=_NO_STORE)
-
-
 # /win/ — 智通客户 SPA. Cross-enterprise visible: any logged-in user can hit
-# this. The bundled JS calls /win/api/* which the middleware above scopes to
+# this. The bundled JS calls /api/win/* which the middleware above scopes to
 # the user's enterprise database.
 @app.api_route("/win", methods=["GET", "HEAD"])
 @app.api_route("/win/", methods=["GET", "HEAD"])
@@ -163,11 +145,19 @@ def win_root(request: Request):
     return HTMLResponse(win_index.read_text(encoding="utf-8"), headers=_NO_STORE)
 
 
-@app.api_route("/win/{subpath:path}", methods=["GET", "HEAD"])
+@app.api_route(
+    "/win/{subpath:path}",
+    methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+)
 def win_static(subpath: str, request: Request):
-    # /win/api/* is handled by the included router above; this route only
-    # fires for non-api subpaths.
-    if subpath.startswith("api/"):
+    # /win/api/* used to be the API mount but has moved to /api/win/*.
+    # No legacy aliases / redirects — must 404 outright (for *any* method)
+    # so the SPA can rely on a single canonical surface and stale clients
+    # don't silently keep working against the old prefix.
+    if subpath.startswith("api/") or subpath == "api":
+        raise HTTPException(404)
+    # Non-API sub-paths only serve GET/HEAD (static assets / SPA shell).
+    if request.method not in ("GET", "HEAD"):
         raise HTTPException(404)
     if not request.cookies.get("app_session"):
         return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
@@ -180,40 +170,3 @@ def win_static(subpath: str, request: Request):
     if win_index.is_file():
         return HTMLResponse(win_index.read_text(encoding="utf-8"), headers=_NO_STORE)
     raise HTTPException(404)
-
-
-@app.api_route("/{full_path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
-async def catch_all(full_path: str, request: Request):
-    m = PATH_RE.match("/" + full_path)
-    if not m:
-        raise HTTPException(404)
-
-    client_id = m.group("client")
-    agent_id = m.group("agent")
-    subpath = m.group("sub") or "/"
-
-    # auth
-    user = api._user_from_request(request)
-
-    # ACL
-    if not db.has_acl(user["id"], client_id, agent_id):
-        raise HTTPException(403, {"error": "not_authorized_for_tenant", "message": "无权访问"})
-
-    # §7.2 firewall
-    try:
-        firewall.check_request(
-            sec_fetch_mode=request.headers.get("sec-fetch-mode"),
-            sec_fetch_site=request.headers.get("sec-fetch-site"),
-            referer=request.headers.get("referer"),
-            host=request.headers.get("host", ""),
-            dest_path_prefix=f"/{client_id}/{agent_id}/",
-            csrf_header=request.headers.get("x-csrf-token"),
-            csrf_cookie=request.cookies.get("app_csrf"),
-            method=request.method,
-        )
-    except firewall.FirewallReject as e:
-        raise HTTPException(403, {"error": "cross_agent_blocked", "message": str(e)})
-
-    return await proxy.reverse_proxy(
-        request, client_id=client_id, agent_id=agent_id, user=user, subpath=subpath,
-    )

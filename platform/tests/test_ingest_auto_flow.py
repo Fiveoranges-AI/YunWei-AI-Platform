@@ -1,4 +1,4 @@
-"""Tests for the unified /api/ingest/auto pipeline (Agent G).
+"""Tests for the unified /ingest/auto pipeline (Agent G).
 
 Coverage:
 - ``merge_drafts`` fuses identity / commercial / ops drafts and computes match
@@ -11,8 +11,8 @@ Coverage:
   confirmed.
 - An extractor raising mid-flight does NOT kill the pipeline — its failure
   becomes a warning on the merged draft.
-- /api/ingest/auto endpoint streams NDJSON with the expected shape.
-- /api/ingest/auto/{id}/confirm + /cancel endpoints work end-to-end.
+- /ingest/auto endpoint streams NDJSON with the expected shape.
+- /ingest/auto/{id}/confirm + /cancel endpoints work end-to-end.
 
 The project autouse fixture wants Postgres + Redis; we override with a no-op
 because these tests use in-memory SQLite, mirroring ``test_planner.py`` /
@@ -837,7 +837,7 @@ async def test_commit_auto_extraction_requires_customer_when_ops_present() -> No
         await engine.dispose()
 
 
-# ---------- /api/ingest/auto endpoints ----------------------------------
+# ---------- /ingest/auto endpoints ----------------------------------
 
 
 def _build_app(engine):
@@ -867,7 +867,7 @@ def _build_app(engine):
 
 @pytest.mark.asyncio
 async def test_auto_endpoint_streams_ndjson(monkeypatch) -> None:
-    """POST /api/ingest/auto returns NDJSON; final ``done`` line carries
+    """POST /ingest/auto returns NDJSON; final ``done`` line carries
     document_id + plan + draft + candidates."""
     from httpx import ASGITransport, AsyncClient
 
@@ -881,7 +881,7 @@ async def test_auto_endpoint_streams_ndjson(monkeypatch) -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/api/ingest/auto",
+                "/ingest/auto",
                 data={"text": "测试客户有限公司 王经理 13800000000", "source_hint": "pasted_text"},
             )
             assert resp.status_code == 200
@@ -913,7 +913,7 @@ async def test_auto_endpoint_rejects_empty_input() -> None:
         app = _build_app(engine)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/api/ingest/auto", data={"source_hint": "file"})
+            resp = await client.post("/ingest/auto", data={"source_hint": "file"})
             assert resp.status_code == 400
     finally:
         await engine.dispose()
@@ -921,7 +921,7 @@ async def test_auto_endpoint_rejects_empty_input() -> None:
 
 @pytest.mark.asyncio
 async def test_auto_confirm_endpoint_writes_entities(monkeypatch) -> None:
-    """POST /api/ingest/auto/{id}/confirm: persists the user-reviewed payload
+    """POST /ingest/auto/{id}/confirm: persists the user-reviewed payload
     and returns created_entities."""
     from httpx import ASGITransport, AsyncClient
 
@@ -948,7 +948,7 @@ async def test_auto_confirm_endpoint_writes_entities(monkeypatch) -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             payload = _confirm_request_full().model_dump(mode="json")
             resp = await client.post(
-                f"/api/ingest/auto/{doc_id}/confirm",
+                f"/ingest/auto/{doc_id}/confirm",
                 json=payload,
             )
             assert resp.status_code == 200, resp.text
@@ -975,7 +975,7 @@ async def test_auto_confirm_endpoint_writes_entities(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_auto_cancel_endpoint_marks_ignored() -> None:
-    """POST /api/ingest/auto/{id}/cancel: flips review_status to ignored."""
+    """POST /ingest/auto/{id}/cancel: flips review_status to ignored."""
     from httpx import ASGITransport, AsyncClient
 
     engine = await _make_engine()
@@ -999,7 +999,7 @@ async def test_auto_cancel_endpoint_marks_ignored() -> None:
         app = _build_app(engine)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(f"/api/ingest/auto/{doc_id}/cancel")
+            resp = await client.post(f"/ingest/auto/{doc_id}/cancel")
             assert resp.status_code == 200
             assert resp.json() == {"document_id": doc_id, "status": "ignored"}
 
@@ -1038,7 +1038,7 @@ async def test_auto_cancel_endpoint_409_when_already_confirmed() -> None:
         app = _build_app(engine)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(f"/api/ingest/auto/{doc_id}/cancel")
+            resp = await client.post(f"/ingest/auto/{doc_id}/cancel")
             assert resp.status_code == 409
     finally:
         await engine.dispose()
@@ -1237,7 +1237,7 @@ async def test_auto_ingest_text_input_never_invokes_ocr(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_auto_endpoint_accepts_file_upload(monkeypatch) -> None:
-    """POST /api/ingest/auto with a multipart file (image bytes) routes
+    """POST /ingest/auto with a multipart file (image bytes) routes
     through the image-OCR branch and lands a Document.
 
     We stub the OCR client to a deterministic string so the test stays
@@ -1267,7 +1267,7 @@ async def test_auto_endpoint_accepts_file_upload(monkeypatch) -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/api/ingest/auto",
+                "/ingest/auto",
                 data={"source_hint": "file"},
                 files={"file": ("card.jpg", b"fakebytes", "image/jpeg")},
             )
@@ -1304,7 +1304,7 @@ async def test_auto_confirm_endpoint_404_for_missing_document() -> None:
             payload = _confirm_request_full().model_dump(mode="json")
             unknown = "00000000-0000-0000-0000-000000000000"
             resp = await client.post(
-                f"/api/ingest/auto/{unknown}/confirm",
+                f"/ingest/auto/{unknown}/confirm",
                 json=payload,
             )
             # commit_auto_extraction raises ValueError("document … not found")
@@ -1343,7 +1343,7 @@ async def test_auto_confirm_endpoint_rejects_already_confirmed() -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             payload = _confirm_request_full().model_dump(mode="json")
             resp = await client.post(
-                f"/api/ingest/auto/{doc_id}/confirm",
+                f"/ingest/auto/{doc_id}/confirm",
                 json=payload,
             )
             assert resp.status_code == 400
@@ -1363,7 +1363,7 @@ async def test_auto_cancel_endpoint_404_for_missing_document() -> None:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             unknown = "00000000-0000-0000-0000-000000000000"
-            resp = await client.post(f"/api/ingest/auto/{unknown}/cancel")
+            resp = await client.post(f"/ingest/auto/{unknown}/cancel")
             assert resp.status_code == 404
     finally:
         await engine.dispose()

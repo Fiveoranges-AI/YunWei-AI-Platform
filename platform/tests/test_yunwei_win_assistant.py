@@ -1,4 +1,4 @@
-"""Tests for the shared assistant endpoint POST /win/api/assistant/chat.
+"""Tests for the shared assistant endpoint POST /api/win/assistant/chat.
 
 The endpoint is the new collapse point for Free/Lite/Pro Q&A: it reads
 enterprise scope from the server-side ``AuthContext`` (cookie → user →
@@ -88,12 +88,12 @@ def _cleanup_tenant_db(enterprise_id: str) -> None:
 def test_chat_without_cookie_returns_401():
     c = _client()
     r = c.post(
-        "/win/api/assistant/chat",
+        "/api/win/assistant/chat",
         json={"question": "测试"},
     )
     assert r.status_code == 401
     body = r.json()
-    # Preserves the legacy /win/api error envelope (not FastAPI's default
+    # Preserves the legacy /api/win error envelope (not FastAPI's default
     # ``{"detail": ...}``).
     assert body["error"] == "not_logged_in"
 
@@ -126,7 +126,7 @@ def test_chat_returns_stubbed_answer_for_trial_user(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "他们交了多少钱"},
             cookies={"app_session": sid},
         )
@@ -167,7 +167,7 @@ def test_chat_ignores_enterprise_id_supplied_in_body(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={
                 "question": "hi",
                 # Attacker-supplied; must be ignored.
@@ -218,7 +218,7 @@ def test_chat_all_customer_id_routes_to_shared_path(monkeypatch):
         )
 
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "总览", "customer_id": "all"},
             cookies={"app_session": sid},
         )
@@ -259,7 +259,7 @@ def test_chat_uuid_customer_id_routes_to_single_customer_path(monkeypatch):
 
         cid = uuid.uuid4()
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "他们的订单状态", "customer_id": str(cid)},
             cookies={"app_session": sid},
         )
@@ -278,7 +278,7 @@ def test_chat_invalid_customer_id_returns_400(monkeypatch):
         # No need to patch the service — _parse_customer_id rejects before
         # we even reach it.
         r = c.post(
-            "/win/api/assistant/chat",
+            "/api/win/assistant/chat",
             json={"question": "x", "customer_id": "not-a-uuid"},
             cookies={"app_session": sid},
         )

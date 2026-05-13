@@ -1,15 +1,15 @@
-"""POST /api/ingest/* endpoints — entity-first ingest.
+"""POST /api/win/ingest/* endpoints — entity-first ingest.
 
 These are the V1.5 surface that writes Customer / Contact / Order / Contract
 rows directly. The newer customer-scoped surface at
-`/api/customers/{id}/ingest` (see app.api.customer_profile) is memory-first
+`/api/win/customers/{id}/ingest` (see app.api.customer_profile) is memory-first
 and writes to the inbox for human confirmation. Both surfaces persist a
 Document and an llm_calls audit row.
 
 Routes:
-- /api/ingest/contract          PDF/DOC/DOCX/PPT/PPTX → draft, then confirm writes entities
-- /api/ingest/business_card     image → Customer + Contact + provenance
-- /api/ingest/wechat_screenshot image → chat_log Document + extracted hints
+- /api/win/ingest/contract          PDF/DOC/DOCX/PPT/PPTX → draft, then confirm writes entities
+- /api/win/ingest/business_card     image → Customer + Contact + provenance
+- /api/win/ingest/wechat_screenshot image → chat_log Document + extracted hints
 
 All three endpoints stream their response as NDJSON
 (``application/x-ndjson``). The server emits named
@@ -72,7 +72,7 @@ from yunwei_win.services.ingest.wechat import ingest_wechat_screenshot
 from yunwei_win.services.llm import LLMCallFailed
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/ingest")
+router = APIRouter(prefix="/ingest")
 
 # How long to wait between {"status":"processing"} heartbeats. Must be
 # comfortably under Cloudflare's 100s edge timeout to keep the connection
@@ -381,7 +381,7 @@ async def upload_auto(
         }
 
     The frontend reviews the draft and POSTs back to
-    ``/api/ingest/auto/{document_id}/confirm`` (or ``/cancel`` to drop it).
+    ``/api/win/ingest/auto/{document_id}/confirm`` (or ``/cancel`` to drop it).
     """
     file_bytes: bytes | None = None
     filename: str | None = None

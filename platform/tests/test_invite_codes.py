@@ -6,7 +6,7 @@ Covers:
   - Double-redeem fails atomically
   - Revoked / expired codes rejected
   - Username/format/password validation
-  - /api/register also wires up the user so /win/api/* gets 200 instead
+  - /api/register also wires up the user so /api/win/* gets 200 instead
     of 401 (proves the middleware sees the new enterprise)
 """
 from __future__ import annotations
@@ -177,7 +177,7 @@ def test_register_validation_errors(body, expected):
 
 
 def test_register_followed_by_win_request():
-    """Full flow: register, then call /win/api/customers using the same
+    """Full flow: register, then call /api/win/customers using the same
     cookie. The middleware should resolve the new enterprise and provision
     its tenant DB lazily; the response should be a 200 with an empty list."""
     code = _mint_code()
@@ -191,7 +191,7 @@ def test_register_followed_by_win_request():
     # the session cookie explicitly.
     sid = r.cookies.get("app_session")
     assert sid
-    r2 = c.get("/win/api/customers", cookies={"app_session": sid})
+    r2 = c.get("/api/win/customers", cookies={"app_session": sid})
     assert r2.status_code == 200, r2.text
     assert isinstance(r2.json(), list)
     # Cleanup the per-tenant DB we just provisioned to keep test idempotent.

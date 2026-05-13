@@ -1,10 +1,10 @@
 """Read endpoints — let the operator drill into ingested data.
 
-- GET /api/customers
-- GET /api/customers/{id}
-- GET /api/contracts
-- GET /api/contracts/{id}
-- GET /api/documents/{id}
+- GET /api/win/customers
+- GET /api/win/customers/{id}
+- GET /api/win/contracts
+- GET /api/win/contracts/{id}
+- GET /api/win/documents/{id}
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def _contract_dict(k: Contract) -> dict:
     }
 
 
-@router.get("/api/customers")
+@router.get("/customers")
 async def list_customers(
     limit: int = Query(default=50, le=200),
     session: AsyncSession = Depends(get_session),
@@ -70,7 +70,7 @@ async def list_customers(
     return [_customer_dict(c) for c in rows]
 
 
-@router.get("/api/customers/{customer_id}")
+@router.get("/customers/{customer_id}")
 async def get_customer(
     customer_id: UUID, session: AsyncSession = Depends(get_session)
 ) -> dict:
@@ -124,7 +124,7 @@ async def get_customer(
     }
 
 
-@router.get("/api/contracts")
+@router.get("/contracts")
 async def list_contracts(
     limit: int = Query(default=50, le=200),
     session: AsyncSession = Depends(get_session),
@@ -137,7 +137,7 @@ async def list_contracts(
     return [_contract_dict(k) for k in rows]
 
 
-@router.get("/api/contracts/{contract_id}")
+@router.get("/contracts/{contract_id}")
 async def get_contract(
     contract_id: UUID, session: AsyncSession = Depends(get_session)
 ) -> dict:
@@ -196,7 +196,7 @@ async def get_contract(
     }
 
 
-@router.get("/api/documents/{document_id}")
+@router.get("/documents/{document_id}")
 async def get_document(
     document_id: UUID, session: AsyncSession = Depends(get_session)
 ) -> dict:
