@@ -77,7 +77,7 @@ for the full rationale and future phases.
 - Node 20+, `npm`
 - Postgres (local or remote), Redis
 - A `.env` at repo root — copy from `.env.example` and fill in:
-  `PLATFORM_DATABASE_URL`, `REDIS_URL`, `COOKIE_SECRET`, `CSRF_SECRET`,
+  `DATABASE_URL`, `REDIS_URL`, `COOKIE_SECRET`,
   `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `LANDINGAI_API_KEY`.
 
 ### Backend
@@ -137,7 +137,7 @@ image (`services/platform-api/Dockerfile`):
 2. **`win-ingest-worker`** — RQ worker. Start Command:
    `yunwei-win-ingest-worker`.
 
-Both services need the same `PLATFORM_DATABASE_URL`, `REDIS_URL`, and
+Both services need the same `DATABASE_URL`, `REDIS_URL`, and
 (when `STORAGE_BACKEND=local`) the same `/data` volume.
 
 Full env-var checklist + promote/rollback flow:

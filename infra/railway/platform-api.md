@@ -10,7 +10,7 @@ Docker image**, both built from `services/platform-api/Dockerfile`:
 2. **`win-ingest-worker`** — long-running RQ worker that drains the
    `yunwei_win` ingest queue. No HTTP listener.
 
-Both services share `PLATFORM_DATABASE_URL`, `REDIS_URL`, and the upload
+Both services share `DATABASE_URL`, `REDIS_URL`, and the upload
 volume so a Document INSERT by the web service is visible to the worker
 and vice versa.
 
@@ -58,10 +58,9 @@ Railway injects `$PORT` automatically.
 
 | Key | Notes |
 |---|---|
-| `PLATFORM_DATABASE_URL` | Postgres — platform metadata (users, enterprises, runtimes, …). |
+| `DATABASE_URL` | Postgres — platform metadata (users, enterprises, runtimes, …). |
 | `REDIS_URL` | Shared with the worker; used for sessions + RQ queue. |
 | `COOKIE_SECRET` | Signing key for `app_session` cookie. |
-| `CSRF_SECRET` | Double-submit token secret. |
 | `ANTHROPIC_API_KEY` | LLM upstream for the shared assistant + ingest extractors. |
 | `MISTRAL_API_KEY` | OCR provider (default). |
 | `LANDINGAI_API_KEY` | Extractor provider (default). |
@@ -104,7 +103,7 @@ The worker subscribes to the `ingest` queue on `REDIS_URL`.
 ### Required env vars
 
 Same as `platform-app`. Both services must read the same
-`PLATFORM_DATABASE_URL` and `REDIS_URL`. If `STORAGE_BACKEND=local`,
+`DATABASE_URL` and `REDIS_URL`. If `STORAGE_BACKEND=local`,
 both must mount the same persistent volume.
 
 ---
@@ -144,9 +143,9 @@ needed forward-only schema fix in a separate change.
 1. Create two Railway services in the same project from this repo.
 2. Set `Dockerfile path = services/platform-api/Dockerfile` on both.
 3. Override `Start Command = yunwei-win-ingest-worker` on the second.
-4. Provision a Postgres add-on → `PLATFORM_DATABASE_URL`.
+4. Provision a Postgres add-on → `DATABASE_URL`.
 5. Provision a Redis add-on → `REDIS_URL`.
-6. Set `COOKIE_SECRET` + `CSRF_SECRET` (`openssl rand -hex 32` each).
+6. Set `COOKIE_SECRET` (`openssl rand -hex 32`).
 7. Set the AI provider keys above.
 8. If `STORAGE_BACKEND=local`: attach a Volume to both services at
    `/data`.

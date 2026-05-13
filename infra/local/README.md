@@ -16,9 +16,9 @@ README.md                 # this file
 
 - Docker + `docker compose` v2.
 - `.env` at the repo root with:
-  - `PLATFORM_DATABASE_URL` (Postgres URL the container can reach)
+  - `DATABASE_URL` (Postgres URL the container can reach)
   - `REDIS_URL`
-  - `COOKIE_SECRET`, `CSRF_SECRET`
+  - `COOKIE_SECRET`
   - `ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `LANDINGAI_API_KEY`
   - `TUNNEL_TOKEN` (Cloudflare Zero Trust tunnel token)
 - A `data/` directory at the repo root (created on first run) for the
