@@ -78,6 +78,31 @@ class ReviewCellEvidence(BaseModel):
     excerpt: str | None = None
 
 
+# vNext source ref carried on each ``ReviewCell`` so the wizard can highlight
+# the originating chunk/cell/text span in the source viewer. Decoupled from
+# ``ParseSourceRef`` so the review JSON does not pull in the parse artifact
+# pydantic module — the shape is the same on the wire.
+class ReviewSourceRef(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ref_type: str
+    ref_id: str
+    page: int | None = None
+    bbox: list[float] | None = None
+    start: int | None = None
+    end: int | None = None
+    excerpt: str | None = None
+    paragraph: int | None = None
+    table_id: str | None = None
+    sheet: str | None = None
+    row: int | None = None
+    col: int | None = None
+
+
+ReviewTablePresentation = Literal["card", "table"]
+ReviewStepStatus = Literal["empty", "in_progress", "complete"]
+
+
 class ReviewCell(BaseModel):
     field_name: str
     label: str
@@ -90,6 +115,10 @@ class ReviewCell(BaseModel):
     confidence: float | None = None
     evidence: ReviewCellEvidence | None = None
     source: ReviewCellSource
+    # vNext additions — defaulted so legacy serializers/consumers keep working.
+    source_refs: list[ReviewSourceRef] = Field(default_factory=list)
+    review_visible: bool = True
+    explicit_clear: bool = False
 
 
 class ReviewRow(BaseModel):
@@ -97,6 +126,11 @@ class ReviewRow(BaseModel):
     entity_id: UUID | None = None
     operation: ReviewRowOperation = "create"
     cells: list[ReviewCell]
+    # vNext additions — row decision proposed by entity resolution, and an
+    # explicit "this row has nothing reviewable" flag to keep default-only
+    # rows out of writeback.
+    row_decision: ReviewRowDecision | None = None
+    is_writable: bool = True
 
 
 class ReviewTable(BaseModel):
@@ -107,6 +141,21 @@ class ReviewTable(BaseModel):
     is_array: bool = False
     rows: list[ReviewRow]
     raw_extraction: dict[str, Any] | None = None
+    # vNext additions — presentation hint for the wizard renderer, and the
+    # progressive-review step this table belongs to.
+    presentation: ReviewTablePresentation = "table"
+    review_step: str | None = None
+
+
+class ReviewStep(BaseModel):
+    """One step in the progressive review wizard."""
+
+    model_config = ConfigDict(extra="allow")
+
+    key: str
+    label: str
+    table_names: list[str] = Field(default_factory=list)
+    status: ReviewStepStatus = "empty"
 
 
 class ReviewDraftDocument(BaseModel):
@@ -124,10 +173,17 @@ class ReviewDraft(BaseModel):
 
     extraction_id: UUID
     document_id: UUID
+    # vNext: link the draft back to the parse attempt + lock state.
+    parse_id: UUID | None = None
     schema_version: int = 1
     status: ExtractionStatus = "pending_review"
+    review_version: int = 0
+    current_step: str | None = None
     document: ReviewDraftDocument
-    route_plan: ReviewDraftRoutePlan
+    # Legacy route_plan kept for serialization compatibility; vNext drafts use
+    # ``steps`` + ``tables`` directly.
+    route_plan: ReviewDraftRoutePlan = Field(default_factory=ReviewDraftRoutePlan)
+    steps: list[ReviewStep] = Field(default_factory=list)
     tables: list[ReviewTable]
     schema_warnings: list[str] = Field(default_factory=list)
     general_warnings: list[str] = Field(default_factory=list)
@@ -169,3 +225,55 @@ class ConfirmExtractionResponse(BaseModel):
     status: ExtractionStatus
     written_rows: dict[str, list[UUID]] = Field(default_factory=dict)
     invalid_cells: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# vNext review lock / autosave / row-decision patch contracts.
+# Implementations land in Task 7+; here only the wire shape is locked in so
+# downstream code can start referencing it.
+# ---------------------------------------------------------------------------
+
+
+class ReviewRowDecisionPatch(BaseModel):
+    """User-side change to a row's create/update/link decision."""
+
+    model_config = ConfigDict(extra="allow")
+
+    table_name: str
+    client_row_id: str
+    operation: ReviewRowDecisionOperation | None = None
+    selected_entity_id: UUID | None = None
+    reason: str | None = None
+
+
+class AutosaveReviewRequest(BaseModel):
+    """PATCH payload for incremental review-draft saves."""
+
+    model_config = ConfigDict(extra="allow")
+
+    lock_token: UUID
+    base_review_version: int
+    current_step: str | None = None
+    cell_patches: list[ReviewCellPatch] = Field(default_factory=list)
+    row_decision_patches: list[ReviewRowDecisionPatch] = Field(default_factory=list)
+
+
+class AutosaveReviewResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    extraction_id: UUID
+    review_version: int
+    current_step: str | None = None
+    conflict: bool = False
+    server_draft: ReviewDraft | None = None
+
+
+class AcquireReviewLockResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    extraction_id: UUID
+    lock_token: UUID | None = None
+    locked_by: str | None = None
+    lock_expires_at: str | None = None
+    review_version: int = 0
+    is_read_only: bool = False
