@@ -236,6 +236,25 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
                 "ALTER TABLE ingest_jobs "
                 "ADD COLUMN IF NOT EXISTS extraction_id UUID"
             ))
+            # Schema-first contracts: customer_id direct on contract,
+            # amount_total / amount_currency captured at contract level,
+            # order_id relaxed to nullable so contracts can be ingested
+            # without a same-confirm order parent.
+            for stmt in (
+                "ALTER TABLE contracts "
+                "ADD COLUMN IF NOT EXISTS customer_id UUID "
+                "REFERENCES customers(id) ON DELETE RESTRICT",
+                "ALTER TABLE contracts "
+                "ADD COLUMN IF NOT EXISTS amount_total NUMERIC(18, 4)",
+                "ALTER TABLE contracts "
+                "ADD COLUMN IF NOT EXISTS amount_currency VARCHAR(8)",
+                "ALTER TABLE contracts ALTER COLUMN order_id DROP NOT NULL",
+                "ALTER TABLE customers "
+                "ADD COLUMN IF NOT EXISTS industry VARCHAR",
+                "ALTER TABLE customers "
+                "ADD COLUMN IF NOT EXISTS notes TEXT",
+            ):
+                await conn.execute(text(stmt))
 
 
 async def ensure_schema_ingest_tables_for(enterprise_id: str) -> None:

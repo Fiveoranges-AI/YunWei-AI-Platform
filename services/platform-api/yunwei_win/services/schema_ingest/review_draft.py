@@ -21,6 +21,24 @@ from uuid import UUID
 
 from yunwei_win.services.ingest.extractors.canonical_schema import PIPELINE_TABLES
 from yunwei_win.services.schema_ingest.fk_links import FK_FIELD_PARENTS
+
+
+def _is_parseable_uuid(value: Any) -> bool:
+    """Cheap check used to disarm extractor cross-row placeholders.
+
+    LLMs frequently emit synthetic FK strings like ``"customer-1"`` for uuid
+    FK fields. We only want to keep an extracted value when it could plausibly
+    be a real UUID; otherwise the FK is better handled by the same-confirm
+    parent auto-link in writeback.
+    """
+
+    if value is None:
+        return False
+    try:
+        UUID(str(value))
+        return True
+    except (ValueError, TypeError):
+        return False
 from yunwei_win.services.schema_ingest.schemas import (
     ReviewCell,
     ReviewCellEvidence,
@@ -327,6 +345,21 @@ def _build_cell(
     value, confidence, evidence_data = _unwrap_field_value(
         raw_field, side_confidence, side_evidence
     )
+
+    # Disarm synthetic FK placeholders ("customer-1", "contract-1", ...) the
+    # LLM emits for uuid FK fields whose parent table is also in this draft.
+    # Falling through to the "auto-linked" branch below means confirm fills
+    # the real UUID at writeback instead of failing UUID validation.
+    if (
+        value is not None
+        and (field.get("data_type") or "").lower() == "uuid"
+        and field_name in FK_FIELD_PARENTS
+        and _is_auto_linked_fk(field_name, selected_table_names)
+        and not _is_parseable_uuid(value)
+    ):
+        value = None
+        confidence = None
+        evidence_data = None
 
     if value is not None:
         if confidence is not None and confidence < _LOW_CONFIDENCE_THRESHOLD:

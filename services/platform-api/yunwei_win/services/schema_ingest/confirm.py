@@ -182,6 +182,11 @@ async def confirm_review_draft(
     server_draft = ReviewDraft.model_validate(extraction.review_draft)
     _apply_patches(server_draft, request.patches)
 
+    # Disarm synthetic FK placeholders ("customer-1", etc.) stored in older
+    # drafts before the materializer learned to clear them. With a same-
+    # confirm parent in the draft, writeback will fill the real UUID.
+    _normalize_linked_fk_cells(server_draft)
+
     # Validate catalog ↔ ORM parity for each table referenced in the draft
     # *before* writing anything. Either direction failing is a 400.
     invalid_cells = _check_orm_parity(server_draft, catalog_by_table)
@@ -308,6 +313,42 @@ def _find_cell(row: ReviewRow, field_name: str) -> ReviewCell | None:
         if cell.field_name == field_name:
             return cell
     return None
+
+
+def _normalize_linked_fk_cells(draft: ReviewDraft) -> None:
+    """Clear unparseable FK uuid values when a same-confirm parent exists.
+
+    Older drafts (and any extractor that emits cross-row placeholders like
+    ``"customer-1"``) carry FK cells with non-UUID values. Once the parent
+    table is present in the draft the writeback path auto-fills the real
+    UUID, so the value here would otherwise just trip ``invalid_value`` at
+    validate time and lose the row.
+    """
+
+    table_names = {t.table_name for t in draft.tables}
+    for table in draft.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.status == "rejected":
+                    continue
+                if cell.field_name not in FK_FIELD_PARENTS:
+                    continue
+                if (cell.data_type or "").lower() != "uuid":
+                    continue
+                if _value_is_empty(cell.value):
+                    continue
+                try:
+                    UUID(str(cell.value))
+                    continue
+                except (ValueError, TypeError):
+                    pass
+                parent_table = FK_FIELD_PARENTS[cell.field_name]
+                if parent_table not in table_names:
+                    continue
+                cell.value = None
+                cell.display_value = ""
+                cell.source = "linked"
+                cell.status = "missing"
 
 
 # ---- validation ------------------------------------------------------

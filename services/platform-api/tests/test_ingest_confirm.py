@@ -920,84 +920,62 @@ async def test_confirm_reports_orm_destination_missing(monkeypatch, tmp_path):
 # ---- test 10: ORM-required field missing from catalog -> 400 ---------
 
 
-@pytest.mark.asyncio
-async def test_confirm_reports_orm_requires_field_missing_from_catalog(
-    monkeypatch, tmp_path
-):
-    """The contracts ORM has a NOT NULL ``order_id`` column with no default
-    and no catalog field. Confirming a contracts row must fail loudly with
-    ``orm_requires_field_missing_from_catalog`` rather than later raising
-    ``IntegrityError`` during the flush."""
+def test_check_orm_parity_fires_when_required_orm_column_lacks_catalog_field():
+    """``_check_orm_parity`` must flag any NOT NULL ORM column with no
+    default and no FK auto-fill that has no matching catalog field.
 
-    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
-    engine = await _make_engine()
-    customer_id = uuid.uuid4()
-    extraction_id = uuid.uuid4()
-    document_id = await _seed_document(engine, customer_id=customer_id)
+    We build a draft whose ``customers`` table has only ``short_name`` in
+    its catalog (``full_name`` is NOT NULL on the Customer ORM with no
+    default and no FK auto-fill — so it must be reported)."""
 
-    tables = [
-        {
-            "table_name": "customers",
-            "label": "客户",
-            "rows": [
-                {
-                    "client_row_id": "customers:0",
-                    "entity_id": str(customer_id),
-                    "operation": "update",
-                    "cells": [
-                        _cell("full_name", "公司全称", "text",
-                              value="测试客户", required=True),
-                    ],
-                }
-            ],
-        },
-        {
-            "table_name": "contracts",
-            "label": "合同",
-            "rows": [
-                {
-                    "client_row_id": "contracts:0",
-                    "entity_id": None,
-                    "operation": "create",
-                    "cells": [
-                        _cell("customer_id", "客户", "uuid",
-                              value=str(customer_id), required=True),
-                        _cell("contract_no_external", "合同号", "text",
-                              value="HT-001"),
-                    ],
-                }
-            ],
-        },
-    ]
-    draft = _draft_payload(
-        extraction_id=extraction_id,
-        document_id=document_id,
-        tables=tables,
-    )
-    await _seed_extraction(
-        engine,
-        extraction_id=extraction_id,
-        document_id=document_id,
-        review_draft=draft,
+    from yunwei_win.services.schema_ingest.confirm import _check_orm_parity
+    from yunwei_win.services.schema_ingest.schemas import (
+        ReviewCell,
+        ReviewDraft,
+        ReviewDraftDocument,
+        ReviewDraftRoutePlan,
+        ReviewRow,
+        ReviewTable,
     )
 
-    app = _build_app(engine, monkeypatch)
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.post(
-                f"/api/win/ingest/extractions/{extraction_id}/confirm",
-                json={"patches": []},
-            )
-            assert res.status_code == 400, res.text
-            cells = res.json()["detail"]["invalid_cells"]
-            assert any(
-                c["table_name"] == "contracts"
-                and c["field_name"] == "order_id"
-                and c["reason"] == "orm_requires_field_missing_from_catalog"
-                for c in cells
-            ), cells
-    finally:
-        await engine.dispose()
+    draft = ReviewDraft(
+        extraction_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        document=ReviewDraftDocument(filename="doc.pdf"),
+        route_plan=ReviewDraftRoutePlan(),
+        tables=[
+            ReviewTable(
+                table_name="customers",
+                label="客户",
+                rows=[
+                    ReviewRow(
+                        client_row_id="customers:0",
+                        cells=[
+                            ReviewCell(
+                                field_name="short_name",
+                                label="简称",
+                                data_type="text",
+                                value="某客户",
+                                status="extracted",
+                                source="ai",
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+    catalog_by_table = {
+        "customers": {"short_name": {"field_name": "short_name", "data_type": "text"}},
+    }
+
+    invalid = _check_orm_parity(draft, catalog_by_table)
+    assert any(
+        c["table_name"] == "customers"
+        and c["field_name"] == "full_name"
+        and c["reason"] == "orm_requires_field_missing_from_catalog"
+        for c in invalid
+    ), invalid
 
 
 # ---- test 11: integer validation accepts integral floats -------------
