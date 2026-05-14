@@ -70,18 +70,6 @@ export function CustomerDetailPane({
               {customer.name}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: 4,
-                  background: "var(--brand-100)",
-                  color: "var(--brand-700)",
-                }}
-              >
-                {customer.tag}
-              </span>
               {customer.risk && (
                 <span
                   style={{
