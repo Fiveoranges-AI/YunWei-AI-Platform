@@ -24,9 +24,6 @@ import json
 from typing import Any
 
 from yunwei_win.services.ingest.pipeline_schemas import PipelineName
-from yunwei_win.services.schema_ingest.extraction_schema import (
-    build_selected_tables_schema_json,
-)
 
 
 PIPELINE_TABLES: dict[PipelineName, list[str]] = {
@@ -64,5 +61,14 @@ def build_pipeline_schema_json(pipeline_name: str, catalog: dict[str, Any]) -> s
             "properties": {},
         }
         return json.dumps(schema, ensure_ascii=False, sort_keys=True)
+
+    # Deferred to avoid a circular import: extraction_schema lives in the
+    # ``schema_ingest`` package, whose ``__init__.py`` pulls in auto.py
+    # → providers.factory → providers.deepseek → canonical_schema. Holding
+    # the import until call time means canonical_schema is fully loaded
+    # before deepseek tries to import it.
+    from yunwei_win.services.schema_ingest.extraction_schema import (
+        build_selected_tables_schema_json,
+    )
 
     return build_selected_tables_schema_json(table_names, catalog)

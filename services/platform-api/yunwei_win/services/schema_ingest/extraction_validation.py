@@ -18,10 +18,19 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from yunwei_win.services.ingest.extractors.canonical_schema import PIPELINE_TABLES
+
+if TYPE_CHECKING:
+    from yunwei_win.services.schema_ingest.extraction_normalize import (
+        NormalizedExtraction,
+    )
+    from yunwei_win.services.schema_ingest.parse_artifact import ParseArtifact
+
+
+_EXTRACTABLE_ROLES = {"extractable", "identity_key"}
 
 
 def validate_pipeline_extraction(
@@ -215,3 +224,109 @@ def _value_matches_type(field_spec: dict, value: Any) -> bool:
         return True
     except (ValueError, InvalidOperation, TypeError):
         return False
+
+
+def validate_normalized_extraction(
+    normalized: "NormalizedExtraction",
+    *,
+    selected_tables: list[str],
+    catalog: dict[str, Any],
+    parse_artifact: "ParseArtifact",
+) -> list[str]:
+    """Validate a vNext NormalizedExtraction against catalog + parse artifact.
+
+    Returns human-readable warning strings (empty list means clean). Catches
+    four classes of issues:
+
+      - tables outside the router's selection (ignored but logged),
+      - unknown tables, unknown fields, and non-extractable fields
+        (``system_link`` / ``audit`` must never come from the extractor),
+      - primitive type / enum violations on extracted values,
+      - ``source_refs`` that don't point at any ref the parser actually
+        emitted (chunks, table cells, grounding keys, page ids).
+    """
+
+    selected = set(selected_tables)
+    catalog_by_table = _index_catalog(catalog)
+    valid_refs = _collect_parse_ref_ids(parse_artifact)
+
+    warnings: list[str] = []
+
+    for table_name, rows in normalized.tables.items():
+        if table_name not in selected:
+            warnings.append(
+                f"table {table_name} not in router selection"
+            )
+            continue
+        table_spec = catalog_by_table.get(table_name)
+        if table_spec is None:
+            warnings.append(
+                f"unknown or non-extractable field {table_name}.* "
+                f"(table not in catalog)"
+            )
+            continue
+        field_specs = _extractable_field_map(table_spec)
+
+        for row_idx, row in enumerate(rows):
+            row_label = f"{table_name}[{row_idx}]"
+            for field_name, normalized_value in row.fields.items():
+                spec = field_specs.get(field_name)
+                if spec is None:
+                    warnings.append(
+                        f"unknown or non-extractable field "
+                        f"{table_name}.{field_name}"
+                    )
+                    continue
+                value = normalized_value.value
+                if value is not None and not _value_matches_type(spec, value):
+                    data_type = (spec.get("data_type") or "text").lower()
+                    warnings.append(
+                        f"{row_label}.{field_name} expected {data_type}, "
+                        f"got {type(value).__name__} ({value!r})"
+                    )
+                for ref in normalized_value.source_refs:
+                    if ref.ref_id and ref.ref_id not in valid_refs:
+                        warnings.append(
+                            f"source ref {ref.ref_id} not found in parse artifact"
+                        )
+
+    return warnings
+
+
+def _extractable_field_map(table_spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for field in table_spec.get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        if field.get("is_active", True) is False:
+            continue
+        name = field.get("field_name")
+        if not isinstance(name, str):
+            continue
+        role = field.get("field_role") or "extractable"
+        if role not in _EXTRACTABLE_ROLES:
+            continue
+        out[name] = field
+    return out
+
+
+def _collect_parse_ref_ids(parse_artifact: "ParseArtifact") -> set[str]:
+    refs: set[str] = set()
+    for chunk in parse_artifact.chunks or []:
+        if chunk.id:
+            refs.add(chunk.id)
+    for key in (parse_artifact.grounding or {}).keys():
+        if isinstance(key, str):
+            refs.add(key)
+    for table in parse_artifact.tables or []:
+        if table.id:
+            refs.add(table.id)
+        for cell in table.cells or []:
+            if cell.ref_id:
+                refs.add(cell.ref_id)
+    for page in parse_artifact.pages or []:
+        if isinstance(page, dict):
+            page_id = page.get("id")
+            if isinstance(page_id, str):
+                refs.add(page_id)
+    return refs
