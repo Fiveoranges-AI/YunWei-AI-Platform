@@ -32,6 +32,44 @@ ReviewCellSource = Literal["ai", "default", "edited", "empty", "linked"]
 ReviewRowOperation = Literal["create", "update"]
 ExtractionStatus = Literal["pending_review", "confirmed", "ignored", "failed"]
 
+# vNext row decision (used by ReviewDraft to render create/update/link choices
+# straight from ``entity_resolution.EntityResolutionProposal``).
+ReviewRowDecisionOperation = Literal[
+    "create", "update", "link_existing", "ignore"
+]
+ReviewMatchLevel = Literal["strong", "weak", "none"]
+
+
+class ReviewEntityCandidate(BaseModel):
+    """One existing entity proposed as a candidate for a row decision."""
+
+    model_config = ConfigDict(extra="allow")
+
+    entity_id: UUID
+    label: str
+    match_level: ReviewMatchLevel
+    match_keys: list[str] = Field(default_factory=list)
+    confidence: float | None = None
+    reason: str | None = None
+
+
+class ReviewRowDecision(BaseModel):
+    """Server-proposed row decision aligned with EntityResolutionRow.
+
+    ReviewDraft surfaces this verbatim; user edits replace selected_entity_id
+    / operation as they walk the wizard, and confirm writeback consumes the
+    final value to fill ``system_link`` FKs.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    operation: ReviewRowDecisionOperation
+    selected_entity_id: UUID | None = None
+    candidate_entities: list[ReviewEntityCandidate] = Field(default_factory=list)
+    match_level: ReviewMatchLevel | None = None
+    match_keys: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
 
 class ReviewCellEvidence(BaseModel):
     """Where in the source document the AI said it found the value."""
