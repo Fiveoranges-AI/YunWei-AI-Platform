@@ -1,24 +1,22 @@
 """Tests for ``LandingAIExtractorProvider``.
 
-The provider wraps the existing LandingAI ``extract_with_schema`` flow behind
-the generic ``ExtractorProvider`` contract. Behavior mirrors
-``extract_selected_pipelines`` in ``services/ingest/landingai_extract.py``:
+The provider wraps LandingAI ``extract_with_schema`` behind the generic
+``ExtractorProvider`` contract:
 
-- For each ``PipelineSelection``: load the static schema JSON, call
-  LandingAI Extract with ``markdown=input.markdown``, return one
-  ``PipelineExtractResult``.
-- Per-schema failures (LandingAI errors *or* schema-loader errors) are soft:
-  empty extraction + a warning string formatted as
+- For each ``PipelineSelection``: build a canonical schema from the tenant
+  company catalog, call LandingAI Extract with ``markdown=input.markdown``,
+  and return one ``PipelineExtractResult``.
+- Per-schema LandingAI failures are soft: empty extraction + a warning string
+  formatted as
   ``"LandingAI extract failed for {name}: {error}"``. Other selections still
   complete.
 - A ``progress`` callback, if provided, is invoked with
   ``("pipeline_started", {"name": ...})`` before each schema and
   ``("pipeline_done", {"name": ..., "ok": bool})`` after.
 
-We monkeypatch ``extract_with_schema`` and ``load_schema_json`` — no live
-LandingAI calls, no DB. The project autouse ``_clean_state`` fixture wants
-Postgres + Redis; we override with a no-op (same pattern as
-``test_commercial_extractor.py``).
+We monkeypatch ``extract_with_schema`` — no live LandingAI calls, no DB. The
+project autouse ``_clean_state`` fixture wants Postgres + Redis; we override
+with a no-op.
 """
 
 from __future__ import annotations
@@ -42,7 +40,7 @@ from yunwei_win.services.ingest.extractors.providers.base import ExtractionInput
 from yunwei_win.services.ingest.extractors.providers.landingai import (
     LandingAIExtractorProvider,
 )
-from yunwei_win.services.ingest.unified_schemas import PipelineSelection
+from yunwei_win.services.ingest.pipeline_schemas import PipelineSelection
 from yunwei_win.services.landingai_ade_client import (
     LandingAIExtractResult,
     LandingAIUnavailable,
@@ -58,18 +56,6 @@ def _make_input(selections: list[PipelineSelection], markdown: str = "甲方：�
         session=SimpleNamespace(),  # type: ignore[arg-type]
         markdown=markdown,
         selections=selections,
-    )
-
-
-def _make_schema_input(
-    selections: list[PipelineSelection],
-    markdown: str = "甲方：测试客户有限公司",
-) -> ExtractionInput:
-    return ExtractionInput(
-        document_id=uuid.uuid4(),
-        session=SimpleNamespace(),  # type: ignore[arg-type]
-        markdown=markdown,
-        selections=selections,
         company_schema=_catalog_from_default(),
     )
 
@@ -77,8 +63,7 @@ def _make_schema_input(
 @pytest.mark.asyncio
 async def test_extract_selected_runs_each_schema(monkeypatch):
     """Happy path: each selection gets one PipelineExtractResult, schema JSON
-    is loaded and forwarded to extract_with_schema in the same call shape as
-    the existing extract_selected_pipelines."""
+    is generated from company schema and forwarded to extract_with_schema."""
     calls: list[tuple[str, str]] = []
 
     async def fake_extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIExtractResult:
@@ -90,11 +75,6 @@ async def test_extract_selected_runs_each_schema(monkeypatch):
         )
 
     monkeypatch.setattr(provider_module, "extract_with_schema", fake_extract_with_schema)
-    monkeypatch.setattr(
-        provider_module,
-        "load_schema_json",
-        lambda name: f'{{"type": "object", "properties": {{"{name}": {{"type": "string"}}}}}}',
-    )
 
     provider = LandingAIExtractorProvider()
     results = await provider.extract_selected(
@@ -108,19 +88,19 @@ async def test_extract_selected_runs_each_schema(monkeypatch):
 
     assert [r.name for r in results] == ["identity", "contract_order"]
     assert all(r.warnings == [] for r in results)
-    assert results[0].extraction == {
-        "ok": True,
-        "schema": '{"type": "object", "properties": {"identity": {"type": "string"}}}',
-    }
+    assert results[0].extraction["ok"] is True
+    assert '"customers"' in results[0].extraction["schema"]
+    assert '"contacts"' in results[0].extraction["schema"]
     assert results[0].extraction_metadata == {"duration_ms": 42}
-    assert results[1].extraction["schema"].startswith('{"type": "object"')
+    assert '"orders"' in results[1].extraction["schema"]
+    assert '"amount_total"' in results[1].extraction["schema"]
     # Markdown forwarded unchanged to every call.
     assert all(md == "甲方：测试客户有限公司" for _, md in calls)
     assert len(calls) == 2
 
 
 @pytest.mark.asyncio
-async def test_extract_selected_uses_company_schema_when_available(monkeypatch):
+async def test_extract_selected_uses_company_schema(monkeypatch):
     calls: list[str] = []
 
     async def fake_extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIExtractResult:
@@ -131,15 +111,11 @@ async def test_extract_selected_uses_company_schema_when_available(monkeypatch):
             metadata={},
         )
 
-    def fail_static_schema_loader(name: str) -> str:
-        raise AssertionError(f"static schema loader should not be used for {name}")
-
     monkeypatch.setattr(provider_module, "extract_with_schema", fake_extract_with_schema)
-    monkeypatch.setattr(provider_module, "load_schema_json", fail_static_schema_loader)
 
     provider = LandingAIExtractorProvider()
     results = await provider.extract_selected(
-        _make_schema_input([PipelineSelection(name="contract_order", confidence=0.9)])
+        _make_input([PipelineSelection(name="contract_order", confidence=0.9)])
     )
 
     assert results[0].extraction == {"orders": {"amount_total": "30000"}}
@@ -156,7 +132,7 @@ async def test_extract_selected_soft_fails_on_extract_error(monkeypatch):
     for that schema and still complete the remaining selections normally."""
 
     async def fake_extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIExtractResult:
-        if '"contract_order"' in schema_json:
+        if '"orders"' in schema_json:
             raise LandingAIUnavailable("upstream 500")
         return LandingAIExtractResult(
             extraction={"ok": True},
@@ -165,11 +141,6 @@ async def test_extract_selected_soft_fails_on_extract_error(monkeypatch):
         )
 
     monkeypatch.setattr(provider_module, "extract_with_schema", fake_extract_with_schema)
-    monkeypatch.setattr(
-        provider_module,
-        "load_schema_json",
-        lambda name: f'{{"type": "object", "properties": {{"{name}": {{"type": "string"}}}}}}',
-    )
 
     provider = LandingAIExtractorProvider()
     results = await provider.extract_selected(
@@ -201,50 +172,6 @@ async def test_extract_selected_soft_fails_on_extract_error(monkeypatch):
     )
     assert "upstream 500" in failed.warnings[0]
 
-
-@pytest.mark.asyncio
-async def test_extract_selected_soft_fails_on_schema_load_error(monkeypatch):
-    """``load_schema_json`` failure for one selection is treated the same way
-    as an extract failure — soft fail, other selections still complete."""
-
-    async def fake_extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIExtractResult:
-        return LandingAIExtractResult(
-            extraction={"ok": True},
-            extraction_metadata={},
-            metadata={},
-        )
-
-    def fake_load_schema_json(name: str) -> str:
-        if name == "finance":
-            raise ValueError(f"unknown LandingAI pipeline schema: {name}")
-        return f'{{"type": "object", "properties": {{"{name}": {{"type": "string"}}}}}}'
-
-    monkeypatch.setattr(provider_module, "extract_with_schema", fake_extract_with_schema)
-    monkeypatch.setattr(provider_module, "load_schema_json", fake_load_schema_json)
-
-    provider = LandingAIExtractorProvider()
-    results = await provider.extract_selected(
-        _make_input(
-            [
-                PipelineSelection(name="identity", confidence=0.9),
-                PipelineSelection(name="finance", confidence=0.7),
-            ]
-        )
-    )
-
-    by_name = {r.name: r for r in results}
-
-    assert by_name["identity"].extraction == {"ok": True}
-    assert by_name["identity"].warnings == []
-
-    failed = by_name["finance"]
-    assert failed.extraction == {}
-    assert failed.extraction_metadata == {}
-    assert len(failed.warnings) == 1
-    assert failed.warnings[0].startswith("LandingAI extract failed for finance:")
-    assert "unknown LandingAI pipeline schema" in failed.warnings[0]
-
-
 @pytest.mark.asyncio
 async def test_extract_selected_emits_progress_events(monkeypatch):
     """If ``progress`` is supplied, the provider emits a ``pipeline_started``
@@ -252,7 +179,7 @@ async def test_extract_selected_emits_progress_events(monkeypatch):
     ``ok=True`` for success and ``ok=False`` for soft-failed selections."""
 
     async def fake_extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIExtractResult:
-        if '"finance"' in schema_json:
+        if '"invoices"' in schema_json:
             raise LandingAIUnavailable("boom")
         return LandingAIExtractResult(
             extraction={"ok": True},
@@ -261,11 +188,6 @@ async def test_extract_selected_emits_progress_events(monkeypatch):
         )
 
     monkeypatch.setattr(provider_module, "extract_with_schema", fake_extract_with_schema)
-    monkeypatch.setattr(
-        provider_module,
-        "load_schema_json",
-        lambda name: f'{{"type": "object", "properties": {{"{name}": {{"type": "string"}}}}}}',
-    )
 
     events: list[tuple[str, dict[str, Any]]] = []
 

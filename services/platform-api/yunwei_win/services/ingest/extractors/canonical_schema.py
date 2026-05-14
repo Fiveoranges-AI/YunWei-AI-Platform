@@ -15,8 +15,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from yunwei_win.services.ingest.pipeline_schemas import PipelineName
 
-PIPELINE_TABLES: dict[str, list[str]] = {
+
+PIPELINE_TABLES: dict[PipelineName, list[str]] = {
     "identity": ["customers", "contacts"],
     "contract_order": [
         "customers",

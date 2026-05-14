@@ -620,3 +620,396 @@ async def test_confirm_marks_extraction_and_job_confirmed(monkeypatch, tmp_path)
             assert doc.review_status == DocumentReviewStatus.confirmed
     finally:
         await engine.dispose()
+
+
+# ---- test 6: server-stored draft is authoritative --------------------
+
+
+@pytest.mark.asyncio
+async def test_confirm_uses_server_stored_draft_not_client_draft(monkeypatch, tmp_path):
+    """The server reads the canonical draft from the DB. A client draft with
+    an empty tables list must NOT short-circuit confirm — the server should
+    still write what the DB-stored draft says."""
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    engine = await _make_engine()
+    customer_id = uuid.uuid4()
+    extraction_id = uuid.uuid4()
+    document_id = await _seed_document(engine, customer_id=customer_id)
+
+    server_tables = [
+        {
+            "table_name": "customers",
+            "label": "客户",
+            "rows": [
+                {
+                    "client_row_id": "customers:0",
+                    "entity_id": str(customer_id),
+                    "operation": "update",
+                    "cells": [
+                        _cell("full_name", "公司全称", "text",
+                              value="服务器版本客户名", required=True),
+                    ],
+                }
+            ],
+        },
+    ]
+    server_draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=server_tables,
+    )
+    await _seed_extraction(
+        engine,
+        extraction_id=extraction_id,
+        document_id=document_id,
+        review_draft=server_draft,
+    )
+
+    # Client sends a draft with no tables (or a tampered name) — should NOT
+    # change what the server writes.
+    client_draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=[],
+    )
+
+    app = _build_app(engine, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.post(
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
+                json={"review_draft": client_draft, "patches": []},
+            )
+            assert res.status_code == 200, res.text
+
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            cust = (
+                await session.execute(
+                    select(Customer).where(Customer.id == customer_id)
+                )
+            ).scalar_one()
+            # The server-stored draft's value wins, not the empty client draft.
+            assert cust.full_name == "服务器版本客户名"
+    finally:
+        await engine.dispose()
+
+
+# ---- test 7: extraction_id mismatch in client draft -> 400 -----------
+
+
+@pytest.mark.asyncio
+async def test_confirm_rejects_when_extraction_id_mismatch_in_client_draft(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    engine = await _make_engine()
+    customer_id = uuid.uuid4()
+    extraction_id = uuid.uuid4()
+    document_id = await _seed_document(engine, customer_id=customer_id)
+
+    tables = [
+        {
+            "table_name": "customers",
+            "label": "客户",
+            "rows": [
+                {
+                    "client_row_id": "customers:0",
+                    "entity_id": str(customer_id),
+                    "operation": "update",
+                    "cells": [
+                        _cell("full_name", "公司全称", "text",
+                              value="测试客户", required=True),
+                    ],
+                }
+            ],
+        }
+    ]
+    server_draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=tables,
+    )
+    await _seed_extraction(
+        engine,
+        extraction_id=extraction_id,
+        document_id=document_id,
+        review_draft=server_draft,
+    )
+
+    # Client sends a draft with a DIFFERENT extraction_id.
+    wrong_id = uuid.uuid4()
+    client_draft = _draft_payload(
+        extraction_id=wrong_id,
+        document_id=document_id,
+        tables=tables,
+    )
+
+    app = _build_app(engine, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.post(
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
+                json={"review_draft": client_draft, "patches": []},
+            )
+            assert res.status_code == 400, res.text
+    finally:
+        await engine.dispose()
+
+
+# ---- test 8: patches for nonexistent rows are silently ignored -------
+
+
+@pytest.mark.asyncio
+async def test_confirm_ignores_patches_for_nonexistent_rows(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    engine = await _make_engine()
+    customer_id = uuid.uuid4()
+    extraction_id = uuid.uuid4()
+    document_id = await _seed_document(engine, customer_id=customer_id)
+
+    tables = [
+        {
+            "table_name": "customers",
+            "label": "客户",
+            "rows": [
+                {
+                    "client_row_id": "customers:0",
+                    "entity_id": str(customer_id),
+                    "operation": "update",
+                    "cells": [
+                        _cell("full_name", "公司全称", "text",
+                              value="测试客户", required=True),
+                    ],
+                }
+            ],
+        }
+    ]
+    draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=tables,
+    )
+    await _seed_extraction(
+        engine,
+        extraction_id=extraction_id,
+        document_id=document_id,
+        review_draft=draft,
+    )
+
+    app = _build_app(engine, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            # Patch a row that doesn't exist in the server draft.
+            patches = [
+                {
+                    "table_name": "customers",
+                    "client_row_id": "ghost:99",
+                    "field_name": "full_name",
+                    "value": "应该被忽略",
+                }
+            ]
+            res = await ac.post(
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
+                json={"patches": patches},
+            )
+            assert res.status_code == 200, res.text
+
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            # Only the original customer row exists — no ghost row was created.
+            customers = (await session.execute(select(Customer))).scalars().all()
+            assert len(customers) == 1
+            assert customers[0].full_name == "测试客户"
+    finally:
+        await engine.dispose()
+
+
+# ---- test 9: catalog field with no ORM destination -> 400 ------------
+
+
+@pytest.mark.asyncio
+async def test_confirm_reports_orm_destination_missing(monkeypatch, tmp_path):
+    """A non-rejected, non-empty cell whose field_name has no ORM column on
+    the table model must surface as ``catalog_field_has_no_orm_destination``.
+    """
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    engine = await _make_engine()
+    customer_id = uuid.uuid4()
+    extraction_id = uuid.uuid4()
+    document_id = await _seed_document(engine, customer_id=customer_id)
+
+    # Customer has no ``imaginary_field`` column on the ORM but the catalog
+    # cell points at it. We synthesize the cell directly into the stored
+    # draft — the materializer normally wouldn't emit unknown fields.
+    tables = [
+        {
+            "table_name": "customers",
+            "label": "客户",
+            "rows": [
+                {
+                    "client_row_id": "customers:0",
+                    "entity_id": str(customer_id),
+                    "operation": "update",
+                    "cells": [
+                        _cell("full_name", "公司全称", "text",
+                              value="测试客户", required=True),
+                        # Catalog claims this field exists, but the ORM doesn't.
+                        _cell("imaginary_field", "imaginary", "text",
+                              value="something"),
+                    ],
+                }
+            ],
+        }
+    ]
+    draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=tables,
+    )
+    await _seed_extraction(
+        engine,
+        extraction_id=extraction_id,
+        document_id=document_id,
+        review_draft=draft,
+    )
+
+    # Inject the imaginary field into the catalog by patching the company
+    # schema service for the duration of this test.
+    from yunwei_win.services import company_schema
+
+    async def fake_get_company_schema(_session):
+        cat = await _real_get_company_schema(_session)
+        for table in cat.get("tables") or []:
+            if table["table_name"] == "customers":
+                table["fields"].append({
+                    "field_name": "imaginary_field",
+                    "label": "imaginary",
+                    "data_type": "text",
+                    "required": False,
+                    "is_array": False,
+                    "is_active": True,
+                    "sort_order": 999,
+                })
+        return cat
+
+    _real_get_company_schema = company_schema.get_company_schema
+    from yunwei_win.services.schema_ingest import confirm as confirm_mod
+
+    monkeypatch.setattr(confirm_mod, "get_company_schema", fake_get_company_schema)
+
+    app = _build_app(engine, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.post(
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
+                json={"patches": []},
+            )
+            assert res.status_code == 400, res.text
+            cells = res.json()["detail"]["invalid_cells"]
+            assert any(
+                c["table_name"] == "customers"
+                and c["field_name"] == "imaginary_field"
+                and c["reason"] == "catalog_field_has_no_orm_destination"
+                for c in cells
+            ), cells
+    finally:
+        await engine.dispose()
+
+
+# ---- test 10: ORM-required field missing from catalog -> 400 ---------
+
+
+@pytest.mark.asyncio
+async def test_confirm_reports_orm_requires_field_missing_from_catalog(
+    monkeypatch, tmp_path
+):
+    """The contracts ORM has a NOT NULL ``order_id`` column with no default
+    and no catalog field. Confirming a contracts row must fail loudly with
+    ``orm_requires_field_missing_from_catalog`` rather than later raising
+    ``IntegrityError`` during the flush."""
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    engine = await _make_engine()
+    customer_id = uuid.uuid4()
+    extraction_id = uuid.uuid4()
+    document_id = await _seed_document(engine, customer_id=customer_id)
+
+    tables = [
+        {
+            "table_name": "customers",
+            "label": "客户",
+            "rows": [
+                {
+                    "client_row_id": "customers:0",
+                    "entity_id": str(customer_id),
+                    "operation": "update",
+                    "cells": [
+                        _cell("full_name", "公司全称", "text",
+                              value="测试客户", required=True),
+                    ],
+                }
+            ],
+        },
+        {
+            "table_name": "contracts",
+            "label": "合同",
+            "rows": [
+                {
+                    "client_row_id": "contracts:0",
+                    "entity_id": None,
+                    "operation": "create",
+                    "cells": [
+                        _cell("customer_id", "客户", "uuid",
+                              value=str(customer_id), required=True),
+                        _cell("contract_no_external", "合同号", "text",
+                              value="HT-001"),
+                    ],
+                }
+            ],
+        },
+    ]
+    draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=tables,
+    )
+    await _seed_extraction(
+        engine,
+        extraction_id=extraction_id,
+        document_id=document_id,
+        review_draft=draft,
+    )
+
+    app = _build_app(engine, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.post(
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
+                json={"patches": []},
+            )
+            assert res.status_code == 400, res.text
+            cells = res.json()["detail"]["invalid_cells"]
+            assert any(
+                c["table_name"] == "contracts"
+                and c["field_name"] == "order_id"
+                and c["reason"] == "orm_requires_field_missing_from_catalog"
+                for c in cells
+            ), cells
+    finally:
+        await engine.dispose()
+
+
+# ---- test 11: integer validation accepts integral floats -------------
+
+
+def test_integer_validation_accepts_integral_floats():
+    from yunwei_win.services.schema_ingest.confirm import _validate_value
+
+    spec = {"data_type": "integer"}
+    assert _validate_value(spec, "10.0") is True
+    assert _validate_value(spec, "10") is True
+    assert _validate_value(spec, 10) is True
+    assert _validate_value(spec, "10.5") is False
+    assert _validate_value(spec, "abc") is False
+    assert _validate_value(spec, True) is False

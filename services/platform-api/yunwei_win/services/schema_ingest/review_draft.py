@@ -10,10 +10,8 @@ tables get materialized for a document. Mapping unknown pipelines is treated
 as a soft warning (skip), not a fatal error — the extractor may evolve
 faster than this map.
 
-The pipeline_results payload format intentionally accepts a few shape
-variants because the V1 extractor pipelines were written independently and
-don't agree on naming. The materializer normalizes them; the rule is
-"prefer the most specific key, then fall back".
+Pipeline results are expected to be ``PipelineExtractResult.model_dump()``
+items, with extracted table data under the canonical ``extraction`` key.
 """
 
 from __future__ import annotations
@@ -55,8 +53,7 @@ def materialize_review_draft(
         catalog: Output of ``services.company_schema.get_company_schema``.
         route_plan: ``{"selected_pipelines": [{name, confidence, reason}], ...}``
             Pipelines may be a list of dicts or bare strings.
-        pipeline_results: ``[{"name"|"schema": pipeline_name, "result"|"data": {...}, "warnings": [...]}]``.
-            Shapes vary by provider — we extract leniently.
+        pipeline_results: ``[{"name": pipeline_name, "extraction": {...}, "warnings": [...]}]``.
     """
 
     catalog_tables: list[dict[str, Any]] = catalog.get("tables") or []
@@ -181,13 +178,7 @@ def _extraction_by_table(
         covered_tables = PIPELINE_TABLES.get(pipeline_name)
         if not covered_tables:
             continue
-        payload = (
-            result_entry.get("extraction")
-            or result_entry.get("result")
-            or result_entry.get("data")
-            or result_entry.get("raw")
-            or {}
-        )
+        payload = result_entry.get("extraction") or {}
         if not isinstance(payload, dict):
             continue
         for table_name in covered_tables:
@@ -206,29 +197,11 @@ def _extraction_by_table(
 def _extract_table_payload(payload: dict[str, Any], table_name: str) -> Any:
     """Find ``table_name`` data inside one pipeline result payload.
 
-    Tries, in order:
-      1. ``payload["data"][table_name]`` (LandingAI nested style)
-      2. ``payload[table_name]``
-      3. ``payload[singular(table_name)]``  (drop trailing 's')
-      4. ``payload`` itself when no nesting matches AND the payload looks
-         like a flat field dict (used when the pipeline only ever covers
-         one table, e.g. ``orders``).
+    Extractors are constrained by the tenant company schema, so table names
+    must match catalog table names exactly.
     """
 
-    nested = payload.get("data")
-    if isinstance(nested, dict) and table_name in nested:
-        return nested[table_name]
-    if table_name in payload:
-        return payload[table_name]
-    singular = table_name.rstrip("s")
-    if singular and singular != table_name and singular in payload:
-        return payload[singular]
-    # Fall back to using the payload itself only if it looks like a record:
-    # i.e. no envelope keys like ``result`` / ``data`` / ``warnings``.
-    envelope_keys = {"data", "result", "raw", "warnings", "confidences", "evidence"}
-    if isinstance(payload, dict) and not envelope_keys.intersection(payload.keys()):
-        return payload
-    return None
+    return payload.get(table_name)
 
 
 # --- per-table materialization ------------------------------------------

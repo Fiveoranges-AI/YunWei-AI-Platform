@@ -10,11 +10,11 @@
 //   short_name    → monogram (fallback: first 1-2 chars of name)
 //                   color    (derived from name hash)
 //                   tag      (default "客户" — yunwei-tools has no tag column)
-//                   aiSummary (TODO: source from /summary headline; v1 placeholder)
+//                   aiSummary (TODO: source from /summary headline)
 //                   metrics  (separate /metrics call)
 //                   risk     (derived from /risks count + max severity)
 
-import { MOCK_ASK_SEED, MOCK_CUSTOMERS, MOCK_REVIEW } from "../data/mock";
+import { MOCK_ASK_SEED, MOCK_CUSTOMERS } from "../data/mock";
 import type {
   AskAIBlock,
   AskSeed,
@@ -24,7 +24,6 @@ import type {
   CustomerListItem,
   CustomerMetrics,
   CustomerRisk,
-  Review,
   RiskLevel,
   RiskSignal,
   CustomerTask,
@@ -388,14 +387,6 @@ function transformRisks(rows: unknown[] | null): RiskSignal[] {
     detail: r.description ?? "",
     sources: r.raw_excerpt ? [r.raw_excerpt] : [],
   }));
-}
-
-export async function getReview(_uploadId: string): Promise<Review> {
-  if (USE_MOCK_FALLBACK) {
-    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-    return MOCK_REVIEW;
-  }
-  throw new Error("没有可复核的上传批次");
 }
 
 export async function getMe(): Promise<CurrentUser> {

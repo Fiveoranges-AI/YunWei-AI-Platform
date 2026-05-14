@@ -11,7 +11,7 @@ from yunwei_win.services.ingest.llm_schema_router import (
     _failopen_plan,
     route_schemas,
 )
-from yunwei_win.services.ingest.landingai_schemas.registry import PIPELINE_NAMES
+from yunwei_win.services.ingest.pipeline_schemas import PIPELINE_NAMES
 from yunwei_win.services.llm import LLMCallFailed
 
 

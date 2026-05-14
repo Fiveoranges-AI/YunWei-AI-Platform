@@ -1,9 +1,9 @@
 """Evidence collection — the single OCR/text-normalization step.
 
 Pipeline step 1: take raw input (file bytes, camera capture, or pasted text)
-and produce a `(Document row, ocr_text)` tuple. Every downstream extractor
-(identity / commercial / ops) reads the same `ocr_text`, so OCR runs exactly
-once per input regardless of how many extractors fire later.
+and produce a `(Document row, ocr_text)` tuple. Every downstream schema-first
+pipeline reads the same `ocr_text`, so OCR runs exactly once per input
+regardless of how many pipelines the router selects.
 
 This module deliberately does *not* call any LLM and does *not* make
 extraction decisions — those are Planner's and the extractors' jobs.

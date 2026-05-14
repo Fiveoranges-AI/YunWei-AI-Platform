@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { GoFn } from "../App";
 import {
   confirmReviewDraft,
+  deleteIngestJob,
   getIngestJob,
   ignoreReviewDraft,
   isReviewDraft,
@@ -11,6 +12,7 @@ import {
 import { ReviewTableWorkspace } from "../components/review/ReviewTableWorkspace";
 import type {
   ConfirmExtractionInvalidCell,
+  IngestJobStatus,
   ReviewCellPatch,
   ReviewDraft,
 } from "../data/types";
@@ -26,6 +28,7 @@ export function ReviewScreen({
 }) {
   const jobId = params?.jobId;
   const [draft, setDraft] = useState<ReviewDraft | null>(null);
+  const [jobStatus, setJobStatus] = useState<IngestJobStatus | null>(null);
   const [loading, setLoading] = useState<boolean>(Boolean(jobId));
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,6 +49,7 @@ export function ReviewScreen({
       try {
         const job = await getIngestJob(jobId);
         if (cancelled) return;
+        setJobStatus(job.status);
         const nextDraft =
           job.review_draft ??
           (isReviewDraft(job.result_json) ? (job.result_json as ReviewDraft) : null);
@@ -96,10 +100,14 @@ export function ReviewScreen({
       setDone(true);
     } catch (e) {
       const apiErr = e as ApiError;
-      if (apiErr.detail && typeof apiErr.detail === "object") {
-        const d = apiErr.detail as { invalid_cells?: ConfirmExtractionInvalidCell[] };
-        if (Array.isArray(d.invalid_cells)) {
-          setInvalidCells(d.invalid_cells);
+      if (
+        apiErr.detail &&
+        typeof apiErr.detail === "object" &&
+        "invalid_cells" in (apiErr.detail as Record<string, unknown>)
+      ) {
+        const cells = (apiErr.detail as { invalid_cells?: unknown }).invalid_cells;
+        if (Array.isArray(cells)) {
+          setInvalidCells(cells as ConfirmExtractionInvalidCell[]);
         }
       }
       setError(apiErr.message || "归档失败");
@@ -121,6 +129,12 @@ export function ReviewScreen({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleDelete(): Promise<void> {
+    if (!jobId) throw new Error("no job id");
+    await deleteIngestJob(jobId);
+    go("inbox");
   }
 
   if (loading) {
@@ -170,12 +184,17 @@ export function ReviewScreen({
   }
 
   if (draft) {
+    const readOnly =
+      (jobStatus !== null && jobStatus !== "extracted") ||
+      draft.status !== "pending_review";
     return (
       <ReviewTableWorkspace
         draft={draft}
         onSubmit={handleSubmit}
         onIgnore={handleIgnore}
+        onDelete={handleDelete}
         busy={busy}
+        readOnly={readOnly}
         submitError={error}
         invalidCells={invalidCells}
         sourceText={draft.document.source_text ?? null}

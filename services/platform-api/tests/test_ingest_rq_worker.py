@@ -109,7 +109,7 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
         DocumentExtraction,
         DocumentExtractionStatus,
     )
-    from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan
+    from yunwei_win.services.ingest.pipeline_schemas import PipelineRoutePlan
     from yunwei_win.services.schema_ingest import (
         AutoIngestResult,
         ReviewDraft,
@@ -446,7 +446,7 @@ async def test_worker_dispatches_to_schema_ingest_and_persists_review_draft(monk
         ReviewDraftDocument,
         ReviewDraftRoutePlan,
     )
-    from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan
+    from yunwei_win.services.ingest.pipeline_schemas import PipelineRoutePlan
 
     engine = await _make_engine()
     _patch_engine_routing(monkeypatch, engine)

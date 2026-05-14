@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,19 +34,24 @@ from yunwei_win.services.company_schema import (
     ensure_default_company_schema,
     get_company_schema,
 )
-from yunwei_win.services.ingest.auto import _build_provider_progress_adapter
 from yunwei_win.services.ingest.evidence import (
     Evidence,
     PreStoredFile,
     collect_evidence,
 )
-from yunwei_win.services.ingest.extractors.providers.base import ExtractionInput
+from yunwei_win.services.ingest.extractors.providers.base import (
+    ExtractionInput,
+    ProgressCallback as ExtractorProgressCallback,
+)
 from yunwei_win.services.ingest.extractors.providers.factory import (
     get_extractor_provider,
 )
 from yunwei_win.services.ingest.llm_schema_router import route_schemas
+from yunwei_win.services.ingest.pipeline_schemas import PipelineRoutePlan
 from yunwei_win.services.ingest.progress import ProgressCallback, emit_progress
-from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan
+from yunwei_win.services.schema_ingest.extraction_validation import (
+    validate_pipeline_extraction,
+)
 from yunwei_win.services.schema_ingest.review_draft import materialize_review_draft
 from yunwei_win.services.schema_ingest.schemas import ReviewDraft
 
@@ -62,6 +67,32 @@ class AutoIngestResult:
     extraction_id: uuid.UUID
     route_plan: PipelineRoutePlan | None
     review_draft: ReviewDraft
+
+
+def _build_provider_progress_adapter(
+    progress: ProgressCallback | None,
+) -> ExtractorProgressCallback | None:
+    """Bridge provider event callbacks onto the worker progress shape."""
+
+    if progress is None:
+        return None
+
+    async def adapter(event: str, payload: Any) -> None:
+        if event == "pipeline_started" and isinstance(payload, dict):
+            await progress("extract", f"开始抽取 {payload.get('name', '?')}")
+        elif event == "pipeline_done" and isinstance(payload, dict):
+            ok = payload.get("ok", True)
+            name = payload.get("name", "?")
+            status = "完成" if ok else "失败"
+            await progress("extract", f"{name} 抽取{status}")
+        elif event in {"schema_extract", "schema_extract_done"} and isinstance(
+            payload, str
+        ):
+            await progress("extract", payload)
+        else:
+            await progress(event, str(payload))
+
+    return adapter
 
 
 async def auto_ingest(
@@ -133,6 +164,13 @@ async def auto_ingest(
             extraction_input,
             progress=_build_provider_progress_adapter(progress),
         )
+        # Validate each pipeline's extraction against the catalog-derived
+        # schema before materializing the draft. Shape mismatches degrade to
+        # warnings so the reviewer still sees the failure in the UI.
+        for pr in pipeline_results:
+            extract_warnings.extend(
+                validate_pipeline_extraction(pr.name, pr.extraction, catalog)
+            )
         pipeline_dump = [pr.model_dump(mode="json") for pr in pipeline_results]
     except Exception as exc:  # noqa: BLE001 — degrade gracefully
         logger.exception("schema ingest extract step failed for document %s", evidence.document_id)

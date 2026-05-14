@@ -7,7 +7,7 @@
 Notes:
 - ``CustomerTask`` 已经在 ``customer_memory.py`` 里定义了，这里不重复声明，
   confirm 直接复用旧模型。
-- 金额/数量统一用 ``Numeric(18, 4)``，比 V1 的 ``Numeric(15, 2)`` 多两位以
+- 金额/数量统一用 ``Numeric(18, 4)``，比旧订单模型多两位以
   支撑小批量制造件的单价。
 - 时间戳用 ``_utcnow + server_default=func.now()`` 的写法，跟 ``ingest_job``
   保持一致，避免 raw insert 没值或 flush 后 lazy refresh。
@@ -104,7 +104,7 @@ class ProductRequirement(Base, _StampedColumns):
 
 
 class ContractPaymentMilestone(Base, _StampedColumns):
-    """合同付款节点（替代 V1 的 ``contracts.payment_milestones`` JSON 列）。"""
+    """合同付款节点（替代旧 ``contracts.payment_milestones`` JSON 列）。"""
 
     __tablename__ = "contract_payment_milestones"
 
@@ -250,7 +250,7 @@ class ShipmentItem(Base, _StampedColumns):
 
 class CustomerJournalItem(Base, _StampedColumns):
     """客户时间线统一表 —— 把抽取出来的承诺/风险/记忆/备注按
-    journal item 汇总到这里。比 V1 的事件/承诺/风险/记忆分表更适合做
+    journal item 汇总到这里。比旧事件/承诺/风险/记忆分表更适合做
     timeline UI。"""
 
     __tablename__ = "customer_journal_items"

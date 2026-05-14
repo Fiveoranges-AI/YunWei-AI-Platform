@@ -1,13 +1,8 @@
 """Pydantic schemas for the customer-memory extraction tool call + the
 inbox payload it produces.
 
-Shape contract:
-  ContractExtractionResult is the existing structured-contract schema.
-  CustomerMemoryExtractionResult is the new "memory in event-log form"
-  schema, returned by the universal ingest pipeline. Both can come from
-  the same input — customer-scoped ingest persists the memory shape as
-  inbox extracted_payload, while contract extraction persists the contract
-  shape directly into customers/contracts/orders.
+Customer-scoped ingest persists this memory/event-log shape as inbox
+``extracted_payload`` for human review.
 """
 
 from __future__ import annotations
@@ -18,7 +13,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from yunwei_win.services.ingest.schemas import (
+from yunwei_win.services.ingest.common_schemas import (
     _strip_titles,
     _clean_date,
     FieldProvenanceEntry,

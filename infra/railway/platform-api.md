@@ -5,7 +5,7 @@ The Railway production shape is:
 1. `platform-app` — public FastAPI web service. Serves `/`, `/win/`, and
    `/api/*`.
 2. `win-ingest-worker` — private RQ worker. No HTTP listener. Drains the
-   `win-ingest` Redis queue and runs `auto_ingest`.
+   `win-ingest` Redis queue and runs the schema-first ingest pipeline.
 3. `Postgres` — one shared platform metadata database.
 4. `Redis` — one shared session/cache/queue Redis.
 5. S3-compatible object storage — required for the standard two-service
@@ -64,8 +64,8 @@ Principles:
 - `DATABASE_URL` and `REDIS_URL` must point to the same Railway Postgres
   and Redis resources for both services.
 - AI provider and storage variables must match between `platform-app` and
-  `win-ingest-worker` while `/api/win/ingest/auto` still exists on the web
-  service.
+  `win-ingest-worker` because the worker drains jobs created by the web
+  service through `/api/win/ingest/jobs`.
 - `COOKIE_SECRET` belongs only on `platform-app`; the worker does not serve
   browser sessions.
 - Do not set `PORT` manually unless Railway domain routing requires a fixed
@@ -74,7 +74,7 @@ Principles:
 - Prefer `STORAGE_BACKEND=s3` for Railway. `STORAGE_BACKEND=local` only
   works when the process that stages files is the same process that reads
   them.
-- Do not set `DOCUMENT_AI_PROVIDER` for new deploys. The current auto
+- Do not set `DOCUMENT_AI_PROVIDER` for new deploys. The schema-first
   ingest path uses `OCR_PROVIDER` and `EXTRACTOR_PROVIDER`.
 
 ## Railway variable templates
