@@ -131,6 +131,47 @@ def test_review_draft_hides_system_fields_and_assigns_steps():
     assert cells["amount_total"].source_refs[0].ref_id == "sheet:报价单!R2C2"
 
 
+def test_review_draft_vnext_does_not_serialize_legacy_route_plan():
+    extraction = NormalizedExtraction(
+        provider="deepseek",
+        tables={
+            "customers": [
+                NormalizedRow(
+                    client_row_id="customers:0",
+                    fields={
+                        "full_name": NormalizedFieldValue(value="测试有限公司")
+                    },
+                )
+            ]
+        },
+        metadata={},
+    )
+    parse = ParseArtifact(
+        version=1,
+        provider="text",
+        source_type="text",
+        markdown="客户：测试有限公司",
+        capabilities=ParseCapabilities(text_spans=True),
+    )
+    proposal = _empty_proposal_for("customers", "customers:0")
+
+    draft = materialize_review_draft_vnext(
+        extraction_id=uuid4(),
+        document_id=uuid4(),
+        parse_id=uuid4(),
+        document_filename="note.txt",
+        parse_artifact=parse,
+        selected_tables=["customers"],
+        normalized_extraction=extraction,
+        entity_resolution=proposal,
+        catalog=_catalog(),
+        document_summary=None,
+        warnings=[],
+    )
+
+    assert "route_plan" not in draft.model_dump(mode="json")
+
+
 def test_default_only_row_is_not_writable():
     extraction = NormalizedExtraction(
         provider="deepseek",

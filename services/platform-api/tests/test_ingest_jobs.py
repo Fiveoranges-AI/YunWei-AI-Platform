@@ -206,7 +206,6 @@ async def test_get_job_returns_result_json_for_extracted(monkeypatch, tmp_path):
         "schema_version": 1,
         "status": "pending_review",
         "document": {"filename": "x.pdf"},
-        "route_plan": {"selected_pipelines": []},
         "tables": [
             {
                 "table_name": "customers",

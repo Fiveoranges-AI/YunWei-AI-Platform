@@ -65,7 +65,6 @@ def _minimal_review_draft(extraction_id: UUID, document_id: UUID) -> dict:
         "review_version": 0,
         "current_step": "customer",
         "document": {"filename": "profile.txt", "summary": None, "source_text": None},
-        "route_plan": {"selected_pipelines": []},
         "steps": [
             {
                 "key": "customer",

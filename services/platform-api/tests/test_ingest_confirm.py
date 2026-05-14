@@ -1,11 +1,8 @@
 """Smoke import test for the confirm module.
 
 The detailed vNext coverage lives in ``tests/test_confirm_vnext.py``.
-After the Task 8 rewrite the legacy assertions (``selected_pipelines``,
-``raw_pipeline_results``, ``schema_version`` on ``DocumentExtraction``,
-etc.) no longer apply; this file only guards that the public surface
-still imports cleanly so anything still grepping for these symbols at
-import time doesn't break.
+After the Task 8 rewrite the legacy pipeline assertions no longer apply;
+this file only guards that the public surface still imports cleanly.
 """
 
 from __future__ import annotations

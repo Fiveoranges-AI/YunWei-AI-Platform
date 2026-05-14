@@ -165,10 +165,6 @@ class ReviewDraftDocument(BaseModel):
     source_text: str | None = None
 
 
-class ReviewDraftRoutePlan(BaseModel):
-    selected_pipelines: list[dict[str, Any]] = Field(default_factory=list)
-
-
 class ReviewDraft(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -181,9 +177,6 @@ class ReviewDraft(BaseModel):
     review_version: int = 0
     current_step: str | None = None
     document: ReviewDraftDocument
-    # Legacy route_plan kept for serialization compatibility; vNext drafts use
-    # ``steps`` + ``tables`` directly.
-    route_plan: ReviewDraftRoutePlan = Field(default_factory=ReviewDraftRoutePlan)
     steps: list[ReviewStep] = Field(default_factory=list)
     tables: list[ReviewTable]
     schema_warnings: list[str] = Field(default_factory=list)

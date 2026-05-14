@@ -6,8 +6,8 @@ Invariant:
     identity_key}``). Extraction sparsity changes cell status, not cell
     existence.
 
-The legacy pipeline-shaped materializer (PIPELINE_TABLES / route_plan /
-pipeline_results) was removed in Task 13 — see ``materialize_review_draft_vnext``.
+The legacy pipeline-shaped materializer (PIPELINE_TABLES / pipeline_results)
+was removed in Task 13 — see ``materialize_review_draft_vnext``.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from yunwei_win.services.schema_ingest.schemas import (
     ReviewCell,
     ReviewDraft,
     ReviewDraftDocument,
-    ReviewDraftRoutePlan,
     ReviewEntityCandidate,
     ReviewRow,
     ReviewRowDecision,
@@ -167,7 +166,6 @@ def materialize_review_draft_vnext(
             summary=document_summary,
             source_text=parse_artifact.markdown or None,
         ),
-        route_plan=ReviewDraftRoutePlan(),
         steps=steps,
         tables=tables,
         schema_warnings=schema_warnings,

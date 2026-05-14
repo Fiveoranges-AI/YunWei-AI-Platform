@@ -397,16 +397,6 @@ export type ReviewDraftDocument = {
   source_text?: string | null;
 };
 
-export type ReviewDraftRoutePlanItem = {
-  name: string;
-  confidence?: number;
-  reason?: string;
-};
-
-export type ReviewDraftRoutePlan = {
-  selected_pipelines: ReviewDraftRoutePlanItem[];
-};
-
 export type ReviewDraftStatus = "pending_review" | "confirmed" | "ignored" | "failed";
 
 export type ReviewDraft = {
@@ -418,8 +408,6 @@ export type ReviewDraft = {
   review_version?: number;
   current_step?: string | null;
   document: ReviewDraftDocument;
-  // Kept optional for legacy job payloads still echoing selected_pipelines.
-  route_plan?: ReviewDraftRoutePlan | null;
   steps?: ReviewStep[];
   tables: ReviewTable[];
   schema_warnings: string[];
@@ -526,8 +514,8 @@ export type ConfirmExtractionResponse = {
 // Mirrors `_extraction_dict` in
 // services/platform-api/yunwei_win/api/schema_ingest.py — an envelope
 // around the ReviewDraft, NOT the bare draft. Legacy fields (warnings,
-// route_plan, created_by, schema_version) are optional so old persisted
-// rows don't break the type narrow.
+// created_by, schema_version) are optional so old persisted rows don't break
+// the type narrow.
 export type ExtractionEnvelope = {
   id: string;
   document_id: string;
@@ -559,7 +547,6 @@ export type ExtractionEnvelope = {
   // Legacy compatibility — older endpoint versions may still return these.
   schema_version?: number;
   warnings?: unknown;
-  route_plan?: ReviewDraftRoutePlan | null;
   created_by?: string | null;
 };
 

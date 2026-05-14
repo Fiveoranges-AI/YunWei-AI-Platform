@@ -5,7 +5,7 @@ This file keeps the ``_catalog_from_default`` helper alive because the
 legacy provider tests (LandingAI / DeepSeek) still import it, and adds
 one smoke test against ``materialize_review_draft_vnext`` so the helper
 is exercised against the vNext shape rather than the dropped
-``selected_pipelines`` / ``pipeline_results`` contract.
+pipeline-results contract.
 """
 
 from __future__ import annotations
