@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { GoFn } from "../App";
 import {
   confirmReviewDraft,
+  deleteIngestJob,
   getIngestJob,
   ignoreReviewDraft,
   isReviewDraft,
@@ -123,6 +124,12 @@ export function ReviewScreen({
     }
   }
 
+  async function handleDelete(): Promise<void> {
+    if (!jobId) throw new Error("no job id");
+    await deleteIngestJob(jobId);
+    go("inbox");
+  }
+
   if (loading) {
     return (
       <CenteredScreen>
@@ -175,6 +182,7 @@ export function ReviewScreen({
         draft={draft}
         onSubmit={handleSubmit}
         onIgnore={handleIgnore}
+        onDelete={handleDelete}
         busy={busy}
         submitError={error}
         invalidCells={invalidCells}

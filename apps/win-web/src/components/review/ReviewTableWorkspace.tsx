@@ -27,6 +27,7 @@ type Props = {
   draft: ReviewDraft;
   onSubmit: (patches: ReviewCellPatch[]) => Promise<void> | void;
   onIgnore: () => Promise<void> | void;
+  onDelete?: () => Promise<void> | void;
   busy?: boolean;
   submitError?: string | null;
   invalidCells?: ConfirmExtractionInvalidCell[];
@@ -81,6 +82,7 @@ export function ReviewTableWorkspace({
   draft,
   onSubmit,
   onIgnore,
+  onDelete,
   busy = false,
   submitError = null,
   invalidCells = [],
@@ -91,6 +93,8 @@ export function ReviewTableWorkspace({
   // Locally appended rows for array tables — keyed by table_name. These
   // get materialized into ReviewCellPatch entries on submit.
   const [extraRowsByTable, setExtraRowsByTable] = useState<Record<string, ReviewRow[]>>({});
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Build a quick lookup map for invalid cells -> reason.
@@ -259,6 +263,25 @@ export function ReviewTableWorkspace({
     await onIgnore();
   }
 
+  async function handleDeleteClick(): Promise<void> {
+    if (!onDelete || deleting) return;
+    if (!window.confirm("确定删除？删除后不可恢复。")) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (e) {
+      const apiErr = e as { message?: string; status?: number };
+      if (apiErr.status === 409) {
+        setDeleteError("当前状态不支持删除");
+      } else {
+        setDeleteError(apiErr.message || "删除失败");
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const filename = draft.document?.filename ?? "(未命名文档)";
   const summary = draft.document?.summary;
   const routeChips = draft.route_plan?.selected_pipelines ?? [];
@@ -346,7 +369,17 @@ export function ReviewTableWorkspace({
               </div>
             )}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {onDelete && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => void handleDeleteClick()}
+                disabled={busy || deleting}
+                style={{ padding: "8px 14px", color: "var(--risk-700)" }}
+              >
+                {deleting ? "删除中…" : "删除"}
+              </button>
+            )}
             <button
               className="btn btn-secondary"
               onClick={() => void handleIgnore()}
@@ -365,6 +398,19 @@ export function ReviewTableWorkspace({
               <span>{busy ? "确认中…" : "确认入库"}</span>
             </button>
           </div>
+          {deleteError && (
+            <div
+              style={{
+                width: "100%",
+                fontSize: 12,
+                color: "var(--risk-700)",
+                marginTop: 4,
+                textAlign: "right",
+              }}
+            >
+              {deleteError}
+            </div>
+          )}
         </div>
       </div>
 

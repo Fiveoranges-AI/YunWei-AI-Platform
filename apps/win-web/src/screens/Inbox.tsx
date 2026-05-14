@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent } from "react";
 import type { GoFn } from "../App";
-import { deleteIngestJob, listIngestJobs } from "../api/ingest";
+import { listIngestJobs } from "../api/ingest";
 import type { IngestJob } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
@@ -33,23 +32,6 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
   const [selectedId, setSelectedId] = useState<string | null>(params.jobId ?? null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  async function handleDeleteHistory(e: MouseEvent, jobId: string): Promise<void> {
-    e.stopPropagation();
-    e.preventDefault();
-    if (deletingId === jobId) return;
-    setDeletingId(jobId);
-    setHistoryError(null);
-    try {
-      await deleteIngestJob(jobId);
-      setHistoryJobs((prev) => prev.filter((j) => j.id !== jobId));
-    } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : "删除失败");
-    } finally {
-      setDeletingId(null);
-    }
-  }
 
   // Active polling while mounted; auto-paces based on whether any job is in flight.
   useEffect(() => {
@@ -162,9 +144,7 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
             <HistoryList
               jobs={historyJobs}
               error={historyError}
-              deletingId={deletingId}
               onOpen={(j) => go("review", { jobId: j.id })}
-              onDelete={handleDeleteHistory}
             />
           )}
         </div>
@@ -416,15 +396,11 @@ function PendingRow({
 function HistoryList({
   jobs,
   error,
-  deletingId,
   onOpen,
-  onDelete,
 }: {
   jobs: InboxJob[];
   error: string | null;
-  deletingId: string | null;
   onOpen: (j: InboxJob) => void;
-  onDelete: (e: MouseEvent, jobId: string) => void;
 }) {
   if (error && jobs.length === 0) {
     return (
@@ -453,32 +429,10 @@ function HistoryList({
     else earlier.push(j);
   }
   const renderRow = (j: InboxJob) => (
-    <HistoryRow
-      key={j.id}
-      job={j}
-      deleting={deletingId === j.id}
-      onClick={() => onOpen(j)}
-      onDelete={(e) => onDelete(e, j.id)}
-    />
+    <HistoryRow key={j.id} job={j} onClick={() => onOpen(j)} />
   );
   return (
     <>
-      {error && (
-        <div
-          style={{
-            margin: "12px 24px 0",
-            padding: "8px 10px",
-            borderRadius: 8,
-            border: "1px solid var(--risk-100)",
-            background: "var(--risk-50)",
-            color: "var(--risk-700)",
-            fontSize: 12,
-            lineHeight: 1.4,
-          }}
-        >
-          {error}
-        </div>
-      )}
       {today.length > 0 && (
         <>
           <DayHeader label="今天" />
@@ -520,14 +474,10 @@ function DayHeader({ label }: { label: string }) {
 
 function HistoryRow({
   job,
-  deleting,
   onClick,
-  onDelete,
 }: {
   job: InboxJob;
-  deleting: boolean;
   onClick: () => void;
-  onDelete: (e: MouseEvent) => void;
 }) {
   const when = job.finished_at ?? job.updated_at ?? job.created_at;
   const statusLabel =
@@ -535,16 +485,8 @@ function HistoryRow({
     job.status === "failed" ? "失败" :
     job.status === "canceled" ? "已取消" : "未知";
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
       style={{
         width: "100%",
         display: "flex",
@@ -552,6 +494,7 @@ function HistoryRow({
         gap: 12,
         padding: "11px 24px",
         background: "transparent",
+        border: "none",
         borderBottom: "1px solid var(--ink-100)",
         cursor: "pointer",
         textAlign: "left",
@@ -576,43 +519,8 @@ function HistoryRow({
           {statusLabel} · {when ? fmtRelative(when) : "—"}
         </div>
       </div>
-      <button
-        type="button"
-        aria-label="删除"
-        title="删除"
-        onClick={onDelete}
-        disabled={deleting}
-        style={{
-          flexShrink: 0,
-          width: 28,
-          height: 28,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 0,
-          background: "transparent",
-          border: "none",
-          borderRadius: 6,
-          cursor: deleting ? "not-allowed" : "pointer",
-          color: "var(--ink-400)",
-          opacity: deleting ? 0.5 : 1,
-          fontFamily: "var(--font)",
-        }}
-        onMouseEnter={(e) => {
-          if (!deleting) {
-            e.currentTarget.style.background = "var(--risk-50)";
-            e.currentTarget.style.color = "var(--risk-700)";
-          }
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = "var(--ink-400)";
-        }}
-      >
-        {I.close(14)}
-      </button>
       <span style={{ color: "var(--ink-400)" }}>{I.chev(13)}</span>
-    </div>
+    </button>
   );
 }
 
