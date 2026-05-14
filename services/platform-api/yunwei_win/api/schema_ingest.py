@@ -786,7 +786,7 @@ async def confirm_extraction(
         session=session,
         extraction_id=extraction_id,
         request=body,
-        confirmed_by=None,
+        confirmed_by=_reviewer_from_request(request),
     )
     if result.invalid_cells:
         raise HTTPException(

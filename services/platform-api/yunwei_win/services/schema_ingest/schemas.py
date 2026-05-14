@@ -207,15 +207,20 @@ class ReviewCellPatch(BaseModel):
 
 
 class ConfirmExtractionRequest(BaseModel):
-    """Patches the server-stored draft.
+    """Confirm the server-stored vNext draft.
 
-    ``review_draft`` is accepted for backward compatibility but is no longer
-    the source of truth: the server reads the canonical draft from the
-    DB-stored ``DocumentExtraction.review_draft`` and applies patches against
-    it. When ``review_draft`` is supplied, only its ``extraction_id`` is
-    cross-checked against the URL path; the rest is ignored.
+    The reviewer's edits must already be persisted via the autosave PATCH —
+    confirm reads the canonical draft from
+    ``DocumentExtraction.review_draft`` and never trusts a client-supplied
+    structure. ``lock_token`` + ``base_version`` are required so a stale
+    tab can't overwrite a newer reviewer's work.
     """
 
+    model_config = ConfigDict(extra="allow")
+
+    lock_token: UUID | None = None
+    base_version: int | None = None
+    # Legacy fields kept for older clients; ignored by vNext writeback.
     review_draft: ReviewDraft | None = None
     patches: list[ReviewCellPatch] = Field(default_factory=list)
 
