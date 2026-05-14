@@ -1,0 +1,251 @@
+"""默认公司 schema 目录。
+
+每个租户开局都先有这套基线，后续靠 ``schema_change_proposals`` 增删字段。
+顺序 = 列表里的顺序（``sort_order`` 在 catalog 服务里按 enumerate 赋值）。
+
+字段格式见 ``services/company_schema/catalog.py::ensure_default_company_schema``。
+注意:
+- 数组型业务表（``contacts`` / ``invoice_items`` / ``shipment_items`` 等）
+  把 ``is_array=True`` 写在表层；ReviewDraft 拼装时会据此让数组表至少
+  显示一行空行。
+- ``orders`` 表前六个字段顺序被测试硬断言，不要随便调。
+- 字段顺序也按列表顺序走（``sort_order`` 取 enumerate）。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+DEFAULT_COMPANY_SCHEMA: list[dict[str, Any]] = [
+    # 1. customers ----------------------------------------------------------
+    {
+        "table_name": "customers",
+        "label": "客户",
+        "purpose": "客户主档，存放公司维度的基本信息",
+        "category": "profile",
+        "fields": [
+            {"field_name": "full_name", "label": "公司全称", "data_type": "text", "required": True},
+            {"field_name": "short_name", "label": "简称", "data_type": "text"},
+            {"field_name": "address", "label": "地址", "data_type": "text"},
+            {"field_name": "tax_id", "label": "统一社会信用代码", "data_type": "text"},
+            {"field_name": "industry", "label": "行业", "data_type": "text"},
+            {"field_name": "notes", "label": "备注", "data_type": "text"},
+        ],
+    },
+    # 2. contacts -----------------------------------------------------------
+    {
+        "table_name": "contacts",
+        "label": "联系人",
+        "purpose": "客户侧关键联系人，多对一挂在客户下",
+        "category": "profile",
+        "is_array": True,
+        "fields": [
+            {"field_name": "customer_id", "label": "所属客户", "data_type": "uuid", "required": True},
+            {"field_name": "name", "label": "姓名", "data_type": "text", "required": True},
+            {"field_name": "role", "label": "职位/角色", "data_type": "text"},
+            {"field_name": "mobile", "label": "手机", "data_type": "text"},
+            {"field_name": "email", "label": "邮箱", "data_type": "text"},
+            {"field_name": "wechat_id", "label": "微信号", "data_type": "text"},
+        ],
+    },
+    # 3. products -----------------------------------------------------------
+    {
+        "table_name": "products",
+        "label": "产品",
+        "purpose": "产品 / SKU 主档",
+        "category": "manufacturing",
+        "fields": [
+            {"field_name": "sku", "label": "SKU", "data_type": "text"},
+            {"field_name": "name", "label": "产品名称", "data_type": "text", "required": True},
+            {"field_name": "description", "label": "说明", "data_type": "text"},
+            {"field_name": "specification", "label": "规格", "data_type": "text"},
+            {"field_name": "unit", "label": "单位", "data_type": "text"},
+        ],
+    },
+    # 4. product_requirements ----------------------------------------------
+    {
+        "table_name": "product_requirements",
+        "label": "产品要求",
+        "purpose": "客户对某产品的工艺/包装/验收要求",
+        "category": "manufacturing",
+        "is_array": True,
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid"},
+            {"field_name": "product_id", "label": "产品", "data_type": "uuid"},
+            {"field_name": "requirement_type", "label": "要求类型", "data_type": "text"},
+            {"field_name": "requirement_text", "label": "要求内容", "data_type": "text", "required": True},
+            {"field_name": "tolerance", "label": "公差/容差", "data_type": "text"},
+            {"field_name": "source_document_id", "label": "来源文档", "data_type": "uuid"},
+        ],
+    },
+    # 5. contracts ----------------------------------------------------------
+    {
+        "table_name": "contracts",
+        "label": "合同",
+        "purpose": "合同主表 —— 一份合同文件对应一条记录",
+        "category": "commercial",
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "contract_no_external", "label": "合同号", "data_type": "text"},
+            {"field_name": "signing_date", "label": "签订日期", "data_type": "date"},
+            {"field_name": "effective_date", "label": "生效日期", "data_type": "date"},
+            {"field_name": "expiry_date", "label": "失效日期", "data_type": "date"},
+            {"field_name": "amount_total", "label": "合同金额", "data_type": "decimal"},
+            {"field_name": "amount_currency", "label": "币种", "data_type": "text", "default_value": "CNY"},
+        ],
+    },
+    # 6. contract_payment_milestones ---------------------------------------
+    {
+        "table_name": "contract_payment_milestones",
+        "label": "付款节点",
+        "purpose": "合同付款条款 —— 1~N 个节点，按比例或按事件触发",
+        "category": "commercial",
+        "is_array": True,
+        "fields": [
+            {"field_name": "contract_id", "label": "合同", "data_type": "uuid", "required": True},
+            {"field_name": "name", "label": "节点名称", "data_type": "text"},
+            {"field_name": "ratio", "label": "付款比例", "data_type": "decimal"},
+            {"field_name": "amount", "label": "付款金额", "data_type": "decimal"},
+            {"field_name": "trigger_event", "label": "触发事件", "data_type": "text"},
+            {"field_name": "trigger_offset_days", "label": "触发后天数", "data_type": "integer"},
+            {"field_name": "due_date", "label": "应付日期", "data_type": "date"},
+            {"field_name": "raw_text", "label": "原文片段", "data_type": "text"},
+        ],
+    },
+    # 7. orders -------------------------------------------------------------
+    # 前六个字段顺序被测试硬断言，不要随意调整。
+    {
+        "table_name": "orders",
+        "label": "订单",
+        "purpose": "客户订单主表",
+        "category": "commercial",
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "amount_total", "label": "订单金额", "data_type": "decimal"},
+            {"field_name": "amount_currency", "label": "币种", "data_type": "text", "default_value": "CNY"},
+            {"field_name": "delivery_promised_date", "label": "承诺交期", "data_type": "date"},
+            {"field_name": "delivery_address", "label": "交付地址", "data_type": "text"},
+            {"field_name": "description", "label": "订单说明", "data_type": "text"},
+        ],
+    },
+    # 8. invoices -----------------------------------------------------------
+    {
+        "table_name": "invoices",
+        "label": "发票",
+        "purpose": "开票主表",
+        "category": "finance",
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "order_id", "label": "关联订单", "data_type": "uuid"},
+            {"field_name": "invoice_no", "label": "发票号", "data_type": "text"},
+            {"field_name": "issue_date", "label": "开票日期", "data_type": "date"},
+            {"field_name": "amount_total", "label": "票面金额", "data_type": "decimal"},
+            {"field_name": "amount_currency", "label": "币种", "data_type": "text", "default_value": "CNY"},
+            {"field_name": "tax_amount", "label": "税额", "data_type": "decimal"},
+            {"field_name": "status", "label": "状态", "data_type": "text"},
+        ],
+    },
+    # 9. invoice_items ------------------------------------------------------
+    {
+        "table_name": "invoice_items",
+        "label": "发票明细",
+        "purpose": "发票行项",
+        "category": "finance",
+        "is_array": True,
+        "fields": [
+            {"field_name": "invoice_id", "label": "所属发票", "data_type": "uuid", "required": True},
+            {"field_name": "product_id", "label": "产品", "data_type": "uuid"},
+            {"field_name": "description", "label": "描述", "data_type": "text"},
+            {"field_name": "quantity", "label": "数量", "data_type": "decimal"},
+            {"field_name": "unit_price", "label": "单价", "data_type": "decimal"},
+            {"field_name": "amount", "label": "金额", "data_type": "decimal"},
+        ],
+    },
+    # 10. payments ----------------------------------------------------------
+    {
+        "table_name": "payments",
+        "label": "收付款",
+        "purpose": "客户实际收/付款流水",
+        "category": "finance",
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "invoice_id", "label": "关联发票", "data_type": "uuid"},
+            {"field_name": "payment_date", "label": "付款日期", "data_type": "date"},
+            {"field_name": "amount", "label": "金额", "data_type": "decimal", "required": True},
+            {"field_name": "currency", "label": "币种", "data_type": "text", "default_value": "CNY"},
+            {"field_name": "method", "label": "付款方式", "data_type": "text"},
+            {"field_name": "reference_no", "label": "凭证号", "data_type": "text"},
+        ],
+    },
+    # 11. shipments ---------------------------------------------------------
+    {
+        "table_name": "shipments",
+        "label": "发货",
+        "purpose": "发货 / 物流主表",
+        "category": "logistics",
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "order_id", "label": "关联订单", "data_type": "uuid"},
+            {"field_name": "shipment_no", "label": "发货单号", "data_type": "text"},
+            {"field_name": "carrier", "label": "承运商", "data_type": "text"},
+            {"field_name": "tracking_no", "label": "运单号", "data_type": "text"},
+            {"field_name": "ship_date", "label": "发货日期", "data_type": "date"},
+            {"field_name": "delivery_date", "label": "送达日期", "data_type": "date"},
+            {"field_name": "delivery_address", "label": "送达地址", "data_type": "text"},
+            {"field_name": "status", "label": "状态", "data_type": "text"},
+        ],
+    },
+    # 12. shipment_items ----------------------------------------------------
+    {
+        "table_name": "shipment_items",
+        "label": "发货明细",
+        "purpose": "发货行项",
+        "category": "logistics",
+        "is_array": True,
+        "fields": [
+            {"field_name": "shipment_id", "label": "所属发货", "data_type": "uuid", "required": True},
+            {"field_name": "product_id", "label": "产品", "data_type": "uuid"},
+            {"field_name": "description", "label": "描述", "data_type": "text"},
+            {"field_name": "quantity", "label": "数量", "data_type": "decimal"},
+            {"field_name": "unit", "label": "单位", "data_type": "text"},
+        ],
+    },
+    # 13. customer_journal_items -------------------------------------------
+    {
+        "table_name": "customer_journal_items",
+        "label": "客户时间线",
+        "purpose": "承诺 / 风险 / 记忆 / 备注的统一时间线条目",
+        "category": "memory",
+        "is_array": True,
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "document_id", "label": "来源文档", "data_type": "uuid"},
+            {"field_name": "item_type", "label": "类型", "data_type": "text", "required": True},
+            {"field_name": "title", "label": "标题", "data_type": "text"},
+            {"field_name": "content", "label": "内容", "data_type": "text"},
+            {"field_name": "occurred_at", "label": "发生时间", "data_type": "datetime"},
+            {"field_name": "due_date", "label": "截止日期", "data_type": "date"},
+            {"field_name": "severity", "label": "严重度", "data_type": "text"},
+            {"field_name": "status", "label": "状态", "data_type": "text"},
+            {"field_name": "confidence", "label": "置信度", "data_type": "decimal"},
+            {"field_name": "raw_excerpt", "label": "原文片段", "data_type": "text"},
+        ],
+    },
+    # 14. customer_tasks (沿用 customer_memory.CustomerTask) -----------------
+    {
+        "table_name": "customer_tasks",
+        "label": "客户待办",
+        "purpose": "针对客户的待办事项",
+        "category": "memory",
+        "is_array": True,
+        "fields": [
+            {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+            {"field_name": "title", "label": "标题", "data_type": "text", "required": True},
+            {"field_name": "description", "label": "描述", "data_type": "text"},
+            {"field_name": "due_date", "label": "截止日期", "data_type": "date"},
+            {"field_name": "priority", "label": "优先级", "data_type": "text"},
+            {"field_name": "status", "label": "状态", "data_type": "text"},
+            {"field_name": "owner", "label": "负责人", "data_type": "text"},
+        ],
+    },
+]

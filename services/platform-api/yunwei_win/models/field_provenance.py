@@ -30,6 +30,17 @@ class EntityType(str, enum.Enum):
     contact = "contact"
     order = "order"
     contract = "contract"
+    # V2 schema-first 落地表
+    product = "product"
+    product_requirement = "product_requirement"
+    invoice = "invoice"
+    invoice_item = "invoice_item"
+    payment = "payment"
+    shipment = "shipment"
+    shipment_item = "shipment_item"
+    contract_payment_milestone = "contract_payment_milestone"
+    customer_journal_item = "customer_journal_item"
+    customer_task = "customer_task"
 
 
 class FieldProvenance(Base):
