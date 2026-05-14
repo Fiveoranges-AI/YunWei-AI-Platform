@@ -179,7 +179,6 @@ export function ReviewScreen({
     async (payload: {
       cell?: ReviewCellPatch;
       row?: ReviewRowDecisionPatch;
-      step?: string;
     }) => {
       const currentLock = lockRef.current;
       const extId = extractionId;
@@ -190,7 +189,6 @@ export function ReviewScreen({
         const res = await autosaveReview(extId, {
           lock_token: currentLock.token,
           base_version: reviewVersionRef.current,
-          current_step: payload.step,
           cell_patches: payload.cell ? [payload.cell] : [],
           row_patches: payload.row ? [payload.row] : [],
         });
@@ -238,9 +236,6 @@ export function ReviewScreen({
   }
   function handleRowPatch(patch: ReviewRowDecisionPatch) {
     void runAutosave({ row: patch });
-  }
-  function handleStepChange(step: string) {
-    void runAutosave({ step });
   }
 
   async function handleConfirm(): Promise<void> {
@@ -396,7 +391,6 @@ export function ReviewScreen({
         invalidCells={invalidCells}
         onCellPatch={handleCellPatch}
         onRowPatch={handleRowPatch}
-        onStepChange={handleStepChange}
         onConfirm={handleConfirm}
         onIgnore={handleIgnore}
         onDelete={handleDelete}

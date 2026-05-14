@@ -1,9 +1,11 @@
 // Review cell editor — a controlled input for a single ReviewCell.
 //
-// The parent (ReviewTableWorkspace) owns the patch buffer. This component
-// is presentational: render the right control for the cell's data_type,
-// surface status (missing/edited/low_confidence/rejected/invalid) via
-// border + chips, and pipe edits back through `onChange`.
+// The parent (ReviewCard / ReviewDetailTable in ReviewWizard) decides
+// when an edit becomes a server-side autosave PATCH; this component
+// stays presentational. It renders the right control for the cell's
+// data_type, surfaces status (missing / edited / low_confidence /
+// rejected / invalid) via border + chips, and pipes edits back through
+// ``onChange``.
 
 import { useMemo } from "react";
 import { EvidenceChip } from "../EvidenceChip";

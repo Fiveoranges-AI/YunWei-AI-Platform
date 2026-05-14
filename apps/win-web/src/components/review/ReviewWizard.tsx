@@ -27,7 +27,6 @@ type Props = {
   invalidCells: ConfirmExtractionInvalidCell[];
   onCellPatch: (patch: ReviewCellPatch) => void;
   onRowPatch: (patch: ReviewRowDecisionPatch) => void;
-  onStepChange: (step: string) => void;
   onConfirm: () => void | Promise<void>;
   onIgnore?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
@@ -79,7 +78,6 @@ export function ReviewWizard({
   invalidCells,
   onCellPatch,
   onRowPatch,
-  onStepChange,
   onConfirm,
   onIgnore,
   onDelete,
@@ -96,10 +94,13 @@ export function ReviewWizard({
     { tableName: string; rowId: string; field: string } | null
   >(null);
 
+  // Step navigation is purely client-side state — flipping between wizard
+  // tabs must not bump the server's review_version. The autosave PATCH is
+  // reserved for cell/row edits; confirm carries the latest version
+  // regardless of which step the user is currently looking at.
   function setStep(next: string) {
     setActiveStep(next);
     setActiveCell(null);
-    onStepChange(next);
   }
 
   const invalidByTable = useMemo(() => buildInvalidMap(invalidCells), [invalidCells]);
