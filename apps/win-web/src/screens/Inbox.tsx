@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GoFn } from "../App";
-import { listIngestJobs, type IngestJob } from "../api/ingest";
 import { listIngestV2Jobs } from "../api/ingestV2";
 import type { IngestV2Job } from "../data/types";
 import { I } from "../icons";
@@ -12,7 +11,7 @@ const IDLE_POLL_MS = 6000;
 const ERROR_POLL_MS = 5000;
 
 type TabId = "processing" | "pending" | "history";
-type InboxJob = IngestJob | IngestV2Job;
+type InboxJob = IngestV2Job;
 
 const STAGE_LABEL: Record<string, string> = {
   received: "接收中",
@@ -170,11 +169,8 @@ async function listInboxJobs(
   status: "active" | "history" | "all",
   limit: number,
 ): Promise<InboxJob[]> {
-  const [v1, v2] = await Promise.all([
-    listIngestJobs(status, limit),
-    listIngestV2Jobs(status, limit),
-  ]);
-  return [...v1, ...v2]
+  const jobs = await listIngestV2Jobs(status, limit);
+  return jobs
     .sort((a, b) => jobSortTime(b) - jobSortTime(a))
     .slice(0, limit);
 }

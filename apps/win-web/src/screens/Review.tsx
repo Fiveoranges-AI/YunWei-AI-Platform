@@ -5,13 +5,9 @@ import {
   applyDraftEdit,
   archiveBatch,
   batchToReview,
-  buildAutoConfirmRequest,
   clearLastBatch,
-  confirmIngestJob,
-  getIngestJob,
   getLastBatch,
   ignoreBatch,
-  jobToBatch,
   parseAmountInput,
   setCustomerOverride,
   setLastBatch,
@@ -67,8 +63,7 @@ export function ReviewScreen({
   const isDesktop = useIsDesktop();
   const [review, setReview] = useState<Review | null>(null);
   const [batch, setBatch] = useState<Batch | null>(null);
-  // V2 schema-first state. When `draftV2` is set, the V2 workspace
-  // renders and the legacy V1 path is skipped entirely.
+  // V2 schema-first state. When `draftV2` is set, the V2 workspace renders.
   const [draftV2, setDraftV2] = useState<ReviewDraft | null>(null);
   const [v2Loading, setV2Loading] = useState<boolean>(Boolean(params?.jobId));
   const [v2Submitting, setV2Submitting] = useState(false);
@@ -92,10 +87,7 @@ export function ReviewScreen({
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      // 0) V2 schema-first path. Try the V2 endpoint first; if the
-      //    backend reports 404 or the job is V1, fall through to the
-      //    V1 loader below. V2 always wins when both paths could load
-      //    the job — the backend marks V2 jobs explicitly.
+      // 0) V2 schema-first job path. New uploads are V2-only.
       if (jobId) {
         try {
           const v2Job = await getIngestV2Job(jobId);
@@ -109,8 +101,7 @@ export function ReviewScreen({
               setV2Loading(false);
               return;
             }
-            // V2 job exists but extraction is not ready yet — surface
-            // the same status messaging V1 uses.
+            // V2 job exists but extraction is not ready yet.
             setV2Loading(false);
             setReviewError(
               v2Job.status === "failed"
@@ -123,44 +114,20 @@ export function ReviewScreen({
           }
         } catch (e) {
           const apiErr = e as ApiError;
-          if (apiErr.status !== 404) {
-            // Non-404 V2 errors shouldn't blow up the V1 fallback;
-            // log to console and continue.
-            console.warn("[review] V2 fetch failed, falling back to V1:", apiErr);
+          if (!cancelled) {
+            setReviewError(
+              apiErr.status === 404
+                ? "任务不存在或不是 V2 schema 草稿"
+                : apiErr.message || "任务加载失败",
+            );
+            setV2Loading(false);
           }
+          return;
         }
-        setV2Loading(false);
       } else {
         setV2Loading(false);
       }
-      // 1) Preferred path: a job_id in the URL — survives refresh and is
-      //    how Upload.tsx hands off in job mode.
-      if (jobId) {
-        try {
-          const job = await getIngestJob(jobId);
-          if (cancelled) return;
-          const fromJob = jobToBatch(job);
-          if (!fromJob) {
-            setReviewError(
-              job.status === "failed"
-                ? job.error_message ?? "任务失败"
-                : job.status === "canceled"
-                  ? "任务已取消"
-                  : "任务尚未生成草稿",
-            );
-            return;
-          }
-          setBatch(fromJob);
-          setReview(batchToReview(fromJob));
-          setLastBatch(fromJob);
-          return;
-        } catch (e) {
-          if (cancelled) return;
-          setReviewError(e instanceof Error ? e.message : "任务加载失败");
-          return;
-        }
-      }
-      // 2) Legacy in-memory batch path (set by older flows / future fallback).
+      // 1) Non-job design-preview/fallback path.
       const inMem = getLastBatch();
       const fromBatch = inMem ? batchToReview(inMem) : null;
       if (fromBatch) {
@@ -170,7 +137,7 @@ export function ReviewScreen({
         }
         return;
       }
-      // 3) Last resort: ask backend for a /review mock so the design preview
+      // 2) Last resort: ask backend for a /review mock so the design preview
       //    still works when /review is opened cold.
       try {
         const r = await getReview("last");
@@ -270,33 +237,6 @@ export function ReviewScreen({
     setArchiveError(null);
     try {
       if (!batch) {
-        setDone(true);
-        return;
-      }
-      // Job-mode single-entry path: use the job-aware confirm so the job
-      // row flips to `confirmed` alongside the document. Multi-entry
-      // batches (legacy /auto flow) keep the per-document archive.
-      if (jobId && batch.entries.length === 1) {
-        const entry = batch.entries[0]!;
-        const customerIds: string[] = [];
-        const warnings: string[] = [];
-        if (entry.result.ok) {
-          const payload = buildAutoConfirmRequest(
-            entry.result.raw,
-            entry.customerDecisionOverride,
-          );
-          const confirmed = await confirmIngestJob(jobId, payload);
-          const cid = confirmed.created_entities?.customer_id;
-          if (cid) customerIds.push(cid);
-          if (confirmed.warnings) warnings.push(...confirmed.warnings);
-        }
-        clearLastBatch();
-        setArchiveResult({
-          confirmedDocuments: entry.result.ok ? 1 : 0,
-          customerIds,
-          warnings,
-        });
-        markCustomersChanged();
         setDone(true);
         return;
       }
