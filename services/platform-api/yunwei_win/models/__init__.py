@@ -67,6 +67,10 @@ from yunwei_win.models.company_data import (
     Shipment,
     ShipmentItem,
 )
+from yunwei_win.models.document_extraction import (
+    DocumentExtraction,
+    DocumentExtractionStatus,
+)
 
 __all__ = [
     # profile
@@ -95,4 +99,6 @@ __all__ = [
     "Invoice", "InvoiceItem", "Payment",
     "Shipment", "ShipmentItem",
     "CustomerJournalItem",
+    # V2 extraction record
+    "DocumentExtraction", "DocumentExtractionStatus",
 ]
