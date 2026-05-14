@@ -20,13 +20,25 @@ import type {
   AskSeed,
   Commitment,
   Contact,
+  ContractPaymentMilestone,
+  CustomerContract,
   CustomerDetail,
+  CustomerInvoice,
+  CustomerInvoiceItem,
+  CustomerJournalItem,
   CustomerListItem,
   CustomerMetrics,
+  CustomerOrder,
+  CustomerPayment,
+  CustomerProduct,
+  CustomerProductRequirement,
   CustomerRisk,
+  CustomerShipment,
+  CustomerShipmentItem,
+  CustomerTask,
   RiskLevel,
   RiskSignal,
-  CustomerTask,
+  SourceDocumentRef,
   TimelineEvent,
 } from "../data/types";
 import { fmtRelative } from "../lib/format";
@@ -55,24 +67,180 @@ type RawCustomer = {
   short_name?: string | null;
   address?: string | null;
   tax_id?: string | null;
+  industry?: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at?: string;
 };
 
+type RawContact = {
+  id: string;
+  name: string;
+  role?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  last?: string | null;
+  title?: string | null;
+  email?: string | null;
+  address?: string | null;
+  wechat_id?: string | null;
+};
+
+type RawOrder = {
+  id: string;
+  amount_total?: number | null;
+  amount_currency?: string | null;
+  delivery_promised_date?: string | null;
+  delivery_address?: string | null;
+  description?: string | null;
+};
+
+type RawContract = {
+  id: string;
+  contract_no_external?: string | null;
+  contract_no_internal?: string | null;
+  amount_total?: number | null;
+  amount_currency?: string | null;
+  delivery_terms?: string | null;
+  penalty_terms?: string | null;
+  signing_date?: string | null;
+  effective_date?: string | null;
+  expiry_date?: string | null;
+};
+
+type RawMilestone = {
+  id: string;
+  contract_id: string;
+  name?: string | null;
+  ratio?: number | null;
+  amount?: number | null;
+  trigger_event?: string | null;
+  trigger_offset_days?: number | null;
+  due_date?: string | null;
+  raw_text?: string | null;
+};
+
+type RawProduct = {
+  id: string;
+  sku?: string | null;
+  name: string;
+  description?: string | null;
+  specification?: string | null;
+  unit?: string | null;
+};
+
+type RawProductRequirement = {
+  id: string;
+  product_id?: string | null;
+  requirement_type?: string | null;
+  requirement_text: string;
+  tolerance?: string | null;
+  source_document_id?: string | null;
+};
+
+type RawInvoice = {
+  id: string;
+  order_id?: string | null;
+  invoice_no?: string | null;
+  issue_date?: string | null;
+  amount_total?: number | null;
+  amount_currency?: string | null;
+  tax_amount?: number | null;
+  status?: string | null;
+};
+
+type RawInvoiceItem = {
+  id: string;
+  invoice_id: string;
+  product_id?: string | null;
+  description?: string | null;
+  quantity?: number | null;
+  unit_price?: number | null;
+  amount?: number | null;
+};
+
+type RawPayment = {
+  id: string;
+  invoice_id?: string | null;
+  payment_date?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  method?: string | null;
+  reference_no?: string | null;
+};
+
+type RawShipment = {
+  id: string;
+  order_id?: string | null;
+  shipment_no?: string | null;
+  carrier?: string | null;
+  tracking_no?: string | null;
+  ship_date?: string | null;
+  delivery_date?: string | null;
+  delivery_address?: string | null;
+  status?: string | null;
+};
+
+type RawShipmentItem = {
+  id: string;
+  shipment_id: string;
+  product_id?: string | null;
+  description?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+};
+
+type RawJournalItem = {
+  id: string;
+  document_id?: string | null;
+  item_type: string;
+  title?: string | null;
+  content?: string | null;
+  occurred_at?: string | null;
+  due_date?: string | null;
+  severity?: string | null;
+  status?: string | null;
+  confidence?: number | null;
+  raw_excerpt?: string | null;
+};
+
+type RawTask = {
+  id: string;
+  customer_id?: string;
+  document_id?: string | null;
+  title?: string | null;
+  description?: string | null;
+  assignee?: string | null;
+  due_date?: string | null;
+  priority?: string | null;
+  status?: string | null;
+};
+
+type RawSourceDocument = {
+  id: string;
+  type?: string | null;
+  original_filename?: string | null;
+  content_type?: string | null;
+  uploader?: string | null;
+  review_status?: string | null;
+  created_at?: string | null;
+};
+
 type RawCustomerDetail = RawCustomer & {
-  contacts?: Array<{
-    id: string;
-    name: string;
-    role?: string | null;
-    phone?: string | null;
-    mobile?: string | null;
-    last?: string | null;
-    title?: string | null;
-    email?: string | null;
-    address?: string | null;
-    wechat_id?: string | null;
-  }>;
-  orders?: Array<{ id: string; amount_total?: number | null }>;
+  contacts?: RawContact[];
+  orders?: RawOrder[];
+  contracts?: RawContract[];
+  contract_payment_milestones?: RawMilestone[];
+  invoices?: RawInvoice[];
+  invoice_items?: RawInvoiceItem[];
+  payments?: RawPayment[];
+  shipments?: RawShipment[];
+  shipment_items?: RawShipmentItem[];
+  products?: RawProduct[];
+  product_requirements?: RawProductRequirement[];
+  journal_items?: RawJournalItem[];
+  tasks?: RawTask[];
+  source_documents?: RawSourceDocument[];
 };
 
 type RawSummary = {
@@ -125,6 +293,8 @@ type CustomerUpdateBody = {
   short_name?: string | null;
   address?: string | null;
   tax_id?: string | null;
+  industry?: string | null;
+  notes?: string | null;
 };
 
 export type ContactInput = {
@@ -305,26 +475,49 @@ export async function listCustomersBasic(): Promise<CustomerListItem[]> {
 
 export async function getCustomer(id: string): Promise<CustomerDetail | undefined> {
   try {
-    const [raw, summary, metrics, events, commitments, tasks, risks] = await Promise.all([
-      fetchJSON<RawCustomerDetail>(`/customers/${id}`),
-      fetchOrNull<RawSummary>(`/customers/${id}/summary`),
-      fetchOrNull<CustomerMetrics>(`/customers/${id}/metrics`),
-      fetchOrNull<unknown[]>(`/customers/${id}/events`),
-      fetchOrNull<unknown[]>(`/customers/${id}/commitments`),
-      fetchOrNull<unknown[]>(`/customers/${id}/tasks`),
-      fetchOrNull<unknown[]>(`/customers/${id}/risks`),
-    ]);
+    // The vNext envelope ships tasks + journal items + business facts inline,
+    // so the legacy /tasks /events /commitments /risks endpoints become
+    // supplementary (still queried so existing assistant memory-era data
+    // remains visible on older drafts).
+    const [raw, summary, metrics, events, commitments, legacyTasks, risks] =
+      await Promise.all([
+        fetchJSON<RawCustomerDetail>(`/customers/${id}`),
+        fetchOrNull<RawSummary>(`/customers/${id}/summary`),
+        fetchOrNull<CustomerMetrics>(`/customers/${id}/metrics`),
+        fetchOrNull<unknown[]>(`/customers/${id}/events`),
+        fetchOrNull<unknown[]>(`/customers/${id}/commitments`),
+        fetchOrNull<unknown[]>(`/customers/${id}/tasks`),
+        fetchOrNull<unknown[]>(`/customers/${id}/risks`),
+      ]);
 
     const base = transformCustomerBase(raw, summary);
+    // Prefer vNext inline tasks when the envelope carries them; fall back to
+    // the legacy /tasks endpoint for drafts that confirm-wrote before
+    // task assignee/document_id existed.
+    const inlineTasks = raw.tasks ? transformInlineTasks(raw.tasks) : null;
     const transformed: CustomerDetail = {
       ...base,
+      industry: raw.industry ?? null,
+      notes: raw.notes ?? null,
       metrics: metrics ?? emptyMetrics(),
       timeline: transformTimeline(events),
       commitments: transformCommitments(commitments),
-      tasks: transformTasks(tasks),
+      tasks: inlineTasks ?? transformTasks(legacyTasks),
       risks: transformRisks(risks),
       contacts: transformContacts(raw.contacts),
       docs: [],
+      orders: transformOrders(raw.orders),
+      contracts: transformContracts(raw.contracts),
+      contractPaymentMilestones: transformMilestones(raw.contract_payment_milestones),
+      invoices: transformInvoices(raw.invoices),
+      invoiceItems: transformInvoiceItems(raw.invoice_items),
+      payments: transformPayments(raw.payments),
+      shipments: transformShipments(raw.shipments),
+      shipmentItems: transformShipmentItems(raw.shipment_items),
+      products: transformProducts(raw.products),
+      productRequirements: transformProductRequirements(raw.product_requirements),
+      journalItems: transformJournalItems(raw.journal_items),
+      sourceDocuments: transformSourceDocuments(raw.source_documents),
     };
     transformed.risk = deriveRisk(transformed.risks);
     return transformed;
@@ -374,7 +567,194 @@ function transformTasks(rows: unknown[] | null): CustomerTask[] {
     id: r.id,
     text: r.title ?? "",
     due: r.due_date ?? "无截止",
+    // ``owner`` retained for components that still read the legacy field;
+    // ``assignee`` is the canonical vNext value.
     owner: r.assignee ?? "未分配",
+    assignee: r.assignee ?? null,
+    priority: r.priority ?? null,
+    status: r.status ?? null,
+    documentId: r.document_id ?? null,
+  }));
+}
+
+function transformInlineTasks(rows: RawTask[]): CustomerTask[] {
+  return rows.map((r) => ({
+    id: r.id,
+    text: r.title ?? r.description ?? "",
+    due: r.due_date ?? "无截止",
+    owner: r.assignee ?? "未分配",
+    assignee: r.assignee ?? null,
+    priority: r.priority ?? null,
+    status: r.status ?? null,
+    documentId: r.document_id ?? null,
+  }));
+}
+
+function transformOrders(rows: RawOrder[] | undefined): CustomerOrder[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    amountTotal: r.amount_total ?? null,
+    amountCurrency: r.amount_currency ?? null,
+    deliveryPromisedDate: r.delivery_promised_date ?? null,
+    deliveryAddress: r.delivery_address ?? null,
+    description: r.description ?? null,
+  }));
+}
+
+function transformContracts(rows: RawContract[] | undefined): CustomerContract[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    contractNoExternal: r.contract_no_external ?? null,
+    contractNoInternal: r.contract_no_internal ?? null,
+    amountTotal: r.amount_total ?? null,
+    amountCurrency: r.amount_currency ?? null,
+    deliveryTerms: r.delivery_terms ?? null,
+    penaltyTerms: r.penalty_terms ?? null,
+    signingDate: r.signing_date ?? null,
+    effectiveDate: r.effective_date ?? null,
+    expiryDate: r.expiry_date ?? null,
+  }));
+}
+
+function transformMilestones(rows: RawMilestone[] | undefined): ContractPaymentMilestone[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    contractId: r.contract_id,
+    name: r.name ?? null,
+    ratio: r.ratio ?? null,
+    amount: r.amount ?? null,
+    triggerEvent: r.trigger_event ?? null,
+    triggerOffsetDays: r.trigger_offset_days ?? null,
+    dueDate: r.due_date ?? null,
+    rawText: r.raw_text ?? null,
+  }));
+}
+
+function transformInvoices(rows: RawInvoice[] | undefined): CustomerInvoice[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    orderId: r.order_id ?? null,
+    invoiceNo: r.invoice_no ?? null,
+    issueDate: r.issue_date ?? null,
+    amountTotal: r.amount_total ?? null,
+    amountCurrency: r.amount_currency ?? null,
+    taxAmount: r.tax_amount ?? null,
+    status: r.status ?? null,
+  }));
+}
+
+function transformInvoiceItems(rows: RawInvoiceItem[] | undefined): CustomerInvoiceItem[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    invoiceId: r.invoice_id,
+    productId: r.product_id ?? null,
+    description: r.description ?? null,
+    quantity: r.quantity ?? null,
+    unitPrice: r.unit_price ?? null,
+    amount: r.amount ?? null,
+  }));
+}
+
+function transformPayments(rows: RawPayment[] | undefined): CustomerPayment[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    invoiceId: r.invoice_id ?? null,
+    paymentDate: r.payment_date ?? null,
+    amount: r.amount ?? null,
+    currency: r.currency ?? null,
+    method: r.method ?? null,
+    referenceNo: r.reference_no ?? null,
+  }));
+}
+
+function transformShipments(rows: RawShipment[] | undefined): CustomerShipment[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    orderId: r.order_id ?? null,
+    shipmentNo: r.shipment_no ?? null,
+    carrier: r.carrier ?? null,
+    trackingNo: r.tracking_no ?? null,
+    shipDate: r.ship_date ?? null,
+    deliveryDate: r.delivery_date ?? null,
+    deliveryAddress: r.delivery_address ?? null,
+    status: r.status ?? null,
+  }));
+}
+
+function transformShipmentItems(rows: RawShipmentItem[] | undefined): CustomerShipmentItem[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    shipmentId: r.shipment_id,
+    productId: r.product_id ?? null,
+    description: r.description ?? null,
+    quantity: r.quantity ?? null,
+    unit: r.unit ?? null,
+  }));
+}
+
+function transformProducts(rows: RawProduct[] | undefined): CustomerProduct[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    sku: r.sku ?? null,
+    name: r.name,
+    description: r.description ?? null,
+    specification: r.specification ?? null,
+    unit: r.unit ?? null,
+  }));
+}
+
+function transformProductRequirements(
+  rows: RawProductRequirement[] | undefined,
+): CustomerProductRequirement[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    productId: r.product_id ?? null,
+    requirementType: r.requirement_type ?? null,
+    requirementText: r.requirement_text,
+    tolerance: r.tolerance ?? null,
+    sourceDocumentId: r.source_document_id ?? null,
+  }));
+}
+
+function transformJournalItems(rows: RawJournalItem[] | undefined): CustomerJournalItem[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    documentId: r.document_id ?? null,
+    itemType: r.item_type,
+    title: r.title ?? null,
+    content: r.content ?? null,
+    occurredAt: r.occurred_at ?? null,
+    dueDate: r.due_date ?? null,
+    severity: r.severity ?? null,
+    status: r.status ?? null,
+    confidence: r.confidence ?? null,
+    rawExcerpt: r.raw_excerpt ?? null,
+  }));
+}
+
+function transformSourceDocuments(
+  rows: RawSourceDocument[] | undefined,
+): SourceDocumentRef[] {
+  if (!rows) return [];
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type ?? null,
+    originalFilename: r.original_filename ?? null,
+    contentType: r.content_type ?? null,
+    uploader: r.uploader ?? null,
+    reviewStatus: r.review_status ?? null,
+    createdAt: r.created_at ?? null,
   }));
 }
 

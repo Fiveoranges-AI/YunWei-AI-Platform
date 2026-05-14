@@ -311,7 +311,9 @@ export function CustomerDetailPane({
                     {I.task(13)}
                   </div>
                   <div style={{ flex: 1, fontSize: 13.5, color: "var(--ink-900)" }}>{t.text}</div>
-                  <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{t.owner}</span>
+                  <span style={{ fontSize: 11, color: "var(--ink-500)" }}>
+                    {t.assignee ?? t.owner ?? "未分配"}
+                  </span>
                   <span className="pill pill-ai" style={{ fontSize: 10.5 }}>{t.due}</span>
                 </div>
               ))}

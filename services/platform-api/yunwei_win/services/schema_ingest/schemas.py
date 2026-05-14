@@ -15,6 +15,7 @@ Notes:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -32,12 +33,75 @@ ReviewCellSource = Literal["ai", "default", "edited", "empty", "linked"]
 ReviewRowOperation = Literal["create", "update"]
 ExtractionStatus = Literal["pending_review", "confirmed", "ignored", "failed"]
 
+# vNext row decision (used by ReviewDraft to render create/update/link choices
+# straight from ``entity_resolution.EntityResolutionProposal``).
+ReviewRowDecisionOperation = Literal[
+    "create", "update", "link_existing", "ignore"
+]
+ReviewMatchLevel = Literal["strong", "weak", "none"]
+
+
+class ReviewEntityCandidate(BaseModel):
+    """One existing entity proposed as a candidate for a row decision."""
+
+    model_config = ConfigDict(extra="allow")
+
+    entity_id: UUID
+    label: str
+    match_level: ReviewMatchLevel
+    match_keys: list[str] = Field(default_factory=list)
+    confidence: float | None = None
+    reason: str | None = None
+
+
+class ReviewRowDecision(BaseModel):
+    """Server-proposed row decision aligned with EntityResolutionRow.
+
+    ReviewDraft surfaces this verbatim; user edits replace selected_entity_id
+    / operation as they walk the wizard, and confirm writeback consumes the
+    final value to fill ``system_link`` FKs.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    operation: ReviewRowDecisionOperation
+    selected_entity_id: UUID | None = None
+    candidate_entities: list[ReviewEntityCandidate] = Field(default_factory=list)
+    match_level: ReviewMatchLevel | None = None
+    match_keys: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
 
 class ReviewCellEvidence(BaseModel):
     """Where in the source document the AI said it found the value."""
 
     page: int | None = None
     excerpt: str | None = None
+
+
+# vNext source ref carried on each ``ReviewCell`` so the wizard can highlight
+# the originating chunk/cell/text span in the source viewer. Decoupled from
+# ``ParseSourceRef`` so the review JSON does not pull in the parse artifact
+# pydantic module — the shape is the same on the wire.
+class ReviewSourceRef(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ref_type: str
+    ref_id: str
+    page: int | None = None
+    bbox: list[float] | None = None
+    start: int | None = None
+    end: int | None = None
+    excerpt: str | None = None
+    paragraph: int | None = None
+    table_id: str | None = None
+    sheet: str | None = None
+    row: int | None = None
+    col: int | None = None
+
+
+ReviewTablePresentation = Literal["card", "table"]
+ReviewStepStatus = Literal["empty", "in_progress", "complete"]
 
 
 class ReviewCell(BaseModel):
@@ -52,6 +116,10 @@ class ReviewCell(BaseModel):
     confidence: float | None = None
     evidence: ReviewCellEvidence | None = None
     source: ReviewCellSource
+    # vNext additions — defaulted so legacy serializers/consumers keep working.
+    source_refs: list[ReviewSourceRef] = Field(default_factory=list)
+    review_visible: bool = True
+    explicit_clear: bool = False
 
 
 class ReviewRow(BaseModel):
@@ -59,6 +127,11 @@ class ReviewRow(BaseModel):
     entity_id: UUID | None = None
     operation: ReviewRowOperation = "create"
     cells: list[ReviewCell]
+    # vNext additions — row decision proposed by entity resolution, and an
+    # explicit "this row has nothing reviewable" flag to keep default-only
+    # rows out of writeback.
+    row_decision: ReviewRowDecision | None = None
+    is_writable: bool = True
 
 
 class ReviewTable(BaseModel):
@@ -69,6 +142,21 @@ class ReviewTable(BaseModel):
     is_array: bool = False
     rows: list[ReviewRow]
     raw_extraction: dict[str, Any] | None = None
+    # vNext additions — presentation hint for the wizard renderer, and the
+    # progressive-review step this table belongs to.
+    presentation: ReviewTablePresentation = "table"
+    review_step: str | None = None
+
+
+class ReviewStep(BaseModel):
+    """One step in the progressive review wizard."""
+
+    model_config = ConfigDict(extra="allow")
+
+    key: str
+    label: str
+    table_names: list[str] = Field(default_factory=list)
+    status: ReviewStepStatus = "empty"
 
 
 class ReviewDraftDocument(BaseModel):
@@ -77,19 +165,19 @@ class ReviewDraftDocument(BaseModel):
     source_text: str | None = None
 
 
-class ReviewDraftRoutePlan(BaseModel):
-    selected_pipelines: list[dict[str, Any]] = Field(default_factory=list)
-
-
 class ReviewDraft(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     extraction_id: UUID
     document_id: UUID
+    # vNext: link the draft back to the parse attempt + lock state.
+    parse_id: UUID | None = None
     schema_version: int = 1
     status: ExtractionStatus = "pending_review"
+    review_version: int = 0
+    current_step: str | None = None
     document: ReviewDraftDocument
-    route_plan: ReviewDraftRoutePlan
+    steps: list[ReviewStep] = Field(default_factory=list)
     tables: list[ReviewTable]
     schema_warnings: list[str] = Field(default_factory=list)
     general_warnings: list[str] = Field(default_factory=list)
@@ -112,15 +200,20 @@ class ReviewCellPatch(BaseModel):
 
 
 class ConfirmExtractionRequest(BaseModel):
-    """Patches the server-stored draft.
+    """Confirm the server-stored vNext draft.
 
-    ``review_draft`` is accepted for backward compatibility but is no longer
-    the source of truth: the server reads the canonical draft from the
-    DB-stored ``DocumentExtraction.review_draft`` and applies patches against
-    it. When ``review_draft`` is supplied, only its ``extraction_id`` is
-    cross-checked against the URL path; the rest is ignored.
+    The reviewer's edits must already be persisted via the autosave PATCH —
+    confirm reads the canonical draft from
+    ``DocumentExtraction.review_draft`` and never trusts a client-supplied
+    structure. ``lock_token`` + ``base_version`` are required so a stale
+    tab can't overwrite a newer reviewer's work.
     """
 
+    model_config = ConfigDict(extra="allow")
+
+    lock_token: UUID | None = None
+    base_version: int | None = None
+    # Legacy fields kept for older clients; ignored by vNext writeback.
     review_draft: ReviewDraft | None = None
     patches: list[ReviewCellPatch] = Field(default_factory=list)
 
@@ -131,3 +224,60 @@ class ConfirmExtractionResponse(BaseModel):
     status: ExtractionStatus
     written_rows: dict[str, list[UUID]] = Field(default_factory=dict)
     invalid_cells: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# vNext review lock / autosave / row-decision patch contracts.
+# Implementations land in Task 7+; here only the wire shape is locked in so
+# downstream code can start referencing it.
+# ---------------------------------------------------------------------------
+
+
+class ReviewRowDecisionPatch(BaseModel):
+    """User-side change to a row's create/update/link decision."""
+
+    model_config = ConfigDict(extra="allow")
+
+    table_name: str
+    client_row_id: str
+    operation: ReviewRowDecisionOperation | None = None
+    selected_entity_id: UUID | None = None
+    match_level: ReviewMatchLevel | None = None
+    match_keys: list[str] | None = None
+    reason: str | None = None
+
+
+class AutosaveReviewRequest(BaseModel):
+    """PATCH payload for incremental review-draft saves."""
+
+    model_config = ConfigDict(extra="allow")
+
+    lock_token: UUID
+    base_version: int
+    current_step: str | None = None
+    cell_patches: list[ReviewCellPatch] = Field(default_factory=list)
+    row_patches: list[ReviewRowDecisionPatch] = Field(default_factory=list)
+
+
+class AutosaveReviewResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    extraction_id: UUID
+    review_version: int
+    current_step: str | None = None
+    lock_expires_at: datetime | None = None
+    review_draft: ReviewDraft | None = None
+
+
+ReviewLockMode = Literal["edit", "read_only"]
+
+
+class AcquireReviewLockResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    extraction_id: UUID
+    mode: ReviewLockMode
+    lock_token: UUID | None = None
+    locked_by: str | None = None
+    lock_expires_at: datetime | None = None
+    review_version: int = 0

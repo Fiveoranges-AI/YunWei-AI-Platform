@@ -1,9 +1,11 @@
-"""Tests for the ReviewDraft materializer.
+"""Catalog helper + vNext smoke tests for the review-draft materializer.
 
-The materializer turns extractor pipeline_results + catalog into a fully-
-populated table/cell payload. Key invariant: for every selected table the
-draft has one cell per active catalog field, even when AI extracted
-nothing for it (`status="missing"`).
+The detailed vNext coverage lives in ``tests/test_review_draft_vnext.py``.
+This file keeps the ``_catalog_from_default`` helper alive because the
+legacy provider tests (LandingAI / DeepSeek) still import it, and adds
+one smoke test against ``materialize_review_draft_vnext`` so the helper
+is exercised against the vNext shape rather than the dropped
+pipeline-results contract.
 """
 
 from __future__ import annotations
@@ -11,26 +13,40 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-import pytest  # noqa: F401 — pytest fixtures registered via conftest
+import pytest
 
 from yunwei_win.services.company_schema import DEFAULT_COMPANY_SCHEMA
-from yunwei_win.services.schema_ingest import (
-    PIPELINE_TABLES,
-    ReviewDraft,
-    materialize_review_draft,
+from yunwei_win.services.schema_ingest.entity_resolution import (
+    EntityResolutionProposal,
+    EntityResolutionRow,
 )
-from yunwei_win.services.ingest.pipeline_schemas import PipelineExtractResult
+from yunwei_win.services.schema_ingest.extraction_normalize import (
+    NormalizedExtraction,
+    NormalizedFieldValue,
+    NormalizedRow,
+)
+from yunwei_win.services.schema_ingest.parse_artifact import (
+    ParseArtifact,
+    ParseCapabilities,
+)
+from yunwei_win.services.schema_ingest.review_draft import (
+    materialize_review_draft_vnext,
+)
 
 
-# ---- helpers ----------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _clean_state():
+    yield
 
 
 def _catalog_from_default() -> dict[str, Any]:
     """Build the runtime catalog shape from ``DEFAULT_COMPANY_SCHEMA``.
 
     Mirrors ``services.company_schema.catalog._table_to_dict`` enough for
-    the materializer: every field gets ``is_array`` (inherited from the
-    table) and ``is_active=True``, with ``sort_order`` from enumerate.
+    the materializer + legacy extractor-provider tests: every field gets
+    ``is_array`` (inherited from the table), ``is_active=True``, and
+    ``sort_order`` from enumerate, while ``field_role``/``review_visible``
+    flow through from the default seed.
     """
 
     tables: list[dict[str, Any]] = []
@@ -58,349 +74,63 @@ def _catalog_from_default() -> dict[str, Any]:
     return {"tables": tables}
 
 
-def _table(draft: ReviewDraft, table_name: str):
-    return next(t for t in draft.tables if t.table_name == table_name)
-
-
-# ---- tests ------------------------------------------------------------
-
-
-def test_orders_with_partial_extraction_shows_all_six_cells():
-    """orders has 6 active fields; extraction provides 4 -> 6 cells, 4
-    extracted + 2 missing, in catalog order."""
+def test_catalog_helper_drives_vnext_materializer_for_orders():
+    """Sanity: the catalog helper still produces a shape the vNext
+    materializer can consume, and the resulting draft hides system
+    fields the way Task 3+ promised.
+    """
 
     catalog = _catalog_from_default()
-    route_plan = {
-        "selected_pipelines": [
-            {"name": "contract_order", "confidence": 0.92, "reason": "包含订单号、金额"}
+
+    extraction = NormalizedExtraction(
+        provider="deepseek",
+        tables={
+            "orders": [
+                NormalizedRow(
+                    client_row_id="orders:0",
+                    fields={
+                        "amount_total": NormalizedFieldValue(
+                            value="30000", confidence=0.9
+                        )
+                    },
+                )
+            ]
+        },
+        metadata={},
+    )
+    proposal = EntityResolutionProposal(
+        rows=[
+            EntityResolutionRow(
+                table_name="orders",
+                client_row_id="orders:0",
+                proposed_operation="create",
+                match_level="none",
+            )
         ]
-    }
-    pipeline_results = [
-        {
-            "name": "contract_order",
-            "extraction": {
-                "orders": {
-                    "amount_total": 30000,
-                    "amount_currency": "USD",
-                    "delivery_promised_date": "2026-06-01",
-                    "description": "客户订单",
-                }
-            },
-        }
-    ]
+    )
+    parse = ParseArtifact(
+        version=1,
+        provider="text",
+        source_type="text",
+        markdown="金额 30000",
+        capabilities=ParseCapabilities(text_spans=True),
+    )
 
-    draft = materialize_review_draft(
+    draft = materialize_review_draft_vnext(
         extraction_id=uuid4(),
         document_id=uuid4(),
-        schema_version=1,
+        parse_id=uuid4(),
         document_filename="order.pdf",
-        route_plan=route_plan,
-        pipeline_results=pipeline_results,
+        parse_artifact=parse,
+        selected_tables=["orders"],
+        normalized_extraction=extraction,
+        entity_resolution=proposal,
         catalog=catalog,
+        document_summary=None,
+        warnings=[],
     )
 
-    orders = _table(draft, "orders")
-    assert len(orders.rows) == 1
-    cells = orders.rows[0].cells
-    assert [c.field_name for c in cells] == [
-        "customer_id",
-        "amount_total",
-        "amount_currency",
-        "delivery_promised_date",
-        "delivery_address",
-        "description",
-    ]
-
-    cell_by_name = {c.field_name: c for c in cells}
-
-    extracted_names = {
-        "amount_total",
-        "amount_currency",
-        "delivery_promised_date",
-        "description",
-    }
-    for name in extracted_names:
-        cell = cell_by_name[name]
-        assert cell.status == "extracted", f"{name} expected extracted"
-        assert cell.source == "ai"
-
-    # customer_id is a required FK to a same-confirm parent (contract_order
-    # selects ``customers`` too) -> status missing, source linked. Confirm
-    # writeback fills the UUID from the customers row that will be inserted
-    # in the same confirm.
-    customer_id_cell = cell_by_name["customer_id"]
-    assert customer_id_cell.status == "missing"
-    assert customer_id_cell.source == "linked"
-    assert customer_id_cell.value is None
-
-    # delivery_address is optional text with no default -> missing.
-    delivery_cell = cell_by_name["delivery_address"]
-    assert delivery_cell.status == "missing"
-    assert delivery_cell.source == "empty"
-    assert delivery_cell.value is None
-
-
-def test_materializer_consumes_pipeline_extract_result_extraction_envelope():
-    """Providers return ``PipelineExtractResult.model_dump()`` with the
-    extracted payload under ``extraction``. The ReviewDraft materializer must
-    consume that canonical envelope directly."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
-    pipeline_results = [
-        PipelineExtractResult(
-            name="contract_order",
-            extraction={
-                "orders": {
-                    "amount_total": "30000",
-                    "amount_currency": "USD",
-                    "delivery_promised_date": "2026-06-01",
-                    "description": "客户订单",
-                },
-                "contracts": {
-                    "contract_no_external": "HT-001",
-                    "amount_total": "30000",
-                    "amount_currency": "USD",
-                },
-                "contract_payment_milestones": [
-                    {
-                        "name": "预付款",
-                        "ratio": "0.3",
-                        "trigger_event": "contract_signed",
-                        "raw_text": "合同签订后支付 30%",
-                    }
-                ],
-            },
-        ).model_dump(mode="json")
-    ]
-
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="order.pdf",
-        route_plan=route_plan,
-        pipeline_results=pipeline_results,
-        catalog=catalog,
-    )
-
-    orders = _table(draft, "orders")
-    order_cells = {c.field_name: c for c in orders.rows[0].cells}
-    assert order_cells["amount_total"].value == "30000"
-    assert order_cells["amount_total"].status == "extracted"
-    assert order_cells["amount_currency"].value == "USD"
-
-    contracts = _table(draft, "contracts")
-    contract_cells = {c.field_name: c for c in contracts.rows[0].cells}
-    assert contract_cells["contract_no_external"].value == "HT-001"
-    assert contract_cells["amount_total"].value == "30000"
-
-    milestones = _table(draft, "contract_payment_milestones")
-    assert len(milestones.rows) == 1
-    milestone_cells = {c.field_name: c for c in milestones.rows[0].cells}
-    assert milestone_cells["name"].value == "预付款"
-    assert milestone_cells["ratio"].value == "0.3"
-
-
-def test_default_values_fill_missing_cells():
-    """When AI omits a field that has a catalog default and the field is
-    non-required + non-uuid, the cell uses the default value, status
-    ``extracted``, source ``default``."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
-    # No amount_currency in extraction -> default ``CNY`` should win.
-    pipeline_results = [
-        {
-            "name": "contract_order",
-            "extraction": {"orders": {"amount_total": 1234}},
-        }
-    ]
-
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="order.pdf",
-        route_plan=route_plan,
-        pipeline_results=pipeline_results,
-        catalog=catalog,
-    )
-
-    orders = _table(draft, "orders")
-    cells = {c.field_name: c for c in orders.rows[0].cells}
-    currency = cells["amount_currency"]
-    assert currency.value == "CNY"
-    assert currency.status == "extracted"
-    assert currency.source == "default"
-
-
-def test_array_table_with_no_items_creates_one_empty_row():
-    """``contracts_order`` selects ``contacts``; with no contacts in the
-    extraction, the table still has exactly one row of ``missing`` cells."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
-    pipeline_results = [
-        {
-            "name": "contract_order",
-            "extraction": {"orders": {"amount_total": 1}},
-        }
-    ]
-
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="x.pdf",
-        route_plan=route_plan,
-        pipeline_results=pipeline_results,
-        catalog=catalog,
-    )
-
-    contacts = _table(draft, "contacts")
-    assert contacts.is_array is True
-    assert len(contacts.rows) == 1
-    for cell in contacts.rows[0].cells:
-        assert cell.status == "missing"
-        assert cell.value is None
-        # contract_order also selects customers, so contacts.customer_id is
-        # the auto-linked FK; every other cell is plain empty.
-        if cell.field_name == "customer_id":
-            assert cell.source == "linked"
-        else:
-            assert cell.source == "empty"
-
-
-def test_unknown_pipeline_is_ignored_not_crashed():
-    """Unknown pipelines in the route plan are skipped, not fatal."""
-
-    catalog = _catalog_from_default()
-    route_plan = {
-        "selected_pipelines": [
-            {"name": "totally_unknown"},
-            {"name": "still_bogus"},
-        ]
-    }
-
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="weird.pdf",
-        route_plan=route_plan,
-        pipeline_results=[],
-        catalog=catalog,
-    )
-
-    # No known pipelines -> no selected tables -> empty list.
-    assert draft.tables == []
-
-
-def test_low_confidence_marks_low_confidence_status():
-    """A value with confidence < 0.6 gets ``status="low_confidence"``."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
-    # Wrap value with confidence side-channel.
-    pipeline_results = [
-        {
-            "name": "contract_order",
-            "extraction": {
-                "orders": {
-                    "amount_total": {"value": 999, "confidence": 0.3},
-                }
-            },
-        }
-    ]
-
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="low_conf.pdf",
-        route_plan=route_plan,
-        pipeline_results=pipeline_results,
-        catalog=catalog,
-    )
-
-    orders = _table(draft, "orders")
-    cells = {c.field_name: c for c in orders.rows[0].cells}
-    amount = cells["amount_total"]
-    assert amount.status == "low_confidence"
-    assert amount.value == 999
-    assert amount.confidence == pytest.approx(0.3)
-    assert amount.source == "ai"
-
-
-def test_fk_cell_without_parent_in_draft_stays_empty():
-    """``commitment_task_risk`` selects only journal/task tables. The
-    ``customer_id`` FK on each of those has no parent ``customers`` in the
-    same draft, so it must stay ``source="empty"`` — confirm will then ask
-    the user to provide a real customer link."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "commitment_task_risk"}]}
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="memo.pdf",
-        route_plan=route_plan,
-        pipeline_results=[],
-        catalog=catalog,
-    )
-
-    journal = _table(draft, "customer_journal_items")
-    customer_id_cell = next(c for c in journal.rows[0].cells if c.field_name == "customer_id")
-    assert customer_id_cell.source == "empty"
-
-
-def test_pipeline_tables_map_matches_spec():
-    """Sanity: the canonical pipeline -> table map matches the spec."""
-
-    assert PIPELINE_TABLES["identity"] == ["customers", "contacts"]
-    assert PIPELINE_TABLES["contract_order"] == [
-        "customers",
-        "contacts",
-        "contracts",
-        "contract_payment_milestones",
-        "orders",
-    ]
-    assert PIPELINE_TABLES["finance"] == ["invoices", "invoice_items", "payments"]
-
-
-def test_materializer_threads_source_text_into_document():
-    """The materializer accepts ``document_source_text`` and stamps it onto
-    ``ReviewDraft.document.source_text``."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="x.pdf",
-        route_plan=route_plan,
-        pipeline_results=[],
-        catalog=catalog,
-        document_source_text="OCR 文本",
-    )
-    assert draft.document.source_text == "OCR 文本"
-
-
-def test_materializer_source_text_defaults_to_none():
-    """``document_source_text`` is optional; default is ``None``."""
-
-    catalog = _catalog_from_default()
-    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
-    draft = materialize_review_draft(
-        extraction_id=uuid4(),
-        document_id=uuid4(),
-        schema_version=1,
-        document_filename="x.pdf",
-        route_plan=route_plan,
-        pipeline_results=[],
-        catalog=catalog,
-    )
-    assert draft.document.source_text is None
+    cells = {cell.field_name: cell for cell in draft.tables[0].rows[0].cells}
+    assert "amount_total" in cells
+    # System link FKs must not leak into the draft cells.
+    assert "customer_id" not in cells

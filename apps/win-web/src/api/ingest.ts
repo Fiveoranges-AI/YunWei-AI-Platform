@@ -5,7 +5,11 @@
 // company data tables.
 
 import type {
+  AcquireReviewLockResponse,
+  AutosaveReviewRequest,
+  AutosaveReviewResponse,
   CompanySchema,
+  ConfirmExtractionRequest,
   ConfirmExtractionResponse,
   ExtractionEnvelope,
   IngestJob,
@@ -96,6 +100,64 @@ export async function getIngestJob(jobId: string): Promise<IngestJob> {
   return jsonOrThrow(res);
 }
 
+// vNext review surface ------------------------------------------------------
+
+export async function getReview(extractionId: string): Promise<ExtractionEnvelope> {
+  const res = await fetch(
+    `${API_BASE}/ingest/extractions/${extractionId}/review`,
+    { credentials: "include", cache: "no-store" },
+  );
+  return jsonOrThrow(res);
+}
+
+export async function acquireReviewLock(
+  extractionId: string,
+): Promise<AcquireReviewLockResponse> {
+  const res = await fetch(
+    `${API_BASE}/ingest/extractions/${extractionId}/review/lock`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+  return jsonOrThrow(res);
+}
+
+export async function autosaveReview(
+  extractionId: string,
+  payload: AutosaveReviewRequest,
+): Promise<AutosaveReviewResponse> {
+  const res = await fetch(
+    `${API_BASE}/ingest/extractions/${extractionId}/review`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return jsonOrThrow(res);
+}
+
+export async function confirmReviewDraft(
+  extractionId: string,
+  payload: ConfirmExtractionRequest,
+): Promise<ConfirmExtractionResponse> {
+  const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}/confirm`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return jsonOrThrow(res);
+}
+
+// Legacy aliases — older callers (old Review.tsx, dev tools) may still
+// import these. They hit the same generic GET / PATCH /extractions/{id}
+// path the backend keeps around as a compat alias. Prefer ``getReview``
+// + autosaveReview for vNext flows.
+
 export async function getReviewDraft(extractionId: string): Promise<ExtractionEnvelope> {
   const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}`, {
     credentials: "include",
@@ -117,18 +179,9 @@ export async function patchReviewDraft(
   return jsonOrThrow(res);
 }
 
-export async function confirmReviewDraft(
-  extractionId: string,
-  payload: { review_draft: ReviewDraft; patches: ReviewCellPatch[] },
-): Promise<ConfirmExtractionResponse> {
-  const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}/confirm`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return jsonOrThrow(res);
-}
+// Re-export ReviewCellPatch so consumers that import { ReviewCellPatch }
+// from this module continue to compile.
+export type { ReviewCellPatch };
 
 export async function ignoreReviewDraft(extractionId: string): Promise<ExtractionEnvelope> {
   const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}/ignore`, {

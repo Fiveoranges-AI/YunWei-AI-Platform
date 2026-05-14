@@ -205,6 +205,7 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         ShipmentItem,
     )
     from yunwei_win.models.document_extraction import DocumentExtraction
+    from yunwei_win.models.document_parse import DocumentParse
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -219,6 +220,7 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         Shipment.__table__,
         ShipmentItem.__table__,
         CustomerJournalItem.__table__,
+        DocumentParse.__table__,
         DocumentExtraction.__table__,
     ]
 

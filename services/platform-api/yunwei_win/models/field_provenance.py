@@ -61,6 +61,18 @@ class FieldProvenance(Base):
         nullable=False,
         index=True,
     )
+    parse_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("document_parses.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    extraction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("document_extractions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     entity_type: Mapped[EntityType] = mapped_column(
         SQLEnum(EntityType, name="provenance_entity_type"), nullable=False
     )
@@ -74,6 +86,9 @@ class FieldProvenance(Base):
     confidence: Mapped[float | None] = mapped_column(Numeric(3, 2), nullable=True)
     excerpt_match: Mapped[bool | None] = mapped_column(nullable=True)
     extracted_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_refs: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    # ai | edited | default | linked | system
+    review_action: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

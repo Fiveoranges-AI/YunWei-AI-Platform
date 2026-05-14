@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import ensure_ingest_job_tables, ensure_schema_ingest_tables, get_engine_for
 from yunwei_win.models import IngestJob, IngestJobStage, IngestJobStatus
-from yunwei_win.services.ingest.evidence import PreStoredFile
+from yunwei_win.services.schema_ingest.upload import PreStoredFile
 from yunwei_win.services.schema_ingest import auto_ingest as schema_auto_ingest
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,13 @@ _STAGE_BY_NAME: dict[str, IngestJobStage] = {
     "route_done": IngestJobStage.route,
     "extract_done": IngestJobStage.extract,
     "merge_done": IngestJobStage.merge,
+    # vNext stage names from schema_ingest.auto.
+    "parsing": IngestJobStage.ocr,
+    "routing": IngestJobStage.route,
+    "extracting": IngestJobStage.extract,
+    "validating": IngestJobStage.extract,
+    "resolving": IngestJobStage.merge,
+    "review_ready": IngestJobStage.done,
 }
 
 
@@ -139,9 +147,19 @@ async def process_ingest_job(job_id: str, enterprise_id: str) -> None:
                 # External cancel won the race — don't overwrite it.
                 return
             j.status = IngestJobStatus.failed
-            j.error_message = f"{type(exc).__name__}: {exc!s}"[:2000]
+            j.error_message = _safe_error_message(exc)
             j.finished_at = datetime.now(timezone.utc)
             await session.commit()
+
+
+def _safe_error_message(exc: BaseException) -> str:
+    raw = f"{type(exc).__name__}: {exc!s}"
+    sanitized = re.sub(
+        r"\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\b",
+        "credential",
+        raw,
+    )
+    return sanitized[:2000]
 
 
 async def _run_extraction(engine, job_uuid: UUID) -> None:
@@ -256,9 +274,22 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
             return
         j.document_id = result.document_id
         j.extraction_id = result.extraction_id
-        j.result_json = result.review_draft.model_dump(mode="json")
+        # vNext result_json: a compact pointer + summary, not the full
+        # draft. The full draft is the canonical
+        # ``DocumentExtraction.review_draft`` — clients should fetch via
+        # GET /extractions/{id}/review instead of reading job.result_json.
+        j.result_json = {
+            "workflow": "vnext",
+            "document_id": str(result.document_id),
+            "parse_id": str(result.parse_id),
+            "extraction_id": str(result.extraction_id),
+            "selected_tables": [
+                t.get("table_name") for t in (result.selected_tables or [])
+                if isinstance(t, dict)
+            ],
+        }
         j.status = IngestJobStatus.extracted
         j.stage = IngestJobStage.done
-        j.progress_message = "已生成 schema 草稿，待人工确认"
+        j.progress_message = "已生成 vNext 草稿，待人工确认"
         j.finished_at = datetime.now(timezone.utc)
         await session.commit()

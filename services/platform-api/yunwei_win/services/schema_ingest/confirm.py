@@ -1,26 +1,29 @@
-"""Confirm reviewed ReviewDraft cells into company data tables.
+"""Confirm a vNext ReviewDraft into the tenant business tables.
 
-Confirm receives:
-  - the server-stored ``DocumentExtraction`` (canonical draft, source of truth);
-  - the client's optional echoed draft + cell-level patches.
+Contract (call from API only; lock + version must already be held):
 
-Behavior:
-  1. Load the canonical draft from ``DocumentExtraction.review_draft``.
-  2. If the client supplied ``request.review_draft`` only cross-check its
-     ``extraction_id`` matches the URL path — its tables/rows are ignored.
-  3. Apply patches onto the server draft (patches targeting missing
-     tables/rows/cells are silently skipped).
-  4. Validate catalog ↔ ORM parity for every table being written.
-  5. Validate every non-rejected cell against the catalog ``data_type``.
-  6. If a non-rejected required cell is empty, return ``invalid_cells``
-     without writing.
-  7. Otherwise write tables in dependency phases (parents -> children),
-     emit ``FieldProvenance`` for each confirmed non-empty cell, and flip
-     the extraction / document / job status to ``confirmed``.
+  1. load extraction; status must be ``pending_review``;
+  2. ``assert_valid_review_lock(lock_token, base_version)`` — stale tokens or
+     stale versions are 409s before we touch any business row;
+  3. validate the server-stored ``review_draft`` against the active catalog
+     for catalog/ORM parity, missing required cells, and primitive type;
+  4. walk rows by table in dependency phases (customers/products →
+     children → grandchildren); the row's ``row_decision.operation`` drives
+     create / update / link_existing / ignore;
+  5. ``system_link`` FK columns are filled from a ``row_uuid_map`` that
+     tracks parents written or linked in this same confirm — never from
+     extractor cells;
+  6. AI null / missing cells never overwrite an existing DB value; only an
+     explicit ``edited`` cell with ``explicit_clear=True`` clears a column;
+  7. each persisted field emits a ``FieldProvenance`` row carrying
+     ``parse_id``, ``extraction_id``, source refs, and the user-facing
+     ``review_action`` (ai / edited / default / linked / system);
+  8. on success flip the extraction to ``confirmed``, release the review
+     lock, mark the linked Document/IngestJob, and commit the whole batch
+     in one transaction.
 
-The current implementation intentionally skips fuzzy merge: if a row carries ``entity_id`` we
-update; otherwise we create. Child rows inherit FK substitutions from
-``client_row_id -> uuid`` mapping built within this confirm.
+If validation produces ``invalid_cells`` the caller receives a response
+with those cells and no business rows are written.
 """
 
 from __future__ import annotations
@@ -68,19 +71,24 @@ from yunwei_win.services.company_schema import (
     get_company_schema,
 )
 from yunwei_win.services.schema_ingest.fk_links import FK_FIELD_PARENTS
+from yunwei_win.services.schema_ingest.review_lock import (
+    assert_valid_review_lock,
+    release_review_lock,
+)
 from yunwei_win.services.schema_ingest.schemas import (
     ConfirmExtractionRequest,
     ConfirmExtractionResponse,
     ReviewCell,
     ReviewDraft,
     ReviewRow,
+    ReviewRowDecision,
     ReviewTable,
 )
 
 logger = logging.getLogger(__name__)
 
 
-# table_name -> (Model, EntityType-for-provenance)
+# table_name -> (Model, EntityType for provenance)
 TABLE_MODEL: dict[str, tuple[type, EntityType]] = {
     "customers": (Customer, EntityType.customer),
     "contacts": (Contact, EntityType.contact),
@@ -102,18 +110,35 @@ TABLE_MODEL: dict[str, tuple[type, EntityType]] = {
 }
 
 
-# Tables written before others to satisfy FK ordering. Phases run sequentially
-# so a child created in phase 2 can reference a parent inserted in phase 1.
+# Parents before children before grandchildren. Phases run sequentially so a
+# child created in phase 2 can find its parent UUID in row_uuid_map.
 WRITE_PHASES: list[list[str]] = [
     ["customers", "products"],
-    ["contacts", "orders", "contracts", "invoices", "shipments", "product_requirements"],
-    ["contract_payment_milestones", "invoice_items", "shipment_items", "payments"],
+    [
+        "contacts",
+        "orders",
+        "contracts",
+        "invoices",
+        "shipments",
+        "product_requirements",
+    ],
+    [
+        "contract_payment_milestones",
+        "invoice_items",
+        "shipment_items",
+        "payments",
+    ],
     ["customer_journal_items", "customer_tasks"],
 ]
 
 
-# FK auto-resolve map lives in ``fk_links.py`` so the materializer and the
-# writeback path stay in sync.
+_HIDDEN_FIELD_ROLES = {"system_link", "audit"}
+_AUDIT_DOCUMENT_FIELDS = {"document_id", "source_document_id"}
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 
 async def confirm_review_draft(
@@ -123,12 +148,6 @@ async def confirm_review_draft(
     request: ConfirmExtractionRequest,
     confirmed_by: str | None,
 ) -> ConfirmExtractionResponse:
-    """Validate + write back the reviewed draft. See module docstring.
-
-    Returns ``ConfirmExtractionResponse``; the caller (API endpoint) raises
-    HTTPException(400) when ``invalid_cells`` is non-empty.
-    """
-
     extraction = (
         await session.execute(
             select(DocumentExtraction).where(DocumentExtraction.id == extraction_id)
@@ -142,16 +161,16 @@ async def confirm_review_draft(
             detail=f"extraction is {extraction.status.value}, not pending_review",
         )
 
-    # If the client echoed a draft, cross-check its extraction_id only;
-    # we do not trust its structure.
-    if request.review_draft is not None:
-        if request.review_draft.extraction_id != extraction_id:
-            raise HTTPException(
-                status_code=400,
-                detail="review_draft.extraction_id does not match URL extraction_id",
-            )
+    if request.lock_token is None or request.base_version is None:
+        raise HTTPException(
+            status_code=400, detail="lock_token and base_version are required"
+        )
+    assert_valid_review_lock(
+        extraction,
+        lock_token=request.lock_token,
+        base_version=request.base_version,
+    )
 
-    # The linked IngestJob must not already be in a terminal state.
     job = (
         await session.execute(
             select(IngestJob).where(IngestJob.extraction_id == extraction_id)
@@ -167,32 +186,18 @@ async def confirm_review_draft(
             detail=f"linked ingest job is {job.status.value}",
         )
 
-    # Catalog is the source of truth for required/data_type.
     await ensure_default_company_schema(session)
     catalog = await get_company_schema(session)
-    catalog_by_table: dict[str, dict[str, dict[str, Any]]] = {}
-    for t in catalog.get("tables") or []:
-        catalog_by_table[t["table_name"]] = {
-            f["field_name"]: f for f in t.get("fields") or []
-        }
+    catalog_by_table: dict[str, dict[str, dict[str, Any]]] = {
+        t["table_name"]: {f["field_name"]: f for f in t.get("fields") or []}
+        for t in catalog.get("tables") or []
+    }
 
-    # Source of truth: the DB-stored ReviewDraft. Patches mutate this draft
-    # in place; the client's echoed draft is intentionally not consulted for
-    # structure.
+    if extraction.review_draft is None:
+        raise HTTPException(status_code=409, detail="review_draft missing on extraction")
     server_draft = ReviewDraft.model_validate(extraction.review_draft)
-    _apply_patches(server_draft, request.patches)
 
-    # Disarm synthetic FK placeholders ("customer-1", etc.) stored in older
-    # drafts before the materializer learned to clear them. With a same-
-    # confirm parent in the draft, writeback will fill the real UUID.
-    _normalize_linked_fk_cells(server_draft)
-
-    # Validate catalog ↔ ORM parity for each table referenced in the draft
-    # *before* writing anything. Either direction failing is a 400.
-    invalid_cells = _check_orm_parity(server_draft, catalog_by_table)
-
-    # Validate every non-rejected cell against the catalog data_type.
-    invalid_cells.extend(_validate_draft(server_draft, catalog_by_table))
+    invalid_cells = _validate_draft(server_draft, catalog_by_table)
     if invalid_cells:
         return ConfirmExtractionResponse(
             extraction_id=extraction_id,
@@ -201,46 +206,43 @@ async def confirm_review_draft(
             invalid_cells=invalid_cells,
         )
 
-    # Index rows by table_name for ordered writeback.
-    rows_by_table: dict[str, list[ReviewRow]] = {}
+    rows_by_table: dict[str, list[tuple[ReviewTable, ReviewRow]]] = {}
     for t in server_draft.tables:
-        rows_by_table.setdefault(t.table_name, []).extend(t.rows)
+        rows_by_table.setdefault(t.table_name, []).extend((t, r) for r in t.rows)
 
     written: dict[str, list[UUID]] = {}
     row_uuid_map: dict[tuple[str, str], UUID] = {}
 
     for phase in WRITE_PHASES:
         for table_name in phase:
-            rows = rows_by_table.get(table_name)
-            if not rows:
+            pairs = rows_by_table.get(table_name)
+            if not pairs:
                 continue
             field_map = catalog_by_table.get(table_name)
             if field_map is None:
                 continue
-            for row in rows:
-                # Skip rows where every non-rejected cell is empty AND the row
-                # is a fresh insert — empty placeholder rows for array tables.
-                if row.entity_id is None and _row_is_empty(row):
-                    continue
-                row_uuid = await _persist_row(
+            for _table_meta, row in pairs:
+                outcome = await _process_row(
                     session=session,
                     table_name=table_name,
                     row=row,
                     field_map=field_map,
                     row_uuid_map=row_uuid_map,
-                    document_id=extraction.document_id,
+                    extraction=extraction,
                 )
-                if row_uuid is None:
+                if outcome is None:
                     continue
+                row_uuid, was_written = outcome
                 row_uuid_map[(table_name, row.client_row_id)] = row_uuid
-                written.setdefault(table_name, []).append(row_uuid)
+                if was_written:
+                    written.setdefault(table_name, []).append(row_uuid)
 
-    # Mark all the surrounding metadata confirmed.
     now = datetime.now(timezone.utc)
     extraction.status = DocumentExtractionStatus.confirmed
     extraction.confirmed_by = confirmed_by
     extraction.confirmed_at = now
     extraction.review_draft = server_draft.model_dump(mode="json")
+    release_review_lock(extraction)
 
     doc = (
         await session.execute(
@@ -264,118 +266,27 @@ async def confirm_review_draft(
     )
 
 
-# ---- draft merging / patching ----------------------------------------
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
 
 
-def _apply_patches(draft: ReviewDraft, patches) -> None:
-    """Apply one patch at a time, looking up table+row+cell in-place."""
-
-    if not patches:
-        return
-    table_index: dict[str, ReviewTable] = {t.table_name: t for t in draft.tables}
-    for patch in patches:
-        table = table_index.get(patch.table_name)
-        if table is None:
-            continue
-        row = _find_row(table, patch.client_row_id)
-        if row is None:
-            continue
-        if patch.entity_id is not None:
-            row.entity_id = patch.entity_id
-        if patch.operation is not None:
-            row.operation = patch.operation
-        cell = _find_cell(row, patch.field_name)
-        if cell is None:
-            continue
-        if patch.value is not None or (patch.status is not None and patch.status != cell.status):
-            old_value = cell.value
-            if patch.value is not None:
-                cell.value = patch.value
-                cell.display_value = str(patch.value)
-                if patch.status is None and patch.value != old_value:
-                    cell.status = "edited"
-                    cell.source = "edited"
-        if patch.status is not None:
-            cell.status = patch.status  # type: ignore[assignment]
-            if patch.status == "edited" and cell.source not in ("edited",):
-                cell.source = "edited"
+def _row_operation(row: ReviewRow) -> str:
+    if row.row_decision is not None:
+        return row.row_decision.operation
+    return row.operation or "create"
 
 
-def _find_row(table: ReviewTable, client_row_id: str) -> ReviewRow | None:
-    for row in table.rows:
-        if row.client_row_id == client_row_id:
-            return row
-    return None
-
-
-def _find_cell(row: ReviewRow, field_name: str) -> ReviewCell | None:
-    for cell in row.cells:
-        if cell.field_name == field_name:
-            return cell
-    return None
-
-
-def _normalize_linked_fk_cells(draft: ReviewDraft) -> None:
-    """Clear unparseable FK uuid values when a same-confirm parent exists.
-
-    Older drafts (and any extractor that emits cross-row placeholders like
-    ``"customer-1"``) carry FK cells with non-UUID values. Once the parent
-    table is present in the draft the writeback path auto-fills the real
-    UUID, so the value here would otherwise just trip ``invalid_value`` at
-    validate time and lose the row.
-    """
-
-    table_names = {t.table_name for t in draft.tables}
-    for table in draft.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                if cell.status == "rejected":
-                    continue
-                if cell.field_name not in FK_FIELD_PARENTS:
-                    continue
-                if (cell.data_type or "").lower() != "uuid":
-                    continue
-                if _value_is_empty(cell.value):
-                    continue
-                try:
-                    UUID(str(cell.value))
-                    continue
-                except (ValueError, TypeError):
-                    pass
-                parent_table = FK_FIELD_PARENTS[cell.field_name]
-                if parent_table not in table_names:
-                    continue
-                cell.value = None
-                cell.display_value = ""
-                cell.source = "linked"
-                cell.status = "missing"
-
-
-# ---- validation ------------------------------------------------------
-
-
-def _check_orm_parity(
+def _validate_draft(
     draft: ReviewDraft,
     catalog_by_table: dict[str, dict[str, dict[str, Any]]],
 ) -> list[dict[str, Any]]:
-    """Fail loudly when catalog cells and ORM columns are out of sync.
+    """Catalog/ORM parity + required + primitive type validation.
 
-    Two directions:
-
-    1. **catalog_field_has_no_orm_destination**: a non-rejected, non-empty cell
-       names a field the SQLAlchemy model has no column for. Without this
-       guard ``setattr(entity, field_name, value)`` would silently drop the
-       value (the old behavior).
-    2. **orm_requires_field_missing_from_catalog**: a NOT-NULL ORM column with
-       no server-side or Python-side default is neither provided by the
-       catalog nor by ``FK_FIELD_PARENTS``. Without this guard the eventual
-       ``flush`` would raise ``IntegrityError`` mid-write.
+    Rows with ``operation in {ignore, link_existing}`` skip cell validation —
+    ``ignore`` rows never write, and ``link_existing`` rows attach an existing
+    entity ID without touching cell values.
     """
-
-    # A FK column counts as satisfiable from the auto-fill map only when the
-    # parent table is also being written in this confirm — otherwise the
-    # eventual flush hits IntegrityError.
-    tables_being_written = {t.table_name for t in draft.tables}
 
     invalid: list[dict[str, Any]] = []
     for table in draft.tables:
@@ -384,110 +295,29 @@ def _check_orm_parity(
             continue
         model, _ = model_pair
         orm_columns = set(model.__table__.columns.keys())
-        catalog_fields = set(catalog_by_table.get(table.table_name, {}).keys())
+        field_map = catalog_by_table.get(table.table_name, {})
 
         for row in table.rows:
-            if row.operation == "create" and row.entity_id is None and _row_is_empty(row):
-                # Reviewer left an empty placeholder; we'd skip this row at
-                # write time, so don't fire parity errors against it.
+            operation = _row_operation(row)
+            if operation in {"ignore", "link_existing"}:
+                continue
+            if not row.is_writable and operation not in {"create", "update"}:
                 continue
 
-            # Direction 1: catalog cell -> ORM column.
             for cell in row.cells:
                 if cell.status == "rejected":
                     continue
                 if _value_is_empty(cell.value):
-                    continue
-                if cell.field_name not in orm_columns:
-                    invalid.append({
-                        "table_name": table.table_name,
-                        "client_row_id": row.client_row_id,
-                        "field_name": cell.field_name,
-                        "reason": "catalog_field_has_no_orm_destination",
-                    })
-
-            # Direction 2: ORM NOT NULL column -> catalog field / FK / context.
-            for column in model.__table__.columns:
-                if not _column_must_be_supplied(column):
-                    continue
-                name = column.name
-                if name in catalog_fields:
-                    continue
-                parent_table = FK_FIELD_PARENTS.get(name)
-                if parent_table is not None and parent_table in tables_being_written:
-                    continue
-                invalid.append({
-                    "table_name": table.table_name,
-                    "client_row_id": row.client_row_id,
-                    "field_name": name,
-                    "reason": "orm_requires_field_missing_from_catalog",
-                })
-    return invalid
-
-
-def _column_must_be_supplied(column: Any) -> bool:
-    """A NOT NULL column with no default that the caller must supply.
-
-    Primary keys and columns with a server-side or Python-side default are
-    excluded — the DB or SQLAlchemy fills them in.
-    """
-
-    if column.nullable:
-        return False
-    if column.primary_key:
-        return False
-    if column.server_default is not None:
-        return False
-    if column.default is not None:
-        return False
-    return True
-
-
-def _validate_draft(
-    draft: ReviewDraft,
-    catalog_by_table: dict[str, dict[str, dict[str, Any]]],
-) -> list[dict[str, Any]]:
-    """Walk every row/cell and collect ``invalid_cells`` entries.
-
-    Empty required non-rejected cells -> ``missing_required``.
-    Non-coercible values -> ``invalid_value``.
-    Empty placeholder rows for array tables (no required field, entity_id
-    null) are skipped — the reviewer chose not to add a row.
-    """
-
-    invalid: list[dict[str, Any]] = []
-    for table in draft.tables:
-        field_map = catalog_by_table.get(table.table_name)
-        if field_map is None:
-            continue
-        for row in table.rows:
-            row_is_create = row.operation == "create" and row.entity_id is None
-            row_empty = _row_is_empty(row)
-            row_has_required = _row_has_required(row, field_map)
-            # Skip a row only when there's nothing the user needs to provide.
-            # An empty create-row with NO required fields is a discard signal.
-            if row_is_create and row_empty and not row_has_required:
-                continue
-            for cell in row.cells:
-                if cell.status == "rejected":
-                    continue
-                field_spec = field_map.get(cell.field_name)
-                if field_spec is None:
-                    continue
-                value_is_empty = _value_is_empty(cell.value)
-                if value_is_empty:
-                    if bool(field_spec.get("required")) and row_is_create:
-                        # FK fields are filled by writeback from a same-
-                        # confirm parent. The check is structural — based
-                        # on FK_FIELD_PARENTS + parent rows in the draft —
-                        # not the cell's ``source`` mark (which the
-                        # materializer sets for UI but may be absent in
-                        # drafts created before that change).
-                        if (
-                            cell.field_name in FK_FIELD_PARENTS
-                            and _draft_has_writeable_parent(draft, cell.field_name)
-                        ):
-                            continue
+                    spec = field_map.get(cell.field_name)
+                    if (
+                        spec is not None
+                        and bool(spec.get("required"))
+                        and operation == "create"
+                        and _system_link_satisfied(
+                            cell.field_name, table.table_name
+                        )
+                        is False
+                    ):
                         invalid.append({
                             "table_name": table.table_name,
                             "client_row_id": row.client_row_id,
@@ -495,8 +325,19 @@ def _validate_draft(
                             "reason": "missing_required",
                         })
                     continue
-                ok = _validate_value(field_spec, cell.value)
-                if not ok:
+                # Non-empty review cells must point at a real ORM column.
+                if cell.field_name not in orm_columns:
+                    invalid.append({
+                        "table_name": table.table_name,
+                        "client_row_id": row.client_row_id,
+                        "field_name": cell.field_name,
+                        "reason": "catalog_field_has_no_orm_destination",
+                    })
+                    continue
+                spec = field_map.get(cell.field_name)
+                if spec is None:
+                    continue
+                if not _value_matches_type(spec, cell.value):
                     invalid.append({
                         "table_name": table.table_name,
                         "client_row_id": row.client_row_id,
@@ -506,52 +347,17 @@ def _validate_draft(
     return invalid
 
 
-def _row_has_required(
-    row: ReviewRow, field_map: dict[str, dict[str, Any]]
-) -> bool:
-    """Whether the row has any catalog-required field in its cells."""
+def _system_link_satisfied(field_name: str, _table_name: str) -> bool:
+    """``True`` when an empty visible cell is OK because confirm will fill it.
 
-    for cell in row.cells:
-        spec = field_map.get(cell.field_name)
-        if spec is None:
-            continue
-        if bool(spec.get("required")):
-            return True
-    return False
-
-
-def _draft_has_writeable_parent(draft: ReviewDraft, fk_field_name: str) -> bool:
-    """True when an FK cell can rely on a same-confirm parent at writeback.
-
-    Mirrors the runtime decision in ``_persist_row`` / ``_lookup_single_parent``:
-    a parent row will be written when (a) it has an ``entity_id`` (update path)
-    or (b) at least one non-rejected cell has a value (fresh insert). Rows
-    with every cell rejected are not written and do not satisfy the link.
+    With vNext, ``system_link`` columns are filtered out of review cells, so
+    they never appear here. Audit fields like ``document_id`` are also
+    filtered out. This guard is only relevant if a legacy draft still has
+    one of those names visible — treat them as system-supplied so we don't
+    raise a missing_required for fields the model can never produce.
     """
 
-    parent_table = FK_FIELD_PARENTS.get(fk_field_name)
-    if parent_table is None:
-        return False
-    for t in draft.tables:
-        if t.table_name != parent_table:
-            continue
-        for row in t.rows:
-            if row.entity_id is not None:
-                return True
-            if not _row_is_empty(row):
-                return True
-    return False
-
-
-def _row_is_empty(row: ReviewRow) -> bool:
-    """A row is "empty" if every non-rejected cell has no value."""
-
-    for cell in row.cells:
-        if cell.status == "rejected":
-            continue
-        if not _value_is_empty(cell.value):
-            return False
-    return True
+    return field_name in FK_FIELD_PARENTS or field_name in _AUDIT_DOCUMENT_FIELDS
 
 
 def _value_is_empty(value: Any) -> bool:
@@ -562,13 +368,11 @@ def _value_is_empty(value: Any) -> bool:
     return False
 
 
-def _validate_value(field_spec: dict[str, Any], value: Any) -> bool:
-    """Return True if ``value`` is coercible to ``data_type``."""
-
+def _value_matches_type(field_spec: dict[str, Any], value: Any) -> bool:
     data_type = (field_spec.get("data_type") or "text").lower()
     try:
         if data_type == "text":
-            return isinstance(value, (str, int, float)) or value is None
+            return isinstance(value, (str, int, float))
         if data_type == "uuid":
             UUID(str(value))
             return True
@@ -597,7 +401,6 @@ def _validate_value(field_spec: dict[str, Any], value: Any) -> bool:
                 int(s)
                 return True
             except ValueError:
-                # Allow floats like "10.0" only when they're integral.
                 return float(s).is_integer()
         if data_type == "boolean":
             if isinstance(value, bool):
@@ -617,12 +420,7 @@ def _validate_value(field_spec: dict[str, Any], value: Any) -> bool:
         return False
 
 
-# ---- coercion --------------------------------------------------------
-
-
 def _coerce_value(field_spec: dict[str, Any], value: Any) -> Any:
-    """Coerce a validated cell value to the storable type."""
-
     if value is None:
         return None
     data_type = (field_spec.get("data_type") or "text").lower()
@@ -652,71 +450,187 @@ def _coerce_value(field_spec: dict[str, Any], value: Any) -> Any:
         if isinstance(value, (int, float)):
             return bool(value)
         return str(value).lower() in ("true", "1")
-    # text / enum / json fall through unchanged.
     return value
 
 
-# ---- writeback -------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Row processing
+# ---------------------------------------------------------------------------
 
 
-async def _persist_row(
+async def _process_row(
     *,
     session: AsyncSession,
     table_name: str,
     row: ReviewRow,
     field_map: dict[str, dict[str, Any]],
     row_uuid_map: dict[tuple[str, str], UUID],
-    document_id: UUID,
-) -> UUID | None:
-    """Create or update a single row + emit provenance.
+    extraction: DocumentExtraction,
+) -> tuple[UUID, bool] | None:
+    """Apply one row's decision. Returns (entity_id, was_written) or None.
 
-    Cells with ``status="rejected"`` or empty value are skipped.
-    Returns the row UUID written (or None when nothing to do).
+    - ``ignore`` and non-writable rows without an explicit decision return None.
+    - ``link_existing`` returns (selected_entity_id, False) so row_uuid_map
+      can feed child FK auto-fills without creating a duplicate parent.
+    - ``create`` / ``update`` actually write business rows + provenance.
     """
 
+    decision: ReviewRowDecision | None = row.row_decision
+    operation = decision.operation if decision is not None else (row.operation or "create")
+
+    if operation == "ignore":
+        return None
+    if not row.is_writable and operation not in {"create", "update", "link_existing"}:
+        return None
+
+    if operation == "link_existing":
+        target_id = (
+            decision.selected_entity_id
+            if decision is not None
+            else None
+        ) or row.entity_id
+        if target_id is None:
+            logger.warning(
+                "confirm: link_existing for %s.%s without selected_entity_id",
+                table_name,
+                row.client_row_id,
+            )
+            return None
+        return target_id, False
+
+    if operation == "update":
+        existing_id = (
+            decision.selected_entity_id
+            if decision is not None
+            else None
+        ) or row.entity_id
+        if existing_id is None:
+            logger.warning(
+                "confirm: update for %s.%s without selected_entity_id",
+                table_name,
+                row.client_row_id,
+            )
+            return None
+        entity_id = await _write_row(
+            session=session,
+            table_name=table_name,
+            row=row,
+            field_map=field_map,
+            row_uuid_map=row_uuid_map,
+            extraction=extraction,
+            existing_id=existing_id,
+            is_update=True,
+        )
+        return (entity_id, True) if entity_id is not None else None
+
+    # default: create
+    entity_id = await _write_row(
+        session=session,
+        table_name=table_name,
+        row=row,
+        field_map=field_map,
+        row_uuid_map=row_uuid_map,
+        extraction=extraction,
+        existing_id=row.entity_id,
+        is_update=False,
+    )
+    return (entity_id, True) if entity_id is not None else None
+
+
+async def _write_row(
+    *,
+    session: AsyncSession,
+    table_name: str,
+    row: ReviewRow,
+    field_map: dict[str, dict[str, Any]],
+    row_uuid_map: dict[tuple[str, str], UUID],
+    extraction: DocumentExtraction,
+    existing_id: UUID | None,
+    is_update: bool,
+) -> UUID | None:
     model_pair = TABLE_MODEL.get(table_name)
     if model_pair is None:
-        logger.warning("schema confirm: unknown table %r, skipping", table_name)
         return None
     model, entity_type = model_pair
+    orm_columns = set(model.__table__.columns.keys())
 
     cell_values: dict[str, Any] = {}
-    provenance_cells: list[ReviewCell] = []
+    provenance_cells: list[tuple[ReviewCell, Any]] = []
+
     for cell in row.cells:
         if cell.status == "rejected":
             continue
-        value = cell.value
-        # Auto-fill FK if empty + we have a same-confirm sibling mapping.
-        if _value_is_empty(value) and cell.field_name in FK_FIELD_PARENTS:
-            parent_table = FK_FIELD_PARENTS[cell.field_name]
-            value = _lookup_single_parent(row_uuid_map, parent_table)
-        if _value_is_empty(value):
+        spec = field_map.get(cell.field_name)
+        if spec is None:
             continue
-        field_spec = field_map.get(cell.field_name)
-        if field_spec is None:
+        if cell.field_name not in orm_columns:
             continue
+        value_is_empty = _value_is_empty(cell.value)
+
+        if value_is_empty:
+            # An explicit user-driven clear is the only way to overwrite a
+            # column with NULL; otherwise leave the DB value alone.
+            if (
+                is_update
+                and cell.source == "edited"
+                and cell.explicit_clear
+                and cell.status != "missing"
+            ):
+                cell_values[cell.field_name] = None
+                provenance_cells.append((cell, None))
+            continue
+
+        if cell.source == "default" and is_update:
+            # Defaults only apply on create, never overwrite live data.
+            continue
+
         try:
-            coerced = _coerce_value(field_spec, value)
-        except (ValueError, InvalidOperation, TypeError) as exc:
-            logger.warning(
-                "schema confirm: skipping %s.%s due to coercion error %s",
-                table_name, cell.field_name, exc,
-            )
+            coerced = _coerce_value(spec, cell.value)
+        except (ValueError, InvalidOperation, TypeError):
             continue
         cell_values[cell.field_name] = coerced
-        provenance_cells.append(cell)
+        provenance_cells.append((cell, coerced))
 
-    # Upsert the row. The ORM parity precondition guarantees every
-    # ``cell_values`` key has a matching column on the model, so we set
-    # attributes directly without a silent ``hasattr`` skip.
-    if row.entity_id is not None:
+    # Fill system_link FK columns from parents written or linked earlier in
+    # this confirm. These never come from extractor cells.
+    system_fk_writes: dict[str, UUID] = {}
+    for fk_name, parent_table in FK_FIELD_PARENTS.items():
+        if fk_name not in orm_columns:
+            continue
+        if fk_name in cell_values:
+            continue
+        if parent_table == "documents":
+            continue  # handled separately below
+        parent_uuid = _lookup_single_parent(row_uuid_map, parent_table)
+        if parent_uuid is None:
+            continue
+        system_fk_writes[fk_name] = parent_uuid
+        cell_values[fk_name] = parent_uuid
+
+    # Audit document_id / source_document_id come from the extraction itself.
+    audit_writes: dict[str, UUID] = {}
+    for audit_name in _AUDIT_DOCUMENT_FIELDS:
+        if audit_name not in orm_columns:
+            continue
+        if audit_name in cell_values:
+            continue
+        cell_values[audit_name] = extraction.document_id
+        audit_writes[audit_name] = extraction.document_id
+
+    if existing_id is not None:
         entity = (
-            await session.execute(select(model).where(model.id == row.entity_id))
+            await session.execute(select(model).where(model.id == existing_id))
         ).scalar_one_or_none()
-        if entity is None:
-            # ``entity_id`` set but row missing — treat as create.
+        if entity is None and is_update:
+            # Update target vanished — treat as create with the chosen id.
             entity = model()
-            entity.id = row.entity_id  # respect client-chosen id
+            entity.id = existing_id
+            for k, v in cell_values.items():
+                setattr(entity, k, v)
+            session.add(entity)
+        elif entity is None:
+            entity = model()
+            entity.id = existing_id
             for k, v in cell_values.items():
                 setattr(entity, k, v)
             session.add(entity)
@@ -729,81 +643,144 @@ async def _persist_row(
             setattr(entity, k, v)
         session.add(entity)
 
-    await session.flush()
+    try:
+        await session.flush()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "confirm: flush failed for %s row %s: %s", table_name, row.client_row_id, exc
+        )
+        raise
+
     row_uuid: UUID = entity.id  # type: ignore[attr-defined]
 
-    for cell in provenance_cells:
+    for cell, coerced in provenance_cells:
         await _write_provenance(
             session=session,
-            document_id=document_id,
+            extraction=extraction,
             entity_type=entity_type,
             entity_id=row_uuid,
-            cell=cell,
+            field_name=cell.field_name,
+            value=coerced,
+            review_action=_review_action_for(cell),
+            source_refs=[ref.model_dump() for ref in cell.source_refs],
+            confidence=cell.confidence,
+        )
+
+    for fk_name, parent_uuid in system_fk_writes.items():
+        await _write_provenance(
+            session=session,
+            extraction=extraction,
+            entity_type=entity_type,
+            entity_id=row_uuid,
+            field_name=fk_name,
+            value=str(parent_uuid),
+            review_action="linked",
+            source_refs=[],
+            confidence=None,
+        )
+
+    for audit_name, audit_value in audit_writes.items():
+        await _write_provenance(
+            session=session,
+            extraction=extraction,
+            entity_type=entity_type,
+            entity_id=row_uuid,
+            field_name=audit_name,
+            value=str(audit_value),
+            review_action="system",
+            source_refs=[],
+            confidence=None,
         )
 
     return row_uuid
 
 
+def _review_action_for(cell: ReviewCell) -> str:
+    source = cell.source
+    if source == "ai":
+        return "ai"
+    if source == "edited":
+        return "edited"
+    if source == "default":
+        return "default"
+    if source == "linked":
+        return "linked"
+    return "system"
+
+
 def _lookup_single_parent(
     row_uuid_map: dict[tuple[str, str], UUID], parent_table: str
 ) -> UUID | None:
-    """If exactly one row of ``parent_table`` was written in this confirm,
-    return its uuid so child rows can inherit the FK. None otherwise."""
-
     matches = [v for (t, _r), v in row_uuid_map.items() if t == parent_table]
     if len(matches) == 1:
         return matches[0]
     return None
 
 
+# ---------------------------------------------------------------------------
+# Provenance
+# ---------------------------------------------------------------------------
+
+
 async def _write_provenance(
     *,
     session: AsyncSession,
-    document_id: UUID,
+    extraction: DocumentExtraction,
     entity_type: EntityType,
     entity_id: UUID,
-    cell: ReviewCell,
+    field_name: str,
+    value: Any,
+    review_action: str,
+    source_refs: list[Any],
+    confidence: float | None,
 ) -> None:
-    """Insert a FieldProvenance row keyed by (document, entity, field).
-
-    Skipped silently when the cell has no evidence AND wasn't user-edited —
-    nothing useful to record. Sqlite has no upsert primitive so we look up
-    + update in place to satisfy the UNIQUE constraint.
-    """
-
-    has_evidence = cell.evidence is not None
-    edited_by_user = cell.source == "edited"
-    if not (has_evidence or edited_by_user):
-        return
-
+    payload = {
+        "value": _provenance_value(value),
+        "parse_id": extraction.parse_id,
+        "extraction_id": extraction.id,
+        "source_page": None,
+        "source_excerpt": _first_excerpt(source_refs),
+        "confidence": confidence,
+        "excerpt_match": None,
+        "extracted_by": review_action,
+        "source_refs": source_refs,
+        "review_action": review_action,
+    }
     existing = (
         await session.execute(
             select(FieldProvenance).where(
-                FieldProvenance.document_id == document_id,
+                FieldProvenance.document_id == extraction.document_id,
                 FieldProvenance.entity_type == entity_type,
                 FieldProvenance.entity_id == entity_id,
-                FieldProvenance.field_name == cell.field_name,
+                FieldProvenance.field_name == field_name,
             )
         )
     ).scalar_one_or_none()
-    payload = {
-        "value": cell.value,
-        "source_page": cell.evidence.page if cell.evidence else None,
-        "source_excerpt": cell.evidence.excerpt if cell.evidence else None,
-        "confidence": cell.confidence,
-        "excerpt_match": None,
-        "extracted_by": cell.source,
-    }
     if existing is None:
         session.add(
             FieldProvenance(
-                document_id=document_id,
+                document_id=extraction.document_id,
                 entity_type=entity_type,
                 entity_id=entity_id,
-                field_name=cell.field_name,
+                field_name=field_name,
                 **payload,
             )
         )
     else:
         for k, v in payload.items():
             setattr(existing, k, v)
+
+
+def _provenance_value(value: Any) -> Any:
+    if isinstance(value, (UUID, Decimal, date, datetime)):
+        return str(value)
+    return value
+
+
+def _first_excerpt(source_refs: list[Any]) -> str | None:
+    for ref in source_refs:
+        if isinstance(ref, dict):
+            excerpt = ref.get("excerpt")
+            if isinstance(excerpt, str) and excerpt:
+                return excerpt
+    return None

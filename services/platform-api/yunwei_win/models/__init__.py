@@ -71,6 +71,10 @@ from yunwei_win.models.document_extraction import (
     DocumentExtraction,
     DocumentExtractionStatus,
 )
+from yunwei_win.models.document_parse import (
+    DocumentParse,
+    DocumentParseStatus,
+)
 
 __all__ = [
     # profile
@@ -101,4 +105,6 @@ __all__ = [
     "CustomerJournalItem",
     # Extraction record
     "DocumentExtraction", "DocumentExtractionStatus",
+    # Parse record
+    "DocumentParse", "DocumentParseStatus",
 ]

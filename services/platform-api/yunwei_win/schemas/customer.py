@@ -89,6 +89,25 @@ class CustomerMemoryItemOut(_Out):
     created_at: datetime
 
 
+class CustomerJournalItemOut(_Out):
+    """vNext unified customer timeline entry (replaces the legacy
+    customer_events / commitments / risks / memory split for new ingest)."""
+
+    id: UUID
+    customer_id: UUID
+    document_id: UUID | None = None
+    item_type: str
+    title: str | None = None
+    content: str | None = None
+    occurred_at: datetime | None = None
+    due_date: date | None = None
+    severity: str | None = None
+    status: str | None = None
+    confidence: Decimal | None = None
+    raw_excerpt: str | None = None
+    created_at: datetime
+
+
 class CustomerInboxItemOut(_Out):
     id: UUID
     customer_id: UUID
@@ -108,9 +127,22 @@ class CustomerInboxItemOut(_Out):
 
 class TimelineEntry(BaseModel):
     """One row of the merged customer timeline. `kind` discriminates which
-    sub-shape lives in `payload`. `at` is the canonical sort key."""
+    sub-shape lives in `payload`. `at` is the canonical sort key.
 
-    kind: Literal["event", "commitment", "task", "risk", "memory", "document"]
+    ``journal`` is the vNext consolidated kind that replaces the legacy
+    event / commitment / risk / memory split for new ingest. The older
+    kinds stay so legacy data still renders.
+    """
+
+    kind: Literal[
+        "event",
+        "commitment",
+        "task",
+        "risk",
+        "memory",
+        "document",
+        "journal",
+    ]
     at: datetime
     title: str
     summary: str | None = None
@@ -151,7 +183,9 @@ class CustomerAskRequest(BaseModel):
 
 class CustomerAskCitation(BaseModel):
     target_type: Literal[
+        # legacy memory-era citation targets
         "customer",
+        "contact",
         "contract",
         "order",
         "document",
@@ -160,7 +194,17 @@ class CustomerAskCitation(BaseModel):
         "task",
         "risk",
         "memory",
-        "contact",
+        # vNext business facts the KB now exposes — keep these in sync
+        # with the assistant tool enum in customer_profile/ask.py.
+        "invoice",
+        "invoice_item",
+        "payment",
+        "shipment",
+        "shipment_item",
+        "product",
+        "product_requirement",
+        "contract_payment_milestone",
+        "journal_item",
     ]
     target_id: str
     snippet: str | None = None
