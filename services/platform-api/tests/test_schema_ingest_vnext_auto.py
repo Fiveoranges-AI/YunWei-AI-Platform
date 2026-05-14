@@ -43,8 +43,16 @@ async def _make_engine():
     return engine
 
 
-def _patch_router(monkeypatch, *, selected: list[str], warnings: list[str] | None = None):
+def _patch_router(
+    monkeypatch,
+    *,
+    selected: list[str],
+    warnings: list[str] | None = None,
+    capture: dict | None = None,
+):
     async def fake_route(*, parse_artifact, catalog, llm=None):
+        if capture is not None:
+            capture["router_llm"] = llm
         return TableRouteResult(
             selected_tables=[SelectedTable(table_name=name) for name in selected],
             rejected_tables=[],
@@ -56,8 +64,16 @@ def _patch_router(monkeypatch, *, selected: list[str], warnings: list[str] | Non
     monkeypatch.setattr(auto_module.router_module, "route_tables", fake_route)
 
 
-def _patch_extractor(monkeypatch, *, tables: dict[str, list[NormalizedRow]]):
+def _patch_extractor(
+    monkeypatch,
+    *,
+    tables: dict[str, list[NormalizedRow]],
+    capture: dict | None = None,
+):
     async def fake_extract(*, parse_artifact, selected_tables, catalog, provider, session=None, llm=None):
+        if capture is not None:
+            capture["extractor_provider"] = provider
+            capture["extractor_llm"] = llm
         return NormalizedExtraction(
             provider="deepseek" if provider == "deepseek" else "landingai",
             tables=tables,
@@ -153,6 +169,49 @@ async def test_auto_ingest_rejects_unsupported_file_type(monkeypatch, tmp_path):
                     content_type="application/zip",
                     source_hint="file",
                 )
+    finally:
+        await engine.dispose()
+        await dispose_all()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_injects_complete_json_llm_into_router_and_extractor(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    captured: dict = {}
+    _patch_router(monkeypatch, selected=["customers"], capture=captured)
+    _patch_extractor(
+        monkeypatch,
+        tables={
+            "customers": [
+                NormalizedRow(
+                    client_row_id="customers:0",
+                    fields={
+                        "full_name": NormalizedFieldValue(value="测试有限公司")
+                    },
+                )
+            ]
+        },
+        capture=captured,
+    )
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            await auto_ingest(
+                session=session,
+                text_content="客户：测试有限公司",
+                source_hint="pasted_text",
+            )
+            await session.commit()
+        router_llm = captured["router_llm"]
+        extractor_llm = captured["extractor_llm"]
+        assert router_llm is not None
+        assert hasattr(router_llm, "complete_json")
+        # text → DeepSeek extractor → same adapter instance
+        assert captured["extractor_provider"] == "deepseek"
+        assert extractor_llm is router_llm
     finally:
         await engine.dispose()
         await dispose_all()

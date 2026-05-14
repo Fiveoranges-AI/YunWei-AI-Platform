@@ -57,6 +57,7 @@ from yunwei_win.services.schema_ingest.file_type import (
     DetectedSourceType,
     detect_source_type,
 )
+from yunwei_win.services.schema_ingest.llm_adapter import DeepSeekCompleteJsonLLM
 from yunwei_win.services.schema_ingest.parse_artifact import ParseArtifact
 from yunwei_win.services.schema_ingest.parsers.factory import (
     parse_file as parse_file_factory,
@@ -160,6 +161,11 @@ async def auto_ingest(
     session.add(parse)
     await session.flush()
 
+    # The same complete_json adapter powers both the table router and the
+    # DeepSeek extractor — one tool round-trip per stage, all writing into
+    # ``llm_calls`` against the same Document for audit.
+    llm = DeepSeekCompleteJsonLLM(session=session, document_id=document.id)
+
     # --- 4. Catalog ----------------------------------------------------
     await ensure_default_company_schema(session)
     catalog = await get_company_schema(session)
@@ -169,7 +175,7 @@ async def auto_ingest(
     route_result = await router_module.route_tables(
         parse_artifact=parse_artifact,
         catalog=catalog,
-        llm=None,
+        llm=llm,
     )
     selected_table_names = [t.table_name for t in route_result.selected_tables]
     selected_tables_dump = [t.model_dump(mode="json") for t in route_result.selected_tables]
@@ -186,6 +192,7 @@ async def auto_ingest(
             catalog=catalog,
             provider=detected.extractor_provider,
             session=session,
+            llm=llm if detected.extractor_provider == "deepseek" else None,
         )
     except Exception as exc:  # noqa: BLE001 — degrade gracefully
         logger.exception("vNext extract failed for document %s", document.id)

@@ -11,9 +11,9 @@ Provider matrix (mirrors ``schema_ingest/file_type.py``):
 
 LandingAI extract is called through the existing ADE client; DeepSeek is
 called through any object exposing ``async complete_json(prompt,
-response_schema)``. The DeepSeek wiring against the real LLM service
-will land when the orchestrator is rebuilt (Task 7+); for now an LLM
-must be passed in by the caller so tests can drive the contract.
+response_schema)``. ``auto_ingest`` wires the production adapter
+``schema_ingest.llm_adapter.DeepSeekCompleteJsonLLM`` and passes it in.
+Tests inject their own fake so no network call happens.
 """
 
 from __future__ import annotations
@@ -62,7 +62,8 @@ async def extract_from_parse_artifact(
         if llm is None:
             raise RuntimeError(
                 "deepseek extractor requires an llm with complete_json(); "
-                "real-LLM wiring is pending the orchestrator rebuild"
+                "auto_ingest injects DeepSeekCompleteJsonLLM — pass one in "
+                "when calling this function directly"
             )
         return await _extract_deepseek(
             parse_artifact=parse_artifact,
