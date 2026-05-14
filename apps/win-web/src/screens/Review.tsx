@@ -1,23 +1,34 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { GoFn } from "../App";
 import {
+  acquireReviewLock,
+  autosaveReview,
   confirmReviewDraft,
   deleteIngestJob,
   getIngestJob,
+  getReview,
   ignoreReviewDraft,
-  isReviewDraft,
   type ApiError,
 } from "../api/ingest";
-import { ReviewTableWorkspace } from "../components/review/ReviewTableWorkspace";
+import { ReviewWizard } from "../components/review/ReviewWizard";
 import type {
   ConfirmExtractionInvalidCell,
   IngestJobStatus,
   ReviewCellPatch,
   ReviewDraft,
+  ReviewLockMode,
+  ReviewRowDecisionPatch,
 } from "../data/types";
 import { I } from "../icons";
 import { markCustomersChanged } from "../lib/customerRefresh";
+
+type LockState = {
+  mode: ReviewLockMode;
+  token: string | null;
+  expiresAt: string | null;
+  lockedBy: string | null;
+};
 
 export function ReviewScreen({
   go,
@@ -28,6 +39,9 @@ export function ReviewScreen({
 }) {
   const jobId = params?.jobId;
   const [draft, setDraft] = useState<ReviewDraft | null>(null);
+  const [extractionId, setExtractionId] = useState<string | null>(null);
+  const [reviewVersion, setReviewVersion] = useState<number>(0);
+  const [lock, setLock] = useState<LockState | null>(null);
   const [jobStatus, setJobStatus] = useState<IngestJobStatus | null>(null);
   const [jobContentType, setJobContentType] = useState<string | null>(null);
   const [hasFile, setHasFile] = useState<boolean>(false);
@@ -35,9 +49,28 @@ export function ReviewScreen({
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lockBanner, setLockBanner] = useState<string | null>(null);
   const [invalidCells, setInvalidCells] = useState<ConfirmExtractionInvalidCell[]>([]);
   const [fallbackDeleting, setFallbackDeleting] = useState(false);
   const [fallbackDeleteError, setFallbackDeleteError] = useState<string | null>(null);
+
+  const draftRef = useRef<ReviewDraft | null>(null);
+  draftRef.current = draft;
+  const reviewVersionRef = useRef<number>(0);
+  reviewVersionRef.current = reviewVersion;
+  const lockRef = useRef<LockState | null>(null);
+  lockRef.current = lock;
+
+  const reload = useCallback(
+    async (extId: string) => {
+      const env = await getReview(extId);
+      if (env.review_draft) {
+        setDraft(env.review_draft);
+        setReviewVersion(env.review_version ?? env.review_draft.review_version ?? 0);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -56,21 +89,69 @@ export function ReviewScreen({
         setJobStatus(job.status);
         setJobContentType(job.content_type ?? null);
         setHasFile(job.source_hint !== "pasted_text");
-        const nextDraft =
-          job.review_draft ??
-          (isReviewDraft(job.result_json) ? (job.result_json as ReviewDraft) : null);
-        if (nextDraft) {
-          setDraft(nextDraft);
+
+        const extId = job.extraction_id ?? null;
+        if (!extId) {
+          setError(
+            job.status === "failed"
+              ? job.error_message ?? "任务失败"
+              : job.status === "canceled"
+                ? "任务已取消"
+                : "任务尚未生成草稿",
+          );
           setLoading(false);
           return;
         }
-        setError(
-          job.status === "failed"
-            ? job.error_message ?? "任务失败"
-            : job.status === "canceled"
-              ? "任务已取消"
-              : "任务尚未生成草稿",
-        );
+
+        setExtractionId(extId);
+
+        const envelope = await getReview(extId);
+        if (cancelled) return;
+        const nextDraft = envelope.review_draft;
+        if (!nextDraft) {
+          setError("草稿未就绪");
+          setLoading(false);
+          return;
+        }
+        setDraft(nextDraft);
+        setReviewVersion(envelope.review_version ?? nextDraft.review_version ?? 0);
+
+        // Acquire lock (best-effort). If draft is no longer pending or
+        // someone else holds the lock we'll fall through to read-only.
+        if (envelope.status === "pending_review" && job.status === "extracted") {
+          try {
+            const lockRes = await acquireReviewLock(extId);
+            if (cancelled) return;
+            setLock({
+              mode: lockRes.mode,
+              token: lockRes.lock_token ?? null,
+              expiresAt: lockRes.lock_expires_at ?? null,
+              lockedBy: lockRes.locked_by ?? null,
+            });
+            setReviewVersion(lockRes.review_version);
+            if (lockRes.mode === "read_only") {
+              setLockBanner(
+                `${lockRes.locked_by ?? "他人"} 正在编辑，当前只读。`,
+              );
+            }
+          } catch (e) {
+            const apiErr = e as ApiError;
+            setLockBanner(`获取锁失败：${apiErr.message ?? "未知错误"}，进入只读。`);
+            setLock({
+              mode: "read_only",
+              token: null,
+              expiresAt: null,
+              lockedBy: null,
+            });
+          }
+        } else {
+          setLock({
+            mode: "read_only",
+            token: null,
+            expiresAt: null,
+            lockedBy: envelope.locked_by ?? null,
+          });
+        }
       } catch (e) {
         if (!cancelled) {
           const apiErr = e as ApiError;
@@ -87,15 +168,94 @@ export function ReviewScreen({
     };
   }, [jobId]);
 
-  async function handleSubmit(patches: ReviewCellPatch[]): Promise<void> {
-    if (!draft || busy) return;
+  const isReadOnly =
+    !lock ||
+    lock.mode !== "edit" ||
+    !lock.token ||
+    (jobStatus !== null && jobStatus !== "extracted") ||
+    (draft !== null && draft.status !== "pending_review");
+
+  const runAutosave = useCallback(
+    async (payload: {
+      cell?: ReviewCellPatch;
+      row?: ReviewRowDecisionPatch;
+      step?: string;
+    }) => {
+      const currentLock = lockRef.current;
+      const extId = extractionId;
+      if (!extId || !currentLock || currentLock.mode !== "edit" || !currentLock.token) {
+        return;
+      }
+      try {
+        const res = await autosaveReview(extId, {
+          lock_token: currentLock.token,
+          base_version: reviewVersionRef.current,
+          current_step: payload.step,
+          cell_patches: payload.cell ? [payload.cell] : [],
+          row_patches: payload.row ? [payload.row] : [],
+        });
+        if (res.review_draft) {
+          setDraft(res.review_draft);
+        }
+        setReviewVersion(res.review_version);
+        setLock((prev) =>
+          prev
+            ? {
+                ...prev,
+                expiresAt: res.lock_expires_at ?? prev.expiresAt,
+              }
+            : prev,
+        );
+      } catch (e) {
+        const apiErr = e as ApiError;
+        if (apiErr.status === 409) {
+          setLockBanner(
+            "草稿被他人改动或锁已失效，已刷新为只读视图。",
+          );
+          setLock({
+            mode: "read_only",
+            token: null,
+            expiresAt: null,
+            lockedBy: currentLock.lockedBy,
+          });
+          if (extId) {
+            try {
+              await reload(extId);
+            } catch {
+              // swallowed — banner already explains the conflict.
+            }
+          }
+        } else {
+          setError(apiErr.message || "保存失败");
+        }
+      }
+    },
+    [extractionId, reload],
+  );
+
+  function handleCellPatch(patch: ReviewCellPatch) {
+    void runAutosave({ cell: patch });
+  }
+  function handleRowPatch(patch: ReviewRowDecisionPatch) {
+    void runAutosave({ row: patch });
+  }
+  function handleStepChange(step: string) {
+    void runAutosave({ step });
+  }
+
+  async function handleConfirm(): Promise<void> {
+    if (!draft || !extractionId || busy) return;
+    if (!lock || lock.mode !== "edit" || !lock.token) {
+      setError("当前为只读，无法提交。");
+      return;
+    }
     setBusy(true);
     setError(null);
     setInvalidCells([]);
     try {
-      const res = await confirmReviewDraft(draft.extraction_id, {
-        review_draft: draft,
-        patches,
+      const res = await confirmReviewDraft(extractionId, {
+        lock_token: lock.token,
+        base_version: reviewVersion,
       });
       if (res.invalid_cells && res.invalid_cells.length > 0) {
         setInvalidCells(res.invalid_cells);
@@ -116,6 +276,22 @@ export function ReviewScreen({
           setInvalidCells(cells as ConfirmExtractionInvalidCell[]);
         }
       }
+      if (apiErr.status === 409) {
+        setLockBanner("锁或版本不匹配，已刷新为只读视图。");
+        setLock({
+          mode: "read_only",
+          token: null,
+          expiresAt: null,
+          lockedBy: lock.lockedBy,
+        });
+        if (extractionId) {
+          try {
+            await reload(extractionId);
+          } catch {
+            // swallow
+          }
+        }
+      }
       setError(apiErr.message || "归档失败");
     } finally {
       setBusy(false);
@@ -123,11 +299,11 @@ export function ReviewScreen({
   }
 
   async function handleIgnore(): Promise<void> {
-    if (!draft || busy) return;
+    if (!extractionId || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await ignoreReviewDraft(draft.extraction_id);
+      await ignoreReviewDraft(extractionId);
       go("upload");
     } catch (e) {
       const apiErr = e as ApiError;
@@ -210,23 +386,24 @@ export function ReviewScreen({
   }
 
   if (draft) {
-    const readOnly =
-      (jobStatus !== null && jobStatus !== "extracted") ||
-      draft.status !== "pending_review";
     const originalFileUrl = hasFile && jobId ? `/api/win/ingest/jobs/${jobId}/file` : null;
     return (
-      <ReviewTableWorkspace
+      <ReviewWizard
         draft={draft}
-        onSubmit={handleSubmit}
+        readOnly={isReadOnly}
+        busy={busy}
+        error={error}
+        invalidCells={invalidCells}
+        onCellPatch={handleCellPatch}
+        onRowPatch={handleRowPatch}
+        onStepChange={handleStepChange}
+        onConfirm={handleConfirm}
         onIgnore={handleIgnore}
         onDelete={handleDelete}
-        busy={busy}
-        readOnly={readOnly}
-        submitError={error}
-        invalidCells={invalidCells}
         sourceText={draft.document.source_text ?? null}
         originalFileUrl={originalFileUrl}
         originalFileContentType={jobContentType}
+        lockBanner={lockBanner}
       />
     );
   }
