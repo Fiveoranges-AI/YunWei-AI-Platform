@@ -23,6 +23,20 @@ type Props = {
   readOnly?: boolean;
 };
 
+// Parent-table display labels for FK cells the system auto-links at
+// confirm time. Kept small + UI-only; keep in sync with FK_FIELD_PARENTS
+// on the backend if the FK map grows.
+const FK_PARENT_LABEL: Record<string, string> = {
+  customer_id: "客户",
+  contract_id: "合同",
+  invoice_id: "发票",
+  order_id: "订单",
+  shipment_id: "货运",
+  product_id: "产品",
+  document_id: "源文档",
+  source_document_id: "源文档",
+};
+
 function borderColor(status: ReviewCellStatus, hasInvalid: boolean): string {
   if (hasInvalid || status === "invalid") return "var(--risk-500)";
   if (status === "low_confidence") return "var(--warn-500)";
@@ -83,6 +97,58 @@ export function ReviewCellEditor({
   const isEdited = cell.status === "edited";
   const isLow = cell.status === "low_confidence";
   const isInvalid = cell.status === "invalid" || Boolean(invalidReason);
+  const isLinked = cell.source === "linked";
+
+  if (isLinked && !isEdited) {
+    // Rendered as an auto-link chip. Confirm writeback fills the UUID from
+    // the same-confirm parent row; the user does not need to enter anything.
+    const parentLabel = FK_PARENT_LABEL[cell.field_name] ?? "关联记录";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 18 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--ink-500)",
+              letterSpacing: "0.01em",
+            }}
+          >
+            {cell.label}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--ink-300)",
+              fontFamily: "ui-monospace, SFMono-Regular, monospace",
+            }}
+          >
+            {cell.field_name}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "7px 10px",
+            fontSize: 13.5,
+            border: "1px dashed var(--ink-200)",
+            borderRadius: 8,
+            background: "var(--surface-2)",
+            color: "var(--ink-600)",
+            fontFamily: "var(--font)",
+            boxSizing: "border-box",
+          }}
+        >
+          <span>↪ 本次新建的{parentLabel}</span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--ink-400)" }}>
+          确认时由系统自动关联
+        </div>
+      </div>
+    );
+  }
 
   const inputStyle = useMemo<React.CSSProperties>(() => {
     return {

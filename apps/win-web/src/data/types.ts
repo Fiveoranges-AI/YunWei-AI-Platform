@@ -122,7 +122,7 @@ export type ReviewCellStatus =
   | "rejected"
   | "invalid";
 
-export type ReviewCellSource = "ai" | "default" | "edited" | "empty";
+export type ReviewCellSource = "ai" | "default" | "edited" | "empty" | "linked";
 
 export type ReviewRowOperation = "create" | "update";
 

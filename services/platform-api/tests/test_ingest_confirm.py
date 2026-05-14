@@ -1013,3 +1013,97 @@ def test_integer_validation_accepts_integral_floats():
     assert _validate_value(spec, "10.5") is False
     assert _validate_value(spec, "abc") is False
     assert _validate_value(spec, True) is False
+
+
+@pytest.mark.asyncio
+async def test_linked_fk_passes_validation_when_parent_in_draft(monkeypatch, tmp_path):
+    """A required FK cell marked ``source="linked"`` does not trigger
+    ``missing_required`` so long as a same-confirm parent row will actually
+    be written. Confirm writeback fills the UUID after the parent inserts.
+    """
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    engine = await _make_engine()
+    extraction_id = uuid.uuid4()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        doc = Document(
+            type=DocumentType.text_note,
+            file_url="file:///tmp/d.png",
+            original_filename="card.png",
+            file_sha256="0" * 64,
+            file_size_bytes=10,
+            ocr_text="名片 OCR",
+        )
+        session.add(doc)
+        await session.commit()
+        document_id = doc.id
+
+    draft = _draft_payload(
+        extraction_id=extraction_id,
+        document_id=document_id,
+        tables=[
+            {
+                "table_name": "customers",
+                "label": "客户",
+                "is_array": False,
+                "rows": [
+                    {
+                        "client_row_id": "customers:0",
+                        "entity_id": None,
+                        "operation": "create",
+                        "cells": [
+                            _cell(
+                                "full_name", "客户名称", "text",
+                                value="新客户", required=True,
+                            ),
+                        ],
+                    }
+                ],
+            },
+            {
+                "table_name": "contacts",
+                "label": "联系人",
+                "is_array": True,
+                "rows": [
+                    {
+                        "client_row_id": "contacts:0",
+                        "entity_id": None,
+                        "operation": "create",
+                        "cells": [
+                            _cell(
+                                "customer_id", "客户", "uuid",
+                                value=None, status="missing", source="linked",
+                                required=True,
+                            ),
+                            _cell(
+                                "name", "姓名", "text",
+                                value="联系人A", required=True,
+                            ),
+                        ],
+                    }
+                ],
+            },
+        ],
+    )
+    await _seed_extraction(
+        engine,
+        extraction_id=extraction_id,
+        document_id=document_id,
+        review_draft=draft,
+    )
+
+    app = _build_app(engine, monkeypatch)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.post(
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
+                json={"review_draft": draft, "patches": []},
+            )
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body["status"] == "confirmed"
+            # Writeback chose the just-created customer's UUID for the
+            # contact's FK; surface it via written_rows for sanity.
+            assert len(body["written_rows"].get("customers", [])) == 1
+            assert len(body["written_rows"].get("contacts", [])) == 1
+    finally:
+        await engine.dispose()

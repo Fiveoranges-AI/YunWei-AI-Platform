@@ -28,6 +28,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,7 +60,7 @@ from yunwei_win.services.schema_ingest import (
     ReviewDraft,
     confirm_review_draft,
 )
-from yunwei_win.services.storage import store_upload
+from yunwei_win.services.storage import open_for_read, store_upload
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest")
@@ -384,6 +385,54 @@ async def get_ingest_job(
         payload["review_draft"] = None
         payload["extraction"] = None
     return payload
+
+
+@router.get("/jobs/{job_id}/file")
+async def get_ingest_job_file(
+    job_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Stream the original uploaded file for a job.
+
+    Resolves the bytes from the linked ``Document.file_url`` when available
+    (post-extract jobs always have one), falling back to the staged upload
+    URL on the job row. Returns 404 for pasted-text jobs that have no file.
+    """
+
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
+
+    stored_path: str | None = None
+    content_type: str | None = j.content_type
+    filename: str = j.original_filename or "file"
+
+    if j.document_id is not None:
+        document = await session.get(Document, j.document_id)
+        if document is not None:
+            stored_path = document.file_url
+            content_type = document.content_type or content_type
+            filename = document.original_filename or filename
+    if not stored_path:
+        stored_path = j.staged_file_url
+    if not stored_path:
+        raise HTTPException(404, "no file for this job")
+
+    try:
+        data = open_for_read(stored_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "file not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("failed to read original file for job %s", j.id)
+        raise HTTPException(500, f"file unavailable: {exc!s}") from exc
+
+    safe_name = filename.replace('"', "")
+    return Response(
+        content=data,
+        media_type=content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    )
 
 
 _DELETABLE_STATUSES = (
