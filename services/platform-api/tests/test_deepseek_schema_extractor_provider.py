@@ -11,8 +11,7 @@ Covers:
 
 The project-level autouse fixture wants Postgres + Redis; we override with a
 no-op because these tests fully monkeypatch ``call_claude`` /
-``extract_tool_use_input`` / ``load_schema_json`` and only need a session
-sentinel.
+``extract_tool_use_input`` and only need a session sentinel.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ from yunwei_win.services.ingest.extractors.providers.base import ExtractionInput
 from yunwei_win.services.ingest.extractors.providers.deepseek import (
     DeepSeekSchemaExtractorProvider,
 )
-from yunwei_win.services.ingest.unified_schemas import (
+from yunwei_win.services.ingest.pipeline_schemas import (
     PipelineExtractResult,
     PipelineSelection,
 )
@@ -53,27 +52,7 @@ def _selections() -> list[PipelineSelection]:
     ]
 
 
-def _stub_schema(name: str) -> str:
-    """Return a tiny valid schema JSON string for `load_schema_json`."""
-    return (
-        '{"type": "object", "properties": {"name": {"type": "string"}}}'
-    )
-
-
 def _make_input(session: Any, selections=None, markdown="some OCR markdown") -> ExtractionInput:
-    return ExtractionInput(
-        document_id=uuid.uuid4(),
-        session=session,
-        markdown=markdown,
-        selections=selections if selections is not None else _selections(),
-    )
-
-
-def _make_schema_input(
-    session: Any,
-    selections=None,
-    markdown="some OCR markdown",
-) -> ExtractionInput:
     return ExtractionInput(
         document_id=uuid.uuid4(),
         session=session,
@@ -116,7 +95,6 @@ async def test_extract_selected_happy_path(monkeypatch) -> None:
     monkeypatch.setattr(
         deepseek_module, "extract_tool_use_input", fake_extract_tool_use_input
     )
-    monkeypatch.setattr(deepseek_module, "load_schema_json", _stub_schema)
 
     session_sentinel = SimpleNamespace(_marker="session")
     provider = DeepSeekSchemaExtractorProvider()
@@ -144,7 +122,7 @@ async def test_extract_selected_happy_path(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_extract_selected_uses_company_schema_when_available(monkeypatch) -> None:
+async def test_extract_selected_uses_company_schema(monkeypatch) -> None:
     call_log: list[dict[str, Any]] = []
 
     async def fake_call_claude(messages, *, purpose, session, **kwargs):
@@ -154,18 +132,14 @@ async def test_extract_selected_uses_company_schema_when_available(monkeypatch) 
     def fake_extract_tool_use_input(response, tool_name):
         return {"orders": {"amount_total": "30000"}}
 
-    def fail_static_schema_loader(name: str) -> str:
-        raise AssertionError(f"static schema loader should not be used for {name}")
-
     monkeypatch.setattr(deepseek_module, "call_claude", fake_call_claude)
     monkeypatch.setattr(
         deepseek_module, "extract_tool_use_input", fake_extract_tool_use_input
     )
-    monkeypatch.setattr(deepseek_module, "load_schema_json", fail_static_schema_loader)
 
     provider = DeepSeekSchemaExtractorProvider()
     results = await provider.extract_selected(
-        _make_schema_input(
+        _make_input(
             SimpleNamespace(),
             selections=[PipelineSelection(name="contract_order", confidence=0.9)],
         )
@@ -196,7 +170,6 @@ async def test_extract_selected_forwards_session(monkeypatch) -> None:
         "extract_tool_use_input",
         lambda response, tool_name: {"name": "x"},
     )
-    monkeypatch.setattr(deepseek_module, "load_schema_json", _stub_schema)
 
     marker = SimpleNamespace(_id="audit-session")
     provider = DeepSeekSchemaExtractorProvider()
@@ -227,7 +200,6 @@ async def test_extract_selected_soft_fails_on_llm_error(monkeypatch) -> None:
         "extract_tool_use_input",
         lambda response, tool_name: {"ok": True},
     )
-    monkeypatch.setattr(deepseek_module, "load_schema_json", _stub_schema)
 
     provider = DeepSeekSchemaExtractorProvider()
     results = await provider.extract_selected(_make_input(SimpleNamespace()))
@@ -267,7 +239,6 @@ async def test_extract_selected_soft_fails_on_non_dict(monkeypatch) -> None:
     monkeypatch.setattr(
         deepseek_module, "extract_tool_use_input", fake_extract_tool_use_input
     )
-    monkeypatch.setattr(deepseek_module, "load_schema_json", _stub_schema)
 
     provider = DeepSeekSchemaExtractorProvider()
     results = await provider.extract_selected(_make_input(SimpleNamespace()))
@@ -296,7 +267,6 @@ async def test_extract_selected_emits_progress(monkeypatch) -> None:
         "extract_tool_use_input",
         lambda response, tool_name: {"name": "x"},
     )
-    monkeypatch.setattr(deepseek_module, "load_schema_json", _stub_schema)
 
     events: list[tuple[str, str]] = []
 

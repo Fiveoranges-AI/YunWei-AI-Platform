@@ -53,7 +53,6 @@ from yunwei_win.services.ingest.job_queue import (
     get_ingest_queue,
     reset_stale_running_jobs,
 )
-from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan  # noqa: F401
 from yunwei_win.services.schema_ingest import (
     ConfirmExtractionRequest,
     ConfirmExtractionResponse,

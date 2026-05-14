@@ -7,10 +7,7 @@ fill an inbox row's `extracted_payload` JSONB.
 Modality-specific upstream:
   text_note               → text → LLM (text-only call)
   image (wechat / card)   → image content block → LLM (vision)
-  contract pdf            → run existing contract extractor first; pass
-                            the structured contract dict to LLM as
-                            "contract_extracted" hint so memory items
-                            are derived from it
+  contract pdf            → customer profile context + OCR text → LLM
 """
 
 from __future__ import annotations

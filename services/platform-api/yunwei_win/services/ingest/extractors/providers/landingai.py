@@ -1,9 +1,8 @@
 """LandingAI extractor provider.
 
-For schema-first ingest, each ``PipelineSelection`` is converted into a
-tenant-catalog JSON Schema so LandingAI emits canonical company table/field
-names. Older internal callers that do not pass ``company_schema`` still fall
-back to the static pipeline schemas.
+Each ``PipelineSelection`` is converted into a tenant-catalog JSON Schema so
+LandingAI emits canonical company table/field names. The provider has no
+static schema fallback; the tenant company schema is the contract.
 
 Per-schema failures are soft. Any exception raised by either the schema
 loader or the LandingAI call is caught, logged, and surfaced as a result
@@ -21,8 +20,7 @@ import logging
 from yunwei_win.services.ingest.extractors.canonical_schema import (
     build_pipeline_schema_json,
 )
-from yunwei_win.services.ingest.landingai_schemas.registry import load_schema_json
-from yunwei_win.services.ingest.unified_schemas import (
+from yunwei_win.services.ingest.pipeline_schemas import (
     PipelineExtractResult,
     PipelineSelection,
 )
@@ -57,18 +55,14 @@ class LandingAIExtractorProvider(ExtractorProvider):
 async def _extract_one(
     selection: PipelineSelection,
     markdown: str,
-    company_schema: dict | None,
+    company_schema: dict,
     progress: ProgressCallback | None,
 ) -> PipelineExtractResult:
     if progress is not None:
         await progress("pipeline_started", {"name": selection.name})
 
     try:
-        schema = (
-            build_pipeline_schema_json(selection.name, company_schema)
-            if company_schema is not None
-            else load_schema_json(selection.name)
-        )
+        schema = build_pipeline_schema_json(selection.name, company_schema)
         response = await extract_with_schema(
             schema_json=schema,
             markdown=markdown,

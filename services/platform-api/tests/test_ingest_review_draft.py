@@ -19,7 +19,7 @@ from yunwei_win.services.schema_ingest import (
     ReviewDraft,
     materialize_review_draft,
 )
-from yunwei_win.services.ingest.unified_schemas import PipelineExtractResult
+from yunwei_win.services.ingest.pipeline_schemas import PipelineExtractResult
 
 
 # ---- helpers ----------------------------------------------------------
@@ -78,7 +78,7 @@ def test_orders_with_partial_extraction_shows_all_six_cells():
     pipeline_results = [
         {
             "name": "contract_order",
-            "result": {
+            "extraction": {
                 "orders": {
                     "amount_total": 30000,
                     "amount_currency": "USD",
@@ -210,7 +210,7 @@ def test_default_values_fill_missing_cells():
     pipeline_results = [
         {
             "name": "contract_order",
-            "result": {"orders": {"amount_total": 1234}},
+            "extraction": {"orders": {"amount_total": 1234}},
         }
     ]
 
@@ -241,7 +241,7 @@ def test_array_table_with_no_items_creates_one_empty_row():
     pipeline_results = [
         {
             "name": "contract_order",
-            "result": {"orders": {"amount_total": 1}},
+            "extraction": {"orders": {"amount_total": 1}},
         }
     ]
 
@@ -298,7 +298,7 @@ def test_low_confidence_marks_low_confidence_status():
     pipeline_results = [
         {
             "name": "contract_order",
-            "result": {
+            "extraction": {
                 "orders": {
                     "amount_total": {"value": 999, "confidence": 0.3},
                 }

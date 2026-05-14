@@ -2,9 +2,7 @@
 
 For every ``PipelineSelection`` the orchestrator hands in, this provider:
 
-1. Builds a canonical company table/field JSON Schema from the tenant catalog
-   when ``input.company_schema`` is present; otherwise falls back to the older
-   static pipeline schema.
+1. Builds a canonical company table/field JSON Schema from the tenant catalog.
 2. Builds a schema-extraction prompt that bundles the schema, shared
    extraction rules, and the OCR markdown.
 3. Calls the configured DeepSeek parse model through ``call_claude`` (the
@@ -29,9 +27,8 @@ from yunwei_win.config import settings
 from yunwei_win.services.ingest.extractors.canonical_schema import (
     build_pipeline_schema_json,
 )
-from yunwei_win.services.ingest.landingai_schemas.registry import load_schema_json
 from yunwei_win.services.ingest.progress import emit_progress
-from yunwei_win.services.ingest.unified_schemas import PipelineExtractResult
+from yunwei_win.services.ingest.pipeline_schemas import PipelineExtractResult
 from yunwei_win.services.llm import call_claude, extract_tool_use_input
 from yunwei_win.services.prompts import find_prompt
 
@@ -107,10 +104,8 @@ class DeepSeekSchemaExtractorProvider(ExtractorProvider):
             metadata: dict = {"provider": "deepseek", "model": model}
 
             try:
-                schema_json = (
-                    build_pipeline_schema_json(schema_name, input.company_schema)
-                    if input.company_schema is not None
-                    else load_schema_json(schema_name)
+                schema_json = build_pipeline_schema_json(
+                    schema_name, input.company_schema
                 )
                 tool = _build_tool(schema_name, schema_json)
                 tool_name = tool["name"]

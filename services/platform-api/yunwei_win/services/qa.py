@@ -1,8 +1,8 @@
 """Natural-language Q&A.
 
-V1 strategy: KB dump + single Claude call with tool_use citations. No vector
-search yet — small DB (50-200 customers, 100-500 contracts) fits in 30K-char
-context budget. When DB grows we'll add a retrieval pre-stage.
+Current strategy: KB dump + single Claude call with tool_use citations. No
+vector search yet — small DB (50-200 customers, 100-500 contracts) fits in
+30K-char context budget. When DB grows we'll add a retrieval pre-stage.
 
 Flow:
 1. Load all customers (+ orders + contracts), recent chat_log Documents
@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.models import Contract, Customer, Document, DocumentType, Order
 from yunwei_win.config import settings
-from yunwei_win.services.ingest.schemas import QA_TOOL_NAME, qa_tool
+from yunwei_win.services.ingest.common_schemas import QA_TOOL_NAME, qa_tool
 from yunwei_win.services.llm import call_claude, extract_tool_use_input
 
 logger = logging.getLogger(__name__)

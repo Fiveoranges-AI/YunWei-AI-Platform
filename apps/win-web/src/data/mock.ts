@@ -1,4 +1,4 @@
-import type { AskSeed, CustomerDetail, Review } from "./types";
+import type { AskSeed, CustomerDetail } from "./types";
 
 export const MOCK_CUSTOMERS: CustomerDetail[] = [
   {
@@ -93,56 +93,6 @@ export const MOCK_CUSTOMERS: CustomerDetail[] = [
     risk: { level: "high", label: "高风险", note: "账期连续延期 2 次" },
   },
 ];
-
-export const MOCK_REVIEW: Review = {
-  customer: { name: "万华化学", isExisting: true, confidence: 0.96 },
-  channel: "微信沟通",
-  docType: "聊天截图 + 语音",
-  contact: { name: "王志强", role: "采购总监", initial: "王" },
-  confidence: 0.92,
-  fields: [
-    { key: "客户名称", value: "万华化学", conf: "high" },
-    { key: "沟通渠道", value: "微信", conf: "high" },
-    { key: "联系人", value: "王志强（采购总监）", conf: "high" },
-    { key: "沟通时间", value: "2026-05-07 14:00", conf: "med" },
-  ],
-  extractions: [
-    {
-      kind: "commitment",
-      title: "承诺事项",
-      text: "客户承诺 10 月 31 日前付款",
-      source: { type: "微信", label: "微信截图第 2 条" },
-      conf: "high",
-    },
-    {
-      kind: "task",
-      title: "待办事项",
-      text: "提前 7 天提醒客户付款节点",
-      source: { type: "微信", label: "微信截图第 2 条" },
-      conf: "high",
-    },
-    {
-      kind: "risk",
-      title: "风险线索",
-      text: "客户提及内部审批延长，建议提前确认资金",
-      source: { type: "语音", label: "语音 02:15 处" },
-      conf: "med",
-    },
-    {
-      kind: "contact",
-      title: "联系人",
-      text: "新增联系人：陈立（工程师 · 136****2401）",
-      source: { type: "微信", label: "微信名片" },
-      conf: "high",
-    },
-  ],
-  missing: ["合同金额", "合同编号"],
-  evidence: [
-    { id: "e1", type: "微信截图", label: "微信截图 #2", preview: "WeChat · 2026-05-07" },
-    { id: "e2", type: "语音转写", label: "语音 02:15", preview: '02:15 · "我们这边大概月底之前能给…"' },
-    { id: "e3", type: "语音转写", label: "语音 04:38", preview: '04:38 · "审批可能会比上次慢一点点"' },
-  ],
-};
 
 export const MOCK_ASK_SEED: AskSeed = {
   customerId: "wh",

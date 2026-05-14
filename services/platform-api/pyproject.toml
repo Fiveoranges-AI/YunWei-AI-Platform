@@ -40,7 +40,7 @@ dev = [
 
 [project.scripts]
 platform-admin = "platform_app.admin:main"
-# Background worker for /win/api/ingest/jobs. Run as a separate Railway
+# Background worker for /api/win/ingest/jobs. Run as a separate Railway
 # service with `Start Command: yunwei-win-ingest-worker`. It must share
 # DATABASE_URL, REDIS_URL, storage, and ingest provider variables with the web
 # service; see infra/railway/platform-api.md.

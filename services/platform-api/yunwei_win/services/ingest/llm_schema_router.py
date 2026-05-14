@@ -1,28 +1,27 @@
 """LLM-driven schema router for the ingest extraction pipeline.
 
-Replaces the regex-based pipeline_router with a single Claude/DeepSeek call
-that returns a multi-label PipelineRoutePlan. Fail-open semantics: any
-upstream failure surfaces as all-6-schemas + needs_human_review=True so we
-prefer over-extraction to silent under-routing.
+Uses a single Claude/DeepSeek call that returns a multi-label
+PipelineRoutePlan. Fail-open semantics: any upstream failure surfaces as
+all-6-schemas + needs_human_review=True so we prefer over-extraction to
+silent under-routing.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
-from pathlib import Path
 from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.config import settings
-from yunwei_win.services.ingest.landingai_schemas.registry import PIPELINE_NAMES
-from yunwei_win.services.ingest.progress import ProgressCallback, emit_progress
-from yunwei_win.services.ingest.schemas import _strip_titles
-from yunwei_win.services.ingest.unified_schemas import (
+from yunwei_win.services.ingest.pipeline_schemas import (
+    PIPELINE_NAMES,
     PipelineRoutePlan,
     PipelineSelection,
 )
+from yunwei_win.services.ingest.progress import ProgressCallback, emit_progress
+from yunwei_win.services.ingest.common_schemas import _strip_titles
 from yunwei_win.services.llm import (
     LLMCallFailed,
     call_claude,
