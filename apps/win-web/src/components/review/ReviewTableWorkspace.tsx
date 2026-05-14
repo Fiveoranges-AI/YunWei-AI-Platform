@@ -37,6 +37,12 @@ type Props = {
   submitError?: string | null;
   invalidCells?: ConfirmExtractionInvalidCell[];
   sourceText?: string | null;
+  // URL to fetch the original uploaded file (PDF / image). When set, the
+  // source panel renders the file itself instead of the parsed OCR text —
+  // the user wants to compare AI extraction against ground truth, not
+  // against an intermediate representation.
+  originalFileUrl?: string | null;
+  originalFileContentType?: string | null;
 };
 
 type PatchKey = string;
@@ -93,6 +99,8 @@ export function ReviewTableWorkspace({
   submitError = null,
   invalidCells = [],
   sourceText = null,
+  originalFileUrl = null,
+  originalFileContentType = null,
 }: Props) {
   const isDesktop = useIsDesktop();
   const [patches, setPatches] = useState<Map<PatchKey, ReviewCellPatch>>(new Map());
@@ -291,8 +299,12 @@ export function ReviewTableWorkspace({
   const filename = draft.document?.filename ?? "(未命名文档)";
   const summary = draft.document?.summary;
   const routeChips = draft.route_plan?.selected_pipelines ?? [];
-  const showSourcePanel = sourceText !== undefined;
+  const hasOriginalFile = typeof originalFileUrl === "string" && originalFileUrl.length > 0;
   const hasSource = typeof sourceText === "string" && sourceText.trim().length > 0;
+  // Render the source panel whenever we have either an original file URL or
+  // parsed OCR text to fall back on.
+  const showSourcePanel = hasOriginalFile || sourceText !== undefined;
+  const fileKind = pickFileKind(originalFileContentType, filename);
 
   return (
     <div
@@ -464,7 +476,13 @@ export function ReviewTableWorkspace({
           }
         >
           {showSourcePanel && !isDesktop && (
-            <SourceTextPanel sourceText={sourceText ?? null} hasSource={hasSource} />
+            <SourceTextPanel
+              sourceText={sourceText ?? null}
+              hasSource={hasSource}
+              originalFileUrl={originalFileUrl}
+              fileKind={fileKind}
+              filename={filename}
+            />
           )}
 
           <div style={{ minWidth: 0 }}>
@@ -536,45 +554,58 @@ export function ReviewTableWorkspace({
                 position: "sticky",
                 top: 12,
                 maxHeight: "calc(100vh - 160px)",
-                overflow: "auto",
+                overflow: "hidden",
                 background: "var(--surface)",
                 border: "1px solid var(--ink-100)",
                 borderRadius: 10,
                 padding: 14,
                 minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
               }}
             >
               <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "var(--ink-500)",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                   marginBottom: 8,
+                  gap: 8,
                 }}
               >
-                源文件内容
-              </div>
-              {hasSource ? (
-                <pre
+                <div
                   style={{
-                    margin: 0,
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
                     fontSize: 12,
-                    lineHeight: 1.55,
-                    color: "var(--ink-700)",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
+                    fontWeight: 700,
+                    color: "var(--ink-500)",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
                   }}
                 >
-                  {sourceText}
-                </pre>
-              ) : (
-                <div style={{ color: "var(--ink-400)", fontSize: 12.5 }}>
-                  暂无可展示的源文件文本
+                  原始文件
                 </div>
-              )}
+                {hasOriginalFile && (
+                  <a
+                    href={originalFileUrl ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--brand-600)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    新窗口打开
+                  </a>
+                )}
+              </div>
+              <OriginalFileView
+                originalFileUrl={originalFileUrl}
+                fileKind={fileKind}
+                filename={filename}
+                fallbackText={sourceText ?? null}
+                hasFallbackText={hasSource}
+              />
             </aside>
           )}
         </div>
@@ -906,16 +937,174 @@ function RowCard({
   );
 }
 
-// Mobile-only collapsible source-text panel. Rendered above tables in a
-// single column. Starts collapsed so it never dominates the small screen.
+type FileKind = "pdf" | "image" | "text" | "other";
+
+// Decide how to render the original file in the source panel.
+// We trust the server's content-type first; only fall back to the file
+// extension when content-type is missing or generic.
+function pickFileKind(contentType: string | null | undefined, filename: string): FileKind {
+  const ct = (contentType ?? "").toLowerCase();
+  if (ct.startsWith("image/")) return "image";
+  if (ct === "application/pdf") return "pdf";
+  if (ct.startsWith("text/")) return "text";
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (/\.(png|jpe?g|gif|webp|bmp|heic|heif)$/.test(lower)) return "image";
+  if (/\.(txt|md|csv|log)$/.test(lower)) return "text";
+  return "other";
+}
+
+// Shared renderer used by both desktop aside and mobile collapsible panel.
+function OriginalFileView({
+  originalFileUrl,
+  fileKind,
+  filename,
+  fallbackText,
+  hasFallbackText,
+}: {
+  originalFileUrl: string | null;
+  fileKind: FileKind;
+  filename: string;
+  fallbackText: string | null;
+  hasFallbackText: boolean;
+}) {
+  if (originalFileUrl && fileKind === "pdf") {
+    return (
+      <iframe
+        src={originalFileUrl}
+        title={filename}
+        style={{
+          flex: 1,
+          width: "100%",
+          minHeight: 320,
+          border: "1px solid var(--ink-100)",
+          borderRadius: 8,
+          background: "#fff",
+        }}
+      />
+    );
+  }
+  if (originalFileUrl && fileKind === "image") {
+    return (
+      <div
+        style={{
+          flex: 1,
+          overflow: "auto",
+          background: "var(--ink-50)",
+          borderRadius: 8,
+          padding: 8,
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "center",
+        }}
+      >
+        <img
+          src={originalFileUrl}
+          alt={filename}
+          style={{ maxWidth: "100%", height: "auto", display: "block" }}
+        />
+      </div>
+    );
+  }
+  if (originalFileUrl && (fileKind === "text" || fileKind === "other")) {
+    // For text we still embed in iframe (browser renders text inline);
+    // for unknown types we offer a download link plus optional OCR fallback.
+    if (fileKind === "text") {
+      return (
+        <iframe
+          src={originalFileUrl}
+          title={filename}
+          style={{
+            flex: 1,
+            width: "100%",
+            minHeight: 320,
+            border: "1px solid var(--ink-100)",
+            borderRadius: 8,
+            background: "#fff",
+          }}
+        />
+      );
+    }
+    return (
+      <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ color: "var(--ink-500)", fontSize: 12.5, marginBottom: 8 }}>
+          浏览器无法直接预览该文件类型。
+          <a
+            href={originalFileUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              marginLeft: 6,
+              color: "var(--brand-600)",
+              textDecoration: "underline",
+            }}
+          >
+            下载查看
+          </a>
+        </div>
+        {hasFallbackText && (
+          <pre
+            style={{
+              margin: 0,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+              fontSize: 12,
+              lineHeight: 1.55,
+              color: "var(--ink-700)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {fallbackText}
+          </pre>
+        )}
+      </div>
+    );
+  }
+  // No original file available (e.g. pasted-text job): show OCR text.
+  if (hasFallbackText) {
+    return (
+      <pre
+        style={{
+          margin: 0,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSize: 12,
+          lineHeight: 1.55,
+          color: "var(--ink-700)",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          overflow: "auto",
+        }}
+      >
+        {fallbackText}
+      </pre>
+    );
+  }
+  return (
+    <div style={{ color: "var(--ink-400)", fontSize: 12.5 }}>
+      暂无可展示的原始内容
+    </div>
+  );
+}
+
+// Mobile-only collapsible source panel. Starts collapsed so it never
+// dominates the small screen. Renders the original file when available,
+// falling back to parsed OCR text.
 function SourceTextPanel({
   sourceText,
   hasSource,
+  originalFileUrl,
+  fileKind,
+  filename,
 }: {
   sourceText: string | null;
   hasSource: boolean;
+  originalFileUrl: string | null;
+  fileKind: FileKind;
+  filename: string;
 }) {
   const [open, setOpen] = useState(false);
+  const hasOriginalFile = typeof originalFileUrl === "string" && originalFileUrl.length > 0;
+  const headerLabel = hasOriginalFile ? "原始文件" : "源文件内容";
   return (
     <div
       style={{
@@ -950,7 +1139,7 @@ function SourceTextPanel({
             textTransform: "uppercase",
           }}
         >
-          源文件内容
+          {headerLabel}
         </span>
         <span
           style={{
@@ -967,29 +1156,19 @@ function SourceTextPanel({
         <div
           style={{
             padding: "0 12px 12px",
-            maxHeight: 280,
-            overflow: "auto",
+            maxHeight: 420,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {hasSource ? (
-            <pre
-              style={{
-                margin: 0,
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                fontSize: 12,
-                lineHeight: 1.55,
-                color: "var(--ink-700)",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {sourceText}
-            </pre>
-          ) : (
-            <div style={{ color: "var(--ink-400)", fontSize: 12.5 }}>
-              暂无可展示的源文件文本
-            </div>
-          )}
+          <OriginalFileView
+            originalFileUrl={originalFileUrl}
+            fileKind={fileKind}
+            filename={filename}
+            fallbackText={sourceText}
+            hasFallbackText={hasSource}
+          />
         </div>
       )}
     </div>

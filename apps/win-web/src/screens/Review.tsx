@@ -29,6 +29,8 @@ export function ReviewScreen({
   const jobId = params?.jobId;
   const [draft, setDraft] = useState<ReviewDraft | null>(null);
   const [jobStatus, setJobStatus] = useState<IngestJobStatus | null>(null);
+  const [jobContentType, setJobContentType] = useState<string | null>(null);
+  const [hasFile, setHasFile] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(Boolean(jobId));
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,6 +54,8 @@ export function ReviewScreen({
         const job = await getIngestJob(jobId);
         if (cancelled) return;
         setJobStatus(job.status);
+        setJobContentType(job.content_type ?? null);
+        setHasFile(job.source_hint !== "pasted_text");
         const nextDraft =
           job.review_draft ??
           (isReviewDraft(job.result_json) ? (job.result_json as ReviewDraft) : null);
@@ -209,6 +213,7 @@ export function ReviewScreen({
     const readOnly =
       (jobStatus !== null && jobStatus !== "extracted") ||
       draft.status !== "pending_review";
+    const originalFileUrl = hasFile && jobId ? `/api/win/ingest/jobs/${jobId}/file` : null;
     return (
       <ReviewTableWorkspace
         draft={draft}
@@ -220,6 +225,8 @@ export function ReviewScreen({
         submitError={error}
         invalidCells={invalidCells}
         sourceText={draft.document.source_text ?? null}
+        originalFileUrl={originalFileUrl}
+        originalFileContentType={jobContentType}
       />
     );
   }
