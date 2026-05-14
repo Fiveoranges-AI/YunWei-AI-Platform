@@ -62,6 +62,36 @@ _TOOL_NAME = "submit_customer_ask_answer"
 _KB_CHAR_BUDGET = 30_000
 
 
+# Citation target types the assistant tool advertises. Keep this list in
+# sync with ``schemas.customer.CustomerAskCitation.target_type`` — Pydantic
+# drops any citation whose target_type isn't on the Literal, and the
+# enumeration here narrows what the model is allowed to emit in the first
+# place.
+_CITATION_TARGET_TYPES: list[str] = [
+    # legacy memory-era targets
+    "customer",
+    "contact",
+    "contract",
+    "order",
+    "document",
+    "event",
+    "commitment",
+    "task",
+    "risk",
+    "memory",
+    # vNext business facts surfaced by ``_build_customer_kb``
+    "invoice",
+    "invoice_item",
+    "payment",
+    "shipment",
+    "shipment_item",
+    "product",
+    "product_requirement",
+    "contract_payment_milestone",
+    "journal_item",
+]
+
+
 def _ask_tool() -> dict[str, Any]:
     return {
         "name": _TOOL_NAME,
@@ -75,7 +105,10 @@ def _ask_tool() -> dict[str, Any]:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "target_type": {"type": "string"},
+                            "target_type": {
+                                "type": "string",
+                                "enum": list(_CITATION_TARGET_TYPES),
+                            },
                             "target_id": {"type": "string"},
                             "snippet": {"type": ["string", "null"]},
                         },

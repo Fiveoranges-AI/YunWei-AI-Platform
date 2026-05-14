@@ -183,7 +183,9 @@ class CustomerAskRequest(BaseModel):
 
 class CustomerAskCitation(BaseModel):
     target_type: Literal[
+        # legacy memory-era citation targets
         "customer",
+        "contact",
         "contract",
         "order",
         "document",
@@ -192,7 +194,17 @@ class CustomerAskCitation(BaseModel):
         "task",
         "risk",
         "memory",
-        "contact",
+        # vNext business facts the KB now exposes — keep these in sync
+        # with the assistant tool enum in customer_profile/ask.py.
+        "invoice",
+        "invoice_item",
+        "payment",
+        "shipment",
+        "shipment_item",
+        "product",
+        "product_requirement",
+        "contract_payment_milestone",
+        "journal_item",
     ]
     target_id: str
     snippet: str | None = None
