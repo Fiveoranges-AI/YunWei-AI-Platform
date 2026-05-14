@@ -201,3 +201,172 @@ export type AskSeed = {
   messages: AskMessage[];
   suggestions: string[];
 };
+
+// ============================================================
+// V2 schema-first review types
+// ============================================================
+
+export type ReviewCellStatus =
+  | "extracted"
+  | "missing"
+  | "low_confidence"
+  | "edited"
+  | "rejected"
+  | "invalid";
+
+export type ReviewCellSource = "ai" | "default" | "edited" | "empty";
+
+export type ReviewRowOperation = "create" | "update";
+
+export type ReviewCellEvidence = {
+  page?: number | null;
+  excerpt?: string | null;
+};
+
+export type ReviewCell = {
+  field_name: string;
+  label: string;
+  data_type: string;
+  required: boolean;
+  is_array: boolean;
+  value: unknown;
+  display_value: string;
+  status: ReviewCellStatus;
+  confidence: number | null;
+  evidence: ReviewCellEvidence | null;
+  source: ReviewCellSource;
+};
+
+export type ReviewRow = {
+  client_row_id: string;
+  entity_id: string | null;
+  operation: ReviewRowOperation;
+  cells: ReviewCell[];
+};
+
+export type ReviewTable = {
+  table_name: string;
+  label: string;
+  purpose?: string | null;
+  category?: string | null;
+  is_array: boolean;
+  rows: ReviewRow[];
+  raw_extraction?: Record<string, unknown> | null;
+};
+
+export type ReviewDraftDocument = {
+  filename: string;
+  summary?: string | null;
+};
+
+export type ReviewDraftRoutePlanItem = {
+  name: string;
+  confidence?: number;
+  reason?: string;
+};
+
+export type ReviewDraftRoutePlan = {
+  selected_pipelines: ReviewDraftRoutePlanItem[];
+};
+
+export type ReviewDraftStatus = "pending_review" | "confirmed" | "ignored" | "failed";
+
+export type ReviewDraft = {
+  extraction_id: string;
+  document_id: string;
+  schema_version: number;
+  status: ReviewDraftStatus;
+  document: ReviewDraftDocument;
+  route_plan: ReviewDraftRoutePlan;
+  tables: ReviewTable[];
+  schema_warnings: string[];
+  general_warnings: string[];
+};
+
+export type ReviewCellPatch = {
+  table_name: string;
+  client_row_id: string;
+  field_name: string;
+  value?: unknown;
+  status?: ReviewCellStatus;
+  entity_id?: string | null;
+  operation?: ReviewRowOperation;
+};
+
+export type IngestV2JobStatus =
+  | "queued"
+  | "running"
+  | "extracted"
+  | "confirmed"
+  | "failed"
+  | "canceled";
+
+export type IngestV2Job = {
+  id: string;
+  batch_id: string;
+  enterprise_id: string;
+  workflow_version: "v2";
+  status: IngestV2JobStatus;
+  stage: string;
+  original_filename: string;
+  content_type?: string | null;
+  uploader?: string | null;
+  source_hint: string;
+  progress_message?: string | null;
+  error_message?: string | null;
+  document_id?: string | null;
+  extraction_id?: string | null;
+  result_json?: ReviewDraft | null;
+  review_draft?: ReviewDraft | null;
+  attempts: number;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
+export type ConfirmExtractionInvalidCell = {
+  table_name: string;
+  client_row_id: string;
+  field_name: string;
+  reason: string;
+};
+
+export type ConfirmExtractionResponse = {
+  extraction_id: string;
+  document_id: string;
+  status: ReviewDraftStatus;
+  written_rows: Record<string, string[]>;
+  invalid_cells: ConfirmExtractionInvalidCell[];
+};
+
+export type CompanySchemaField = {
+  id: string;
+  field_name: string;
+  label: string;
+  data_type: string;
+  required: boolean;
+  is_array: boolean;
+  enum_values?: string[] | null;
+  default_value?: unknown;
+  description?: string | null;
+  extraction_hint?: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type CompanySchemaTable = {
+  id: string;
+  table_name: string;
+  label: string;
+  purpose?: string | null;
+  category?: string | null;
+  version: number;
+  is_active: boolean;
+  sort_order: number;
+  fields: CompanySchemaField[];
+};
+
+export type CompanySchema = {
+  tables: CompanySchemaTable[];
+};
