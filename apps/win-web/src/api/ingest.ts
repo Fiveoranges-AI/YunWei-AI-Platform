@@ -144,6 +144,20 @@ export async function cancelIngestJob(jobId: string): Promise<IngestJob> {
   return jsonOrThrow(res);
 }
 
+export type DeleteIngestJobResult = {
+  deleted: number;
+  job_id: string;
+  status: "confirmed" | "failed" | "canceled";
+};
+
+export async function deleteIngestJob(jobId: string): Promise<DeleteIngestJobResult> {
+  const res = await fetch(`${API_BASE}/ingest/jobs/${jobId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return jsonOrThrow(res);
+}
+
 export function isReviewDraft(value: unknown): value is ReviewDraft {
   return (
     typeof value === "object" &&

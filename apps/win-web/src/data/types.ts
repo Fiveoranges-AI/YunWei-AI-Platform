@@ -257,6 +257,7 @@ export type ReviewTable = {
 export type ReviewDraftDocument = {
   filename: string;
   summary?: string | null;
+  source_text?: string | null;
 };
 
 export type ReviewDraftRoutePlanItem = {
