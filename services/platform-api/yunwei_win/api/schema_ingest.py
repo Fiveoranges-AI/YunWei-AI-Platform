@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -427,11 +428,17 @@ async def get_ingest_job_file(
         logger.exception("failed to read original file for job %s", j.id)
         raise HTTPException(500, f"file unavailable: {exc!s}") from exc
 
-    safe_name = filename.replace('"', "")
+    # HTTP headers are latin-1; non-ASCII filenames (e.g. Chinese) must use
+    # RFC 5987 filename* encoding. Keep an ASCII fallback for older clients.
+    ascii_fallback = filename.encode("ascii", "replace").decode("ascii").replace('"', "")
+    encoded = quote(filename, safe="")
+    disposition = (
+        f'inline; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+    )
     return Response(
         content=data,
         media_type=content_type or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+        headers={"Content-Disposition": disposition},
     )
 
 

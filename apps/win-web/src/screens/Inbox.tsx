@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GoFn } from "../App";
-import { listIngestJobs } from "../api/ingest";
+import { deleteIngestJob, listIngestJobs, type ApiError } from "../api/ingest";
 import type { IngestJob } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
@@ -89,6 +89,14 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
   // If a pending job is selected by id but the list changes, fall back to first.
   const selected = pending.find((j) => j.id === selectedId) ?? pending[0] ?? null;
 
+  async function handleDeletePending(job: InboxJob): Promise<void> {
+    // Optimistically drop the row; if the server rejects, refetch will
+    // restore it on the next tick.
+    setActiveJobs((prev) => prev.filter((j) => j.id !== job.id));
+    if (selectedId === job.id) setSelectedId(null);
+    await deleteIngestJob(job.id);
+  }
+
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
       {/* Left pane — queue list */}
@@ -154,7 +162,11 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
       {isDesktop && (
         <>
           {tab === "pending" && selected && (
-            <PreviewPane job={selected} onReview={() => go("review", { jobId: selected.id })} />
+            <PreviewPane
+              job={selected}
+              onReview={() => go("review", { jobId: selected.id })}
+              onDelete={() => handleDeletePending(selected)}
+            />
           )}
           {tab === "pending" && !selected && <EmptyPane msg="选择一项待确认资料查看 AI 提取结果" />}
           {tab === "processing" && <EmptyPane msg="处理中的资料无需复核" />}
@@ -526,8 +538,36 @@ function HistoryRow({
 
 // ──────────────── right pane ────────────────
 
-function PreviewPane({ job, onReview }: { job: InboxJob; onReview: () => void }) {
+function PreviewPane({
+  job,
+  onReview,
+  onDelete,
+}: {
+  job: InboxJob;
+  onReview: () => void;
+  onDelete: () => Promise<void>;
+}) {
   const when = job.finished_at ?? job.updated_at ?? job.created_at;
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDeleteClick(): Promise<void> {
+    if (deleting) return;
+    if (!window.confirm("确定删除该待确认任务？删除后不可恢复。")) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (e) {
+      const err = e as ApiError;
+      setDeleteError(
+        err.status === 409 ? "当前状态不支持删除" : err.message || "删除失败",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div
       style={{
@@ -628,31 +668,56 @@ function PreviewPane({ job, onReview }: { job: InboxJob; onReview: () => void })
           padding: "14px 40px",
           borderTop: "1px solid var(--ink-100)",
           display: "flex",
-          alignItems: "center",
-          gap: 8,
+          flexDirection: "column",
+          gap: 6,
         }}
       >
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={onReview}
-          style={{
-            height: 36,
-            padding: "0 18px",
-            borderRadius: 8,
-            background: "var(--ink-900)",
-            color: "#fff",
-            border: "none",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          {I.spark(13, "#fff")} 打开 AI 复核
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            onClick={() => void handleDeleteClick()}
+            disabled={deleting}
+            style={{
+              height: 36,
+              padding: "0 14px",
+              borderRadius: 8,
+              background: "transparent",
+              color: "var(--risk-700)",
+              border: "1px solid var(--ink-100)",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: deleting ? "not-allowed" : "pointer",
+              fontFamily: "var(--font)",
+            }}
+          >
+            {deleting ? "删除中…" : "删除"}
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={onReview}
+            style={{
+              height: 36,
+              padding: "0 18px",
+              borderRadius: 8,
+              background: "var(--ink-900)",
+              color: "#fff",
+              border: "none",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "var(--font)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            {I.spark(13, "#fff")} 打开 AI 复核
+          </button>
+        </div>
+        {deleteError && (
+          <div style={{ fontSize: 12, color: "var(--risk-700)", textAlign: "right" }}>
+            {deleteError}
+          </div>
+        )}
       </div>
     </div>
   );
