@@ -1,4 +1,4 @@
-"""LLM-driven schema router for /api/ingest/auto.
+"""LLM-driven schema router for the ingest extraction pipeline.
 
 Replaces the regex-based pipeline_router with a single Claude/DeepSeek call
 that returns a multi-label PipelineRoutePlan. Fail-open semantics: any

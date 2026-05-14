@@ -2,8 +2,8 @@
 
 Persists the original payload as a Document, runs the customer-memory LLM
 extraction, and stores the result as a pending CustomerInboxItem awaiting
-human confirm/ignore. The legacy entity-first ingest at /api/ingest/* is a
-separate code path with different semantics (see app.api.ingest).
+human confirm/ignore. Company-wide schema ingest is handled separately by
+``yunwei_win.api.schema_ingest``.
 """
 
 from __future__ import annotations

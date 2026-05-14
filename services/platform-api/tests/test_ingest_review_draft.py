@@ -1,4 +1,4 @@
-"""Tests for the V2 ReviewDraft materializer.
+"""Tests for the ReviewDraft materializer.
 
 The materializer turns extractor pipeline_results + catalog into a fully-
 populated table/cell payload. Key invariant: for every selected table the
@@ -14,7 +14,7 @@ from uuid import uuid4
 import pytest  # noqa: F401 — pytest fixtures registered via conftest
 
 from yunwei_win.services.company_schema import DEFAULT_COMPANY_SCHEMA
-from yunwei_win.services.ingest_v2 import (
+from yunwei_win.services.schema_ingest import (
     PIPELINE_TABLES,
     ReviewDraft,
     materialize_review_draft,

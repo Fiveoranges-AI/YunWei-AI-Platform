@@ -1,6 +1,6 @@
-"""Pydantic schemas for the V2 schema-first ReviewDraft contract.
+"""Pydantic schemas for the schema-first ReviewDraft contract.
 
-Public surface returned by ``GET /api/win/ingest/v2/extractions/{id}`` and
+Public surface returned by ``GET /api/win/ingest/extractions/{id}`` and
 echoed back to ``POST .../confirm``. The frontend renders ``ReviewDraft.tables``
 directly — these schemas are the contract.
 

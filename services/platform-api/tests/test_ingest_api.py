@@ -1,4 +1,4 @@
-"""Tests for the V2 schema-first ingest API (/api/win/ingest/v2/*).
+"""Tests for the schema-first ingest API (/api/win/ingest/*).
 
 Mirrors the V1 ``test_ingest_jobs.py`` pattern: in-memory SQLite,
 ``_stub_queue`` to bypass Redis, FastAPI dependency override for the
@@ -63,12 +63,9 @@ def _stub_queue(monkeypatch):
         return f"rq:{job_id}:a{attempt}"
 
     monkeypatch.setattr(job_queue_module, "enqueue_ingest_job", fake_enqueue)
-    from yunwei_win.api import ingest as ingest_api
+    from yunwei_win.api import schema_ingest as schema_ingest_api
 
-    monkeypatch.setattr(ingest_api, "enqueue_ingest_job", fake_enqueue)
-    from yunwei_win.api import ingest_v2 as ingest_v2_api
-
-    monkeypatch.setattr(ingest_v2_api, "enqueue_ingest_job", fake_enqueue)
+    monkeypatch.setattr(schema_ingest_api, "enqueue_ingest_job", fake_enqueue)
     return calls
 
 
@@ -92,20 +89,20 @@ def _build_app(engine) -> FastAPI:
 def _stub_ensure_helpers(monkeypatch):
     """Skip the per-enterprise table-ensure helpers; in-memory SQLite already
     has every table from ``Base.metadata.create_all``."""
-    from yunwei_win.api import ingest_v2 as ingest_v2_api
+    from yunwei_win.api import schema_ingest as schema_ingest_api
 
     async def _noop(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(ingest_v2_api, "ensure_ingest_v2_tables_for", _noop)
-    monkeypatch.setattr(ingest_v2_api, "ensure_ingest_job_tables_for", _noop)
+    monkeypatch.setattr(schema_ingest_api, "ensure_schema_ingest_tables_for", _noop)
+    monkeypatch.setattr(schema_ingest_api, "ensure_ingest_job_tables_for", _noop)
 
 
 # ---------- POST /jobs ---------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_create_v2_jobs_marks_workflow_version(monkeypatch, tmp_path):
+async def test_create_schema_jobs_returns_review_job(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     _stub_ensure_helpers(monkeypatch)
     calls = _stub_queue(monkeypatch)
@@ -114,7 +111,7 @@ async def test_create_v2_jobs_marks_workflow_version(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                "/api/win/ingest/v2/jobs",
+                "/api/win/ingest/jobs",
                 files=[("files", ("a.pdf", b"%PDF-fake", "application/pdf"))],
                 data={"source_hint": "file"},
             )
@@ -122,7 +119,7 @@ async def test_create_v2_jobs_marks_workflow_version(monkeypatch, tmp_path):
             body = res.json()
             assert len(body["jobs"]) == 1
             j = body["jobs"][0]
-            assert j["workflow_version"] == "v2"
+            assert "workflow_version" not in j
             assert j["extraction_id"] is None
             assert j["status"] == "queued"
             assert len(calls) == 1
@@ -135,7 +132,7 @@ async def test_create_v2_jobs_marks_workflow_version(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_list_v2_jobs_excludes_v1(monkeypatch, tmp_path):
+async def test_list_schema_jobs_returns_active_jobs(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     _stub_ensure_helpers(monkeypatch)
     _stub_queue(monkeypatch)
@@ -144,27 +141,26 @@ async def test_list_v2_jobs_excludes_v1(monkeypatch, tmp_path):
         b = IngestBatch(enterprise_id="tenant_test", source="seed")
         session.add(b)
         await session.flush()
-        # Mix of V1 + V2 jobs in the same batch.
         session.add(IngestJob(
             batch_id=b.id, enterprise_id="tenant_test",
-            original_filename="v1.pdf", source_hint="file",
+            original_filename="a.pdf", source_hint="file",
             status=IngestJobStatus.running, stage=IngestJobStage.extract,
-            attempts=1, workflow_version="v1",
+            attempts=1,
         ))
         session.add(IngestJob(
             batch_id=b.id, enterprise_id="tenant_test",
-            original_filename="v2.pdf", source_hint="file",
+            original_filename="schema.pdf", source_hint="file",
             status=IngestJobStatus.queued, stage=IngestJobStage.received,
-            attempts=0, workflow_version="v2",
+            attempts=0,
         ))
         await session.commit()
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.get("/api/win/ingest/v2/jobs?status=active")
+            res = await ac.get("/api/win/ingest/jobs?status=active")
             assert res.status_code == 200, res.text
             rows = res.json()
-            assert [r["original_filename"] for r in rows] == ["v2.pdf"]
+            assert [r["original_filename"] for r in rows] == ["schema.pdf", "a.pdf"]
     finally:
         await engine.dispose()
 
@@ -173,7 +169,7 @@ async def test_list_v2_jobs_excludes_v1(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_get_v2_job_without_extraction_returns_null_draft(monkeypatch, tmp_path):
+async def test_get_schema_job_without_extraction_returns_null_draft(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     _stub_ensure_helpers(monkeypatch)
     _stub_queue(monkeypatch)
@@ -186,7 +182,7 @@ async def test_get_v2_job_without_extraction_returns_null_draft(monkeypatch, tmp
             batch_id=b.id, enterprise_id="tenant_test",
             original_filename="x.pdf", source_hint="file",
             status=IngestJobStatus.queued, stage=IngestJobStage.received,
-            attempts=0, workflow_version="v2",
+            attempts=0,
         )
         session.add(job)
         await session.commit()
@@ -194,10 +190,10 @@ async def test_get_v2_job_without_extraction_returns_null_draft(monkeypatch, tmp
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.get(f"/api/win/ingest/v2/jobs/{jid}")
+            res = await ac.get(f"/api/win/ingest/jobs/{jid}")
             assert res.status_code == 200, res.text
             body = res.json()
-            assert body["workflow_version"] == "v2"
+            assert "workflow_version" not in body
             assert body["review_draft"] is None
             assert body["extraction"] is None
     finally:
@@ -205,7 +201,7 @@ async def test_get_v2_job_without_extraction_returns_null_draft(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
-async def test_get_v2_job_with_extraction_embeds_review_draft(monkeypatch, tmp_path):
+async def test_get_schema_job_with_extraction_embeds_review_draft(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     _stub_ensure_helpers(monkeypatch)
     _stub_queue(monkeypatch)
@@ -248,7 +244,7 @@ async def test_get_v2_job_with_extraction_embeds_review_draft(monkeypatch, tmp_p
             batch_id=b.id, enterprise_id="tenant_test",
             original_filename="x.pdf", source_hint="file",
             status=IngestJobStatus.extracted, stage=IngestJobStage.done,
-            attempts=1, workflow_version="v2",
+            attempts=1,
             document_id=doc.id,
             extraction_id=extraction.id,
             result_json=draft_payload,
@@ -259,7 +255,7 @@ async def test_get_v2_job_with_extraction_embeds_review_draft(monkeypatch, tmp_p
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.get(f"/api/win/ingest/v2/jobs/{jid}")
+            res = await ac.get(f"/api/win/ingest/jobs/{jid}")
             assert res.status_code == 200, res.text
             body = res.json()
             assert body["review_draft"] == draft_payload
@@ -341,7 +337,7 @@ async def test_patch_extraction_updates_review_draft(monkeypatch, tmp_path):
                 ],
             }
             res = await ac.patch(
-                f"/api/win/ingest/v2/extractions/{ex_id}",
+                f"/api/win/ingest/extractions/{ex_id}",
                 json={"review_draft": new_draft},
             )
             assert res.status_code == 200, res.text
@@ -387,7 +383,7 @@ async def test_ignore_extraction_marks_status_ignored(monkeypatch, tmp_path):
             batch_id=b.id, enterprise_id="tenant_test",
             original_filename="z.pdf", source_hint="file",
             status=IngestJobStatus.extracted, stage=IngestJobStage.done,
-            attempts=1, workflow_version="v2",
+            attempts=1,
             extraction_id=ex_id,
         )
         session.add(job)
@@ -395,7 +391,7 @@ async def test_ignore_extraction_marks_status_ignored(monkeypatch, tmp_path):
     app = _build_app(engine)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
-            res = await ac.post(f"/api/win/ingest/v2/extractions/{ex_id}/ignore")
+            res = await ac.post(f"/api/win/ingest/extractions/{ex_id}/ignore")
             assert res.status_code == 200, res.text
             assert res.json()["status"] == "ignored"
 

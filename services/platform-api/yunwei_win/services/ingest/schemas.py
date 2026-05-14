@@ -282,7 +282,7 @@ class ContactDecision(BaseModel):
 
 
 class ContractConfirmRequest(BaseModel):
-    """Body of POST /api/ingest/contract/{document_id}/confirm.
+    """Payload for confirming a contract extraction draft.
 
     Customer + each contact carry a per-entity decision (new vs merge into
     existing). Order and contract are always new (single PDF → single new

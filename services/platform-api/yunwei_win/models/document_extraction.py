@@ -1,4 +1,4 @@
-"""V2 document extraction record.
+"""Document extraction record.
 
 Stores the durable AI proposal for one document: the route plan, raw pipeline
 results, and the materialized ReviewDraft. Confirm flips ``status`` and
@@ -43,7 +43,7 @@ class DocumentExtractionStatus(str, enum.Enum):
 class DocumentExtraction(Base):
     """One AI extraction attempt for one Document.
 
-    ``review_draft`` is the materialized table/cell payload the V2 review UI
+    ``review_draft`` is the materialized table/cell payload the review UI
     renders. ``raw_pipeline_results`` keeps the upstream extractor output
     around for debugging / re-materialization without re-running OCR.
     """

@@ -5,7 +5,7 @@ Three layers:
                  + field_provenance / llm_calls
   Memory layer:  customer_events / commitments / tasks / risk_signals
                  / memory_items / inbox_items
-  V2 schema layer: company_schema_tables / company_schema_fields /
+  Schema layer: company_schema_tables / company_schema_fields /
                    schema_change_proposals + foundation business tables
                    (products / invoices / payments / shipments / ...)
 """
@@ -49,7 +49,7 @@ from yunwei_win.models.llm_call import LLMCall
 from yunwei_win.models.order import Order
 
 # ---------------------------------------------------------------------------
-# V2 schema-first company data layer.
+# Schema-first company data layer.
 # ---------------------------------------------------------------------------
 from yunwei_win.models.company_schema import (
     CompanySchemaField,
@@ -92,13 +92,13 @@ __all__ = [
     "CustomerInboxItem", "InboxSourceKind", "InboxStatus",
     "DocumentProcessingStatus", "DocumentReviewStatus",
     "InputChannel", "InputModality",
-    # V2 schema catalog
+    # Schema catalog
     "CompanySchemaTable", "CompanySchemaField", "SchemaChangeProposal",
-    # V2 company data foundation
+    # Company data foundation
     "Product", "ProductRequirement", "ContractPaymentMilestone",
     "Invoice", "InvoiceItem", "Payment",
     "Shipment", "ShipmentItem",
     "CustomerJournalItem",
-    # V2 extraction record
+    # Extraction record
     "DocumentExtraction", "DocumentExtractionStatus",
 ]

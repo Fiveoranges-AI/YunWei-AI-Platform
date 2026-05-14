@@ -90,7 +90,7 @@ def _patch_engine_routing(monkeypatch, engine):
         worker_module, "ensure_ingest_job_tables", fake_ensure_tables
     )
     monkeypatch.setattr(
-        worker_module, "ensure_ingest_v2_tables", fake_ensure_tables
+        worker_module, "ensure_schema_ingest_tables", fake_ensure_tables
     )
 
 
@@ -102,17 +102,23 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
     engine = await _make_engine()
     _patch_engine_routing(monkeypatch, engine)
 
+    import uuid
+
     from yunwei_win.models import Document, DocumentType
-    from yunwei_win.services.ingest.auto import AutoIngestResult
-    from yunwei_win.services.ingest.merge import MergeCandidates
-    from yunwei_win.services.ingest.unified_schemas import (
-        IngestPlan,
-        PipelineExtractResult,
-        PipelineRoutePlan,
-        UnifiedDraft,
+    from yunwei_win.models.document_extraction import (
+        DocumentExtraction,
+        DocumentExtractionStatus,
+    )
+    from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan
+    from yunwei_win.services.schema_ingest import (
+        AutoIngestResult,
+        ReviewDraft,
+        ReviewDraftDocument,
+        ReviewDraftRoutePlan,
     )
 
     captured_stages: list[str] = []
+    fake_extraction_id = uuid.uuid4()
 
     async def fake_auto_ingest(**kwargs):
         # Insert a real Document row + ``flush`` (no commit). The
@@ -139,26 +145,37 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             await progress("merge", "merge")
             await progress("auto_done", "done")
             captured_stages.append("called")
+        draft = ReviewDraft(
+            extraction_id=fake_extraction_id,
+            document_id=doc.id,
+            schema_version=1,
+            status="pending_review",
+            document=ReviewDraftDocument(filename="x.pdf"),
+            route_plan=ReviewDraftRoutePlan(),
+            tables=[],
+        )
+        sess.add(
+            DocumentExtraction(
+                id=fake_extraction_id,
+                document_id=doc.id,
+                schema_version=1,
+                provider="fake",
+                review_draft=draft.model_dump(mode="json"),
+                status=DocumentExtractionStatus.pending_review,
+            )
+        )
+        await sess.flush()
         # NOTE: deliberately NOT committing here. The worker is expected to
-        # commit after the auto_ingest call returns; this fake matches the
+        # commit after the schema ingest call returns; this fake matches the
         # LandingAI-branch contract that triggered the production FK bug.
         return AutoIngestResult(
             document_id=doc.id,
-            plan=IngestPlan(),
-            draft=UnifiedDraft(
-                pipeline_results=[
-                    PipelineExtractResult(
-                        name="identity",
-                        extraction={"customer": {"name": "Acme"}},
-                        extraction_metadata={"provider": "landingai"},
-                    ),
-                ],
-            ),
-            candidates=MergeCandidates(),
+            extraction_id=fake_extraction_id,
             route_plan=PipelineRoutePlan(),
+            review_draft=draft,
         )
 
-    monkeypatch.setattr(worker_module, "auto_ingest", fake_auto_ingest)
+    monkeypatch.setattr(worker_module, "schema_auto_ingest", fake_auto_ingest)
 
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -187,16 +204,10 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             assert j.stage == IngestJobStage.done
             assert j.started_at is not None
             assert j.finished_at is not None
+            assert j.extraction_id == fake_extraction_id
             assert j.result_json is not None
-            assert "draft" in j.result_json
-            assert "plan" in j.result_json
-            # WinApp Review reads ``raw.pipeline_results`` directly — the
-            # async job payload must mirror sync ``/auto`` (api/ingest.py)
-            # and surface a top-level ``pipeline_results`` list.
-            assert "pipeline_results" in j.result_json
-            assert any(
-                r["name"] == "identity" for r in j.result_json["pipeline_results"]
-            )
+            assert j.result_json["extraction_id"] == str(fake_extraction_id)
+            assert j.result_json["tables"] == []
             assert captured_stages == ["called"]
             # Regression for ingest_jobs_document_id_fkey: the Document that
             # auto_ingest insert+flushed (without committing) must survive
@@ -228,7 +239,7 @@ async def test_worker_records_failure_on_exception(monkeypatch):
     async def boom_auto_ingest(**_kwargs):
         raise RuntimeError("simulated extraction blow up")
 
-    monkeypatch.setattr(worker_module, "auto_ingest", boom_auto_ingest)
+    monkeypatch.setattr(worker_module, "schema_auto_ingest", boom_auto_ingest)
 
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -275,7 +286,7 @@ async def test_worker_skips_canceled_job(monkeypatch):
         # Returning None would crash the result-persist step; assert it isn't reached.
         return None
 
-    monkeypatch.setattr(worker_module, "auto_ingest", fake_auto_ingest)
+    monkeypatch.setattr(worker_module, "schema_auto_ingest", fake_auto_ingest)
 
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -335,7 +346,7 @@ async def test_worker_honors_mid_flight_cancel(monkeypatch):
         # Never reached.
         raise AssertionError("progress should have raised _CanceledMidFlight")
 
-    monkeypatch.setattr(worker_module, "auto_ingest", fake_auto_ingest)
+    monkeypatch.setattr(worker_module, "schema_auto_ingest", fake_auto_ingest)
 
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -415,14 +426,13 @@ async def test_worker_uses_supplied_enterprise_id(monkeypatch):
         await engine.dispose()
 
 
-# ---------- V2 dispatch --------------------------------------------------
+# ---------- Schema-first dispatch ----------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(monkeypatch):
-    """A job with ``workflow_version="v2"`` routes to ``auto_ingest_v2`` and
-    the worker persists the ReviewDraft onto ``result_json`` + sets
-    ``extraction_id``. V1 ``auto_ingest`` MUST NOT be called."""
+async def test_worker_dispatches_to_schema_ingest_and_persists_review_draft(monkeypatch):
+    """The worker always routes jobs to schema-first ingest and persists the
+    ReviewDraft onto ``result_json`` + sets ``extraction_id``."""
 
     import uuid
     from yunwei_win.models import Document, DocumentType
@@ -430,8 +440,8 @@ async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(
         DocumentExtraction,
         DocumentExtractionStatus,
     )
-    from yunwei_win.services.ingest_v2 import (
-        AutoIngestV2Result,
+    from yunwei_win.services.schema_ingest import (
+        AutoIngestResult,
         ReviewDraft,
         ReviewDraftDocument,
         ReviewDraftRoutePlan,
@@ -442,13 +452,7 @@ async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(
     _patch_engine_routing(monkeypatch, engine)
 
     fake_extraction_id = uuid.uuid4()
-    v1_calls = {"n": 0}
-
-    async def boom_v1(**_kwargs):
-        v1_calls["n"] += 1
-        raise AssertionError("V1 auto_ingest must not be called for V2 jobs")
-
-    async def fake_v2(**kwargs):
+    async def fake_schema_ingest(**kwargs):
         sess: AsyncSession = kwargs["session"]
         doc = Document(
             type=DocumentType.text_note,
@@ -470,7 +474,7 @@ async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(
             tables=[],
         )
         # Persist the extraction row so the IngestJob.extraction_id FK
-        # holds — mirror what the real auto_ingest_v2 does.
+        # holds — mirror what the real schema ingest does.
         sess.add(
             DocumentExtraction(
                 id=fake_extraction_id,
@@ -482,15 +486,14 @@ async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(
             )
         )
         await sess.flush()
-        return AutoIngestV2Result(
+        return AutoIngestResult(
             document_id=doc.id,
             extraction_id=fake_extraction_id,
             route_plan=PipelineRoutePlan(),
             review_draft=draft,
         )
 
-    monkeypatch.setattr(worker_module, "auto_ingest", boom_v1)
-    monkeypatch.setattr(worker_module, "auto_ingest_v2", fake_v2)
+    monkeypatch.setattr(worker_module, "schema_auto_ingest", fake_schema_ingest)
 
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -505,7 +508,6 @@ async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(
                 source_hint="pasted_text",
                 text_content="t",
                 status=IngestJobStatus.queued,
-                workflow_version="v2",
             )
             session.add(job)
             await session.commit()
@@ -517,11 +519,9 @@ async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(
             j = (await session.execute(select(IngestJob))).scalar_one()
             assert j.status == IngestJobStatus.extracted
             assert j.stage == IngestJobStage.done
-            assert j.workflow_version == "v2"
             assert j.extraction_id == fake_extraction_id
             assert j.result_json is not None
             assert j.result_json["extraction_id"] == str(fake_extraction_id)
             assert j.result_json["tables"] == []
-            assert v1_calls["n"] == 0
     finally:
         await engine.dispose()

@@ -203,7 +203,7 @@ export type AskSeed = {
 };
 
 // ============================================================
-// V2 schema-first review types
+// Schema-first review types
 // ============================================================
 
 export type ReviewCellStatus =
@@ -293,7 +293,7 @@ export type ReviewCellPatch = {
   operation?: ReviewRowOperation;
 };
 
-export type IngestV2JobStatus =
+export type IngestJobStatus =
   | "queued"
   | "running"
   | "extracted"
@@ -301,12 +301,11 @@ export type IngestV2JobStatus =
   | "failed"
   | "canceled";
 
-export type IngestV2Job = {
+export type IngestJob = {
   id: string;
   batch_id: string;
   enterprise_id: string;
-  workflow_version: "v2";
-  status: IngestV2JobStatus;
+  status: IngestJobStatus;
   stage: string;
   original_filename: string;
   content_type?: string | null;

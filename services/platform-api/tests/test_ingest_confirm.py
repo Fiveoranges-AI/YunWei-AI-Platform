@@ -1,8 +1,8 @@
-"""Confirm endpoint tests for the V2 schema-first surface.
+"""Confirm endpoint tests for the schema-first surface.
 
 Each test synthesizes a ``DocumentExtraction.review_draft`` JSON and POSTs
-``/api/win/ingest/v2/extractions/{id}/confirm`` with patches. We don't
-exercise the materializer — that's covered by ``test_ingest_v2_review_draft``.
+``/api/win/ingest/extractions/{id}/confirm`` with patches. We don't
+exercise the materializer — that's covered by ``test_schema_ingest_review_draft``.
 """
 
 from __future__ import annotations
@@ -73,13 +73,13 @@ def _build_app(engine, monkeypatch) -> FastAPI:
     app.dependency_overrides[get_session] = session_dep
 
     # Bypass the per-enterprise ensure helpers — SQLite has every table.
-    from yunwei_win.api import ingest_v2 as ingest_v2_api
+    from yunwei_win.api import schema_ingest as schema_ingest_api
 
     async def _noop(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(ingest_v2_api, "ensure_ingest_v2_tables_for", _noop)
-    monkeypatch.setattr(ingest_v2_api, "ensure_ingest_job_tables_for", _noop)
+    monkeypatch.setattr(schema_ingest_api, "ensure_schema_ingest_tables_for", _noop)
+    monkeypatch.setattr(schema_ingest_api, "ensure_ingest_job_tables_for", _noop)
 
     app.include_router(yinhu_router, prefix="/api/win")
     return app
@@ -258,7 +258,7 @@ async def test_confirm_creates_orders_row_and_provenance(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                f"/api/win/ingest/v2/extractions/{extraction_id}/confirm",
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
                 json={"review_draft": draft, "patches": []},
             )
             assert res.status_code == 200, res.text
@@ -358,7 +358,7 @@ async def test_confirm_uses_user_filled_missing_cells(monkeypatch, tmp_path):
                 }
             ]
             res = await ac.post(
-                f"/api/win/ingest/v2/extractions/{extraction_id}/confirm",
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
                 json={"review_draft": draft, "patches": patches},
             )
             assert res.status_code == 200, res.text
@@ -431,7 +431,7 @@ async def test_confirm_rejects_when_required_cell_empty(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                f"/api/win/ingest/v2/extractions/{extraction_id}/confirm",
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
                 json={"review_draft": draft, "patches": []},
             )
             assert res.status_code == 400, res.text
@@ -523,7 +523,7 @@ async def test_confirm_skips_rejected_cells(monkeypatch, tmp_path):
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                f"/api/win/ingest/v2/extractions/{extraction_id}/confirm",
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
                 json={"review_draft": draft, "patches": []},
             )
             assert res.status_code == 200, res.text
@@ -584,7 +584,7 @@ async def test_confirm_marks_extraction_and_job_confirmed(monkeypatch, tmp_path)
             batch_id=b.id, enterprise_id="tenant_test",
             original_filename="doc.pdf", source_hint="file",
             status=IngestJobStatus.extracted, stage=IngestJobStage.done,
-            attempts=1, workflow_version="v2",
+            attempts=1,
             document_id=document_id,
             extraction_id=extraction_id,
         )
@@ -595,7 +595,7 @@ async def test_confirm_marks_extraction_and_job_confirmed(monkeypatch, tmp_path)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
             res = await ac.post(
-                f"/api/win/ingest/v2/extractions/{extraction_id}/confirm",
+                f"/api/win/ingest/extractions/{extraction_id}/confirm",
                 json={"review_draft": draft, "patches": []},
             )
             assert res.status_code == 200, res.text

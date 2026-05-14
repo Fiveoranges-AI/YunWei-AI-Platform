@@ -13,14 +13,14 @@ export const MOCK_CUSTOMERS: CustomerDetail[] = [
     metrics: { contractTotal: 3220000, receivable: 322000, contracts: 2, tasks: 3, contacts: 4 },
     risk: { level: "med", label: "中风险", note: "收款周期延长 18 天" },
     timeline: [
-      { kind: "upload", title: "上传新合同草案", when: "今天 10:30", by: "李欣 · 销售助理", src: "终验补充协议_v2.pdf" },
+      { kind: "upload", title: "上传新合同草案", when: "今天 10:30", by: "李欣 · 销售助理", src: "终验补充协议.pdf" },
       { kind: "meet", title: "完成第一次需求沟通会议", when: "昨天 14:00", by: "王总 · 万华化学", src: "语音 12′45″" },
       { kind: "wechat", title: "王总确认月底前回款", when: "昨天 09:12", by: "微信 · 王志强", src: "微信截图 3 张" },
       { kind: "invoice", title: "开具增值税发票 ¥150,000", when: "5 月 6 日", by: "财务 · 张华", src: "INV-20260506-018" },
     ],
     commitments: [
       { id: "c1", text: "客户承诺 10 月 31 日前完成尾款支付", source: "微信 · 王总 · 昨天", confidence: "high" },
-      { id: "c2", text: "我方承诺 10 月 25 日前完成终验文件交付", source: "终验补充协议_v2.pdf · §4.2", confidence: "high" },
+      { id: "c2", text: "我方承诺 10 月 25 日前完成终验文件交付", source: "终验补充协议.pdf · §4.2", confidence: "high" },
     ],
     tasks: [
       { id: "t1", text: "本周内致电王总确认尾款进度", due: "本周内", owner: "李欣" },
@@ -42,7 +42,7 @@ export const MOCK_CUSTOMERS: CustomerDetail[] = [
       { id: "p3", name: "陈立", role: "工程师", initial: "陈", phone: "136****2401", last: "上周三" },
     ],
     docs: [
-      { id: "d1", name: "终验补充协议_v2.pdf", kind: "合同", date: "今天" },
+      { id: "d1", name: "终验补充协议.pdf", kind: "合同", date: "今天" },
       { id: "d2", name: "微信记录_王总_2026-05", kind: "聊天", date: "昨天" },
       { id: "d3", name: "设备采购合同_2026Q1.pdf", kind: "合同", date: "4 月 12 日" },
       { id: "d4", name: "送货单_SH-20260308.jpg", kind: "送货单", date: "3 月 8 日" },
@@ -155,7 +155,7 @@ export const MOCK_ASK_SEED: AskSeed = {
           "存在中等风险：客户尾款 ¥322,000 仍未到账，且其内部审批节奏明显放缓。建议本周联系并提前备案。",
         evidence: [
           { id: "e1", type: "微信", label: "微信记录 · 王总 · 昨天" },
-          { id: "e2", type: "合同", label: "终验补充协议_v2.pdf · §4.2" },
+          { id: "e2", type: "合同", label: "终验补充协议.pdf · §4.2" },
           { id: "e3", type: "语音", label: "语音 02:15 · 02:15 处" },
         ],
         next: [

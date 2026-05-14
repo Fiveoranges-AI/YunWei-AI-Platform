@@ -119,28 +119,14 @@ class IngestJob(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rq_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    # On success, the worker writes the same shape as /auto's done payload:
-    # {document_id, plan, route_plan, draft, pipeline_results, candidates,
-    #  needs_review_fields}. Stored as JSONB so the Review page can rehydrate
-    # from a job_id alone.
+    # On success, the worker writes the materialized ReviewDraft JSON so the
+    # Review page can rehydrate from a job_id alone.
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # ---- V2 schema-first ingest --------------------------------------------
-    # ``workflow_version`` lets the worker fork V1 vs V2 extraction without
-    # touching the row layout for legacy jobs. New uploads via /ingest/v2/jobs
-    # set this to ``"v2"``; pre-V2 rows stay on ``"v1"`` thanks to the
-    # server_default. ``extraction_id`` links to the DocumentExtraction that
-    # carries the materialized ReviewDraft for V2 jobs.
-    workflow_version: Mapped[str] = mapped_column(
-        String(16),
-        nullable=False,
-        default="v1",
-        server_default="v1",
-        index=True,
-    )
+    # Schema-first ingest links each job to its materialized ReviewDraft.
     extraction_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid,
         ForeignKey("document_extractions.id", ondelete="SET NULL"),

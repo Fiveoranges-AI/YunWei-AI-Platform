@@ -1,20 +1,20 @@
-"""Schema-first V2 ingest surface.
+"""Schema-first ingest surface.
 
 Public exports:
 - ``PIPELINE_TABLES`` / ``materialize_review_draft``: build the ReviewDraft
   payload from extractor output + tenant catalog.
-- ``auto_ingest_v2``: V2 end-to-end orchestrator the worker calls.
+- ``auto_ingest``: end-to-end orchestrator the worker calls.
 - ``confirm_review_draft``: write confirmed cells into company data tables.
 - The Pydantic schema family the API + frontend share.
 """
 
-from yunwei_win.services.ingest_v2.auto import AutoIngestV2Result, auto_ingest_v2
-from yunwei_win.services.ingest_v2.confirm import confirm_review_draft
-from yunwei_win.services.ingest_v2.review_draft import (
+from yunwei_win.services.schema_ingest.auto import AutoIngestResult, auto_ingest
+from yunwei_win.services.schema_ingest.confirm import confirm_review_draft
+from yunwei_win.services.schema_ingest.review_draft import (
     PIPELINE_TABLES,
     materialize_review_draft,
 )
-from yunwei_win.services.ingest_v2.schemas import (
+from yunwei_win.services.schema_ingest.schemas import (
     ConfirmExtractionRequest,
     ConfirmExtractionResponse,
     ExtractionStatus,
@@ -33,8 +33,8 @@ from yunwei_win.services.ingest_v2.schemas import (
 
 __all__ = [
     "PIPELINE_TABLES",
-    "AutoIngestV2Result",
-    "auto_ingest_v2",
+    "AutoIngestResult",
+    "auto_ingest",
     "confirm_review_draft",
     "materialize_review_draft",
     "ConfirmExtractionRequest",
