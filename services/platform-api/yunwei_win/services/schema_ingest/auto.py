@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,7 +32,6 @@ from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yunwei_win.config import settings
 from yunwei_win.models.customer_memory import (
     DocumentProcessingStatus,
     InputChannel,
@@ -68,6 +68,10 @@ from yunwei_win.services.schema_ingest.schemas import ReviewDraft
 from yunwei_win.services.storage import open_for_read, store_upload
 
 logger = logging.getLogger(__name__)
+
+_CREDENTIAL_NAME_RE = re.compile(
+    r"\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\b"
+)
 
 
 @dataclass
@@ -139,24 +143,41 @@ async def auto_ingest(
 
     # --- 3. Parse ------------------------------------------------------
     await emit_progress(progress, "parsing", f"使用 {detected.parser_provider} 解析")
-    parse_artifact = await _run_parse(
-        detected=detected,
-        text_content=text_content,
-        file_bytes=file_bytes,
-        original_filename=original_filename,
-        content_type=content_type,
-        pre_stored=pre_stored,
-        document=document,
-    )
+    parse_status = DocumentParseStatus.parsed
+    parse_error_message: str | None = None
+    parse_warnings: list[str] = []
+    try:
+        parse_artifact = await _run_parse(
+            detected=detected,
+            text_content=text_content,
+            file_bytes=file_bytes,
+            original_filename=original_filename,
+            content_type=content_type,
+            pre_stored=pre_stored,
+            document=document,
+        )
+    except Exception as exc:  # noqa: BLE001 — keep the review flow recoverable
+        logger.exception("vNext parse failed for document %s", document.id)
+        parse_status = DocumentParseStatus.failed
+        parse_error_message = f"{type(exc).__name__}: {exc!s}"
+        parse_warnings.append(
+            f"parse failed: {_public_error_message(parse_error_message)}"
+        )
+        parse_artifact = _failed_parse_artifact(
+            detected=detected,
+            document=document,
+            error_message=_public_error_message(parse_error_message),
+        )
 
     parse = DocumentParse(
         document_id=document.id,
         provider=detected.parser_provider,
         model=parse_artifact.metadata.get("model") if isinstance(parse_artifact.metadata, dict) else None,
-        status=DocumentParseStatus.parsed,
+        status=parse_status,
         artifact=parse_artifact.model_dump(mode="json"),
         raw_metadata=dict(parse_artifact.metadata or {}),
-        warnings=[],
+        warnings=parse_warnings,
+        error_message=parse_error_message,
     )
     session.add(parse)
     await session.flush()
@@ -184,7 +205,10 @@ async def auto_ingest(
     await emit_progress(
         progress, "extracting", f"使用 {detected.extractor_provider} 抽取"
     )
-    extraction_warnings: list[str] = list(route_result.warnings or [])
+    extraction_warnings: list[str] = [
+        _public_error_message(w)
+        for w in (list(parse_warnings) + list(route_result.warnings or []))
+    ]
     try:
         normalized = await extractors_module.extract_from_parse_artifact(
             parse_artifact=parse_artifact,
@@ -196,8 +220,9 @@ async def auto_ingest(
         )
     except Exception as exc:  # noqa: BLE001 — degrade gracefully
         logger.exception("vNext extract failed for document %s", document.id)
+        safe_error = _public_error_message(f"{type(exc).__name__}: {exc!s}")
         extraction_warnings.append(
-            f"extraction failed: {type(exc).__name__}: {exc!s}"
+            f"extraction failed: {safe_error}"
         )
         from yunwei_win.services.schema_ingest.extraction_normalize import (
             NormalizedExtraction,
@@ -314,10 +339,12 @@ async def _persist_document(
         sha = pre_stored.sha256
         size = pre_stored.size
         # No restage — just take the descriptor as-is.
-        stored = type(pre_stored)(  # mirror StoredFile shape
+        stored = PreStoredFile(
             path=pre_stored.path,
             sha256=sha,
             size=size,
+            original_filename=pre_stored.original_filename,
+            content_type=pre_stored.content_type,
         )
         doc_type = _SOURCE_TYPE_TO_DOCUMENT_TYPE.get(detected.source_type, DocumentType.other)
         modality = _SOURCE_TYPE_TO_MODALITY.get(detected.source_type, InputModality.other)
@@ -396,3 +423,26 @@ async def _run_parse(
         filename=original_filename or document.original_filename,
         content_type=content_type or document.content_type,
     )
+
+
+def _failed_parse_artifact(
+    *,
+    detected: DetectedSourceType,
+    document: Document,
+    error_message: str,
+) -> ParseArtifact:
+    return ParseArtifact(
+        provider=detected.parser_provider,
+        source_type=detected.source_type,
+        markdown="",
+        metadata={
+            "parse_failed": True,
+            "error_message": error_message,
+            "filename": document.original_filename,
+            "content_type": document.content_type,
+        },
+    )
+
+
+def _public_error_message(message: str) -> str:
+    return _CREDENTIAL_NAME_RE.sub("credential", message)

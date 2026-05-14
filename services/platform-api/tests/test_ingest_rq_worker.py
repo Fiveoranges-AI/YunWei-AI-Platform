@@ -280,6 +280,45 @@ async def test_worker_records_failure_on_exception(monkeypatch):
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_worker_sanitizes_credential_names_in_failure_message(monkeypatch):
+    engine = await _make_engine()
+    _patch_engine_routing(monkeypatch, engine)
+
+    async def boom_auto_ingest(**_kwargs):
+        raise RuntimeError("VISION_AGENT_API_KEY is not configured")
+
+    monkeypatch.setattr(worker_module, "schema_auto_ingest", boom_auto_ingest)
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            batch = IngestBatch(enterprise_id="tenant_test", total_jobs=1)
+            session.add(batch)
+            await session.flush()
+            job = IngestJob(
+                batch_id=batch.id,
+                enterprise_id="tenant_test",
+                original_filename="x.pdf",
+                content_type="application/pdf",
+                source_hint="file",
+                status=IngestJobStatus.queued,
+            )
+            session.add(job)
+            await session.commit()
+            job_id = str(job.id)
+
+        await worker_module.process_ingest_job(job_id, "tenant_test")
+
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            j = (await session.execute(select(IngestJob))).scalar_one()
+            assert j.status == IngestJobStatus.failed
+            assert j.error_message is not None
+            assert "API_KEY" not in j.error_message
+            assert "credential is not configured" in j.error_message
+    finally:
+        await engine.dispose()
+
+
 # ---------- cancel-before-start ------------------------------------------
 
 

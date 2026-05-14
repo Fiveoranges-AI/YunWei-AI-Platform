@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -146,9 +147,19 @@ async def process_ingest_job(job_id: str, enterprise_id: str) -> None:
                 # External cancel won the race — don't overwrite it.
                 return
             j.status = IngestJobStatus.failed
-            j.error_message = f"{type(exc).__name__}: {exc!s}"[:2000]
+            j.error_message = _safe_error_message(exc)
             j.finished_at = datetime.now(timezone.utc)
             await session.commit()
+
+
+def _safe_error_message(exc: BaseException) -> str:
+    raw = f"{type(exc).__name__}: {exc!s}"
+    sanitized = re.sub(
+        r"\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\b",
+        "credential",
+        raw,
+    )
+    return sanitized[:2000]
 
 
 async def _run_extraction(engine, job_uuid: UUID) -> None:

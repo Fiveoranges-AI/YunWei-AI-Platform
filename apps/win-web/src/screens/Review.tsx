@@ -30,6 +30,8 @@ type LockState = {
   lockedBy: string | null;
 };
 
+const LOCK_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 export function ReviewScreen({
   go,
   params,
@@ -60,14 +62,18 @@ export function ReviewScreen({
   reviewVersionRef.current = reviewVersion;
   const lockRef = useRef<LockState | null>(null);
   lockRef.current = lock;
+  const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const reload = useCallback(
-    async (extId: string) => {
+    async (extId: string): Promise<number | null> => {
       const env = await getReview(extId);
       if (env.review_draft) {
         setDraft(env.review_draft);
-        setReviewVersion(env.review_version ?? env.review_draft.review_version ?? 0);
+        const nextVersion = env.review_version ?? env.review_draft.review_version ?? 0;
+        setReviewVersion(nextVersion);
+        return nextVersion;
       }
+      return null;
     },
     [],
   );
@@ -94,7 +100,7 @@ export function ReviewScreen({
         if (!extId) {
           setError(
             job.status === "failed"
-              ? job.error_message ?? "任务失败"
+              ? displayJobError(job.error_message)
               : job.status === "canceled"
                 ? "任务已取消"
                 : "任务尚未生成草稿",
@@ -175,6 +181,57 @@ export function ReviewScreen({
     (jobStatus !== null && jobStatus !== "extracted") ||
     (draft !== null && draft.status !== "pending_review");
 
+  useEffect(() => {
+    if (!extractionId || !lock || lock.mode !== "edit" || !lock.token) return;
+
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const lockRes = await acquireReviewLock(extractionId);
+          if (lockRes.mode !== "edit" || !lockRes.lock_token) {
+            setLock({
+              mode: "read_only",
+              token: null,
+              expiresAt: lockRes.lock_expires_at ?? null,
+              lockedBy: lockRes.locked_by ?? null,
+            });
+            setLockBanner(
+              `${lockRes.locked_by ?? "他人"} 正在编辑，当前只读。`,
+            );
+            return;
+          }
+          setLock({
+            mode: "edit",
+            token: lockRes.lock_token,
+            expiresAt: lockRes.lock_expires_at ?? null,
+            lockedBy: lockRes.locked_by ?? null,
+          });
+          setReviewVersion((prev) => Math.max(prev, lockRes.review_version));
+        } catch (e) {
+          const apiErr = e as ApiError;
+          if (apiErr.status === 409) {
+            setLock({
+              mode: "read_only",
+              token: null,
+              expiresAt: null,
+              lockedBy: lock.lockedBy,
+            });
+            setLockBanner("复核锁已失效，已切换为只读视图。");
+            try {
+              await reload(extractionId);
+            } catch {
+              // The lock banner already explains why editing stopped.
+            }
+          } else {
+            setLockBanner(`锁续期失败：${apiErr.message || "网络异常"}`);
+          }
+        }
+      })();
+    }, LOCK_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [extractionId, lock?.mode, lock?.token, lock?.lockedBy, reload]);
+
   const runAutosave = useCallback(
     async (payload: {
       cell?: ReviewCellPatch;
@@ -185,13 +242,14 @@ export function ReviewScreen({
       if (!extId || !currentLock || currentLock.mode !== "edit" || !currentLock.token) {
         return;
       }
-      try {
-        const res = await autosaveReview(extId, {
-          lock_token: currentLock.token,
-          base_version: reviewVersionRef.current,
-          cell_patches: payload.cell ? [payload.cell] : [],
-          row_patches: payload.row ? [payload.row] : [],
-        });
+      const lockToken = currentLock.token;
+      const request = (baseVersion: number) => ({
+        lock_token: lockToken,
+        base_version: baseVersion,
+        cell_patches: payload.cell ? [payload.cell] : [],
+        row_patches: payload.row ? [payload.row] : [],
+      });
+      const applyResponse = (res: Awaited<ReturnType<typeof autosaveReview>>) => {
         if (res.review_draft) {
           setDraft(res.review_draft);
         }
@@ -204,8 +262,24 @@ export function ReviewScreen({
               }
             : prev,
         );
+      };
+      try {
+        const res = await autosaveReview(extId, request(reviewVersionRef.current));
+        applyResponse(res);
       } catch (e) {
         const apiErr = e as ApiError;
+        if (apiErr.status === 409 && isReviewVersionMismatch(apiErr)) {
+          try {
+            const nextVersion = await reload(extId);
+            if (nextVersion !== null) {
+              const retryRes = await autosaveReview(extId, request(nextVersion));
+              applyResponse(retryRes);
+              return;
+            }
+          } catch {
+            // Fall through to conservative read-only handling below.
+          }
+        }
         if (apiErr.status === 409) {
           setLockBanner(
             "草稿被他人改动或锁已失效，已刷新为只读视图。",
@@ -231,11 +305,21 @@ export function ReviewScreen({
     [extractionId, reload],
   );
 
+  const enqueueAutosave = useCallback(
+    (payload: { cell?: ReviewCellPatch; row?: ReviewRowDecisionPatch }) => {
+      autosaveQueueRef.current = autosaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => runAutosave(payload));
+      void autosaveQueueRef.current;
+    },
+    [runAutosave],
+  );
+
   function handleCellPatch(patch: ReviewCellPatch) {
-    void runAutosave({ cell: patch });
+    enqueueAutosave({ cell: patch });
   }
   function handleRowPatch(patch: ReviewRowDecisionPatch) {
-    void runAutosave({ row: patch });
+    enqueueAutosave({ row: patch });
   }
 
   async function handleConfirm(): Promise<void> {
@@ -248,9 +332,15 @@ export function ReviewScreen({
     setError(null);
     setInvalidCells([]);
     try {
+      await autosaveQueueRef.current.catch(() => undefined);
+      const currentLock = lockRef.current;
+      if (!currentLock || currentLock.mode !== "edit" || !currentLock.token) {
+        setError("当前为只读，无法提交。");
+        return;
+      }
       const res = await confirmReviewDraft(extractionId, {
-        lock_token: lock.token,
-        base_version: reviewVersion,
+        lock_token: currentLock.token,
+        base_version: reviewVersionRef.current,
       });
       if (res.invalid_cells && res.invalid_cells.length > 0) {
         setInvalidCells(res.invalid_cells);
@@ -450,5 +540,23 @@ function CenteredScreen({ children }: { children: ReactNode }) {
     >
       {children}
     </div>
+  );
+}
+
+function isReviewVersionMismatch(err: ApiError): boolean {
+  const detail =
+    typeof err.detail === "string"
+      ? err.detail
+      : typeof err.message === "string"
+        ? err.message
+        : "";
+  return detail.startsWith("review_version mismatch");
+}
+
+function displayJobError(message: string | null | undefined): string {
+  if (!message) return "任务失败";
+  return message.replace(
+    /\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\b/g,
+    "凭证",
   );
 }

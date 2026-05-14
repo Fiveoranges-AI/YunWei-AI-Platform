@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E4
 from yunwei_win.db import Base, dispose_all  # noqa: E402
 from yunwei_win.models.document import Document  # noqa: E402
 from yunwei_win.models.document_extraction import DocumentExtraction  # noqa: E402
-from yunwei_win.models.document_parse import DocumentParse  # noqa: E402
+from yunwei_win.models.document_parse import DocumentParse, DocumentParseStatus  # noqa: E402
 from yunwei_win.services.schema_ingest import auto as auto_module  # noqa: E402
 from yunwei_win.services.schema_ingest.auto import auto_ingest  # noqa: E402
 from yunwei_win.services.schema_ingest.extraction_normalize import (  # noqa: E402
@@ -257,6 +257,61 @@ async def test_auto_ingest_stores_validation_warnings(monkeypatch, tmp_path):
             assert any(
                 "source ref chunk:99 not found" in w
                 for w in extraction.validation_warnings
+            )
+    finally:
+        await engine.dispose()
+        await dispose_all()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_degrades_parser_failure_into_review_draft(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+
+    async def fail_parse(**_kwargs):
+        raise RuntimeError("VISION_AGENT_API_KEY is not configured")
+
+    monkeypatch.setattr(auto_module, "parse_file_factory", fail_parse)
+    _patch_router(monkeypatch, selected=["customers"])
+    _patch_extractor(monkeypatch, tables={})
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                file_bytes=b"%PDF-1.4 placeholder",
+                original_filename="quote.pdf",
+                content_type="application/pdf",
+                source_hint="file",
+            )
+            await session.commit()
+
+            parse = (
+                await session.execute(
+                    select(DocumentParse).where(DocumentParse.id == result.parse_id)
+                )
+            ).scalar_one()
+            assert parse.status == DocumentParseStatus.failed
+            assert "VISION_AGENT_API_KEY" in (parse.error_message or "")
+            assert parse.artifact["metadata"]["parse_failed"] is True
+
+            extraction = (
+                await session.execute(
+                    select(DocumentExtraction).where(
+                        DocumentExtraction.id == result.extraction_id
+                    )
+                )
+            ).scalar_one()
+            assert result.review_draft is not None
+            assert any(
+                "parse failed: RuntimeError" in warning
+                for warning in (extraction.validation_warnings or [])
+            )
+            assert not any(
+                "API_KEY" in warning
+                for warning in (extraction.validation_warnings or [])
             )
     finally:
         await engine.dispose()

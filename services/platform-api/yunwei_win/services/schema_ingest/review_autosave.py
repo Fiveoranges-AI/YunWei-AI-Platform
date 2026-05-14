@@ -153,11 +153,6 @@ def _apply_one_cell_patch(cell: ReviewCell, patch: ReviewCellPatch) -> None:
         cell.status = "edited"
         cell.source = "edited"
 
-    if patch.entity_id is not None:
-        # Carry the entity link through to legacy consumers; vNext callers
-        # use row_decision.selected_entity_id instead.
-        pass
-
 
 def _apply_row_patches(
     draft: ReviewDraft, patches: list[ReviewRowDecisionPatch]
