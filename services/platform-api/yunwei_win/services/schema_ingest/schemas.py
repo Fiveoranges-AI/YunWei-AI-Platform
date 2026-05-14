@@ -74,6 +74,7 @@ class ReviewTable(BaseModel):
 class ReviewDraftDocument(BaseModel):
     filename: str
     summary: str | None = None
+    source_text: str | None = None
 
 
 class ReviewDraftRoutePlan(BaseModel):

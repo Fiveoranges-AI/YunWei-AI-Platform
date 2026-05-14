@@ -258,7 +258,15 @@ async def test_get_schema_job_with_extraction_embeds_review_draft(monkeypatch, t
             res = await ac.get(f"/api/win/ingest/jobs/{jid}")
             assert res.status_code == 200, res.text
             body = res.json()
-            assert body["review_draft"] == draft_payload
+            returned = body["review_draft"]
+            # Read path hydrates document.source_text from Document.ocr_text
+            # when the stored draft lacks it. Compare apart from that key.
+            assert returned["document"]["source_text"] == "some text"
+            returned_without_source = dict(returned)
+            returned_without_source["document"] = {
+                k: v for k, v in returned["document"].items() if k != "source_text"
+            }
+            assert returned_without_source == draft_payload
             assert body["extraction"]["status"] == "pending_review"
     finally:
         await engine.dispose()
@@ -343,6 +351,330 @@ async def test_patch_extraction_updates_review_draft(monkeypatch, tmp_path):
             assert res.status_code == 200, res.text
             body = res.json()
             assert body["review_draft"]["tables"][0]["rows"][0]["cells"][0]["value"] == 12345
+    finally:
+        await engine.dispose()
+
+
+# ---------- GET /jobs/{id} source_text hydration ------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_job_returns_source_text_from_extraction(monkeypatch, tmp_path):
+    """When a stored review_draft has no document.source_text but the linked
+    Document has ``ocr_text``, the API hydrates the response with it (without
+    writing back to the DB)."""
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_ensure_helpers(monkeypatch)
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        doc = Document(
+            type=DocumentType.text_note,
+            file_url="file:///tmp/x.txt",
+            original_filename="x.pdf",
+            file_sha256="3" * 64,
+            file_size_bytes=10,
+            ocr_text="测试合同文本",
+        )
+        session.add(doc)
+        await session.flush()
+        ex_id = uuid.uuid4()
+        draft_payload = {
+            "extraction_id": str(ex_id),
+            "document_id": str(doc.id),
+            "schema_version": 1,
+            "status": "pending_review",
+            "document": {"filename": "x.pdf"},  # no source_text
+            "route_plan": {"selected_pipelines": []},
+            "tables": [],
+        }
+        extraction = DocumentExtraction(
+            id=ex_id,
+            document_id=doc.id,
+            schema_version=1,
+            provider="landingai",
+            route_plan={},
+            raw_pipeline_results=[],
+            review_draft=draft_payload,
+            status=DocumentExtractionStatus.pending_review,
+        )
+        session.add(extraction)
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        job = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="x.pdf", source_hint="file",
+            status=IngestJobStatus.extracted, stage=IngestJobStage.done,
+            attempts=1,
+            document_id=doc.id,
+            extraction_id=ex_id,
+            result_json=draft_payload,
+        )
+        session.add(job)
+        await session.commit()
+        jid = str(job.id)
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.get(f"/api/win/ingest/jobs/{jid}")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body["review_draft"]["document"]["source_text"] == "测试合同文本"
+
+        # The DB-stored draft must not have been mutated.
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            ext = (
+                await session.execute(
+                    select(DocumentExtraction).where(DocumentExtraction.id == ex_id)
+                )
+            ).scalar_one()
+            assert "source_text" not in (ext.review_draft.get("document") or {})
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_get_job_keeps_existing_source_text(monkeypatch, tmp_path):
+    """If the stored review_draft already has ``document.source_text``, do
+    not override it from ``Document.ocr_text``."""
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_ensure_helpers(monkeypatch)
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        doc = Document(
+            type=DocumentType.text_note,
+            file_url="file:///tmp/x.txt",
+            original_filename="x.pdf",
+            file_sha256="4" * 64,
+            file_size_bytes=10,
+            ocr_text="文档 OCR 文本",
+        )
+        session.add(doc)
+        await session.flush()
+        ex_id = uuid.uuid4()
+        draft_payload = {
+            "extraction_id": str(ex_id),
+            "document_id": str(doc.id),
+            "schema_version": 1,
+            "status": "pending_review",
+            "document": {"filename": "x.pdf", "source_text": "已存"},
+            "route_plan": {"selected_pipelines": []},
+            "tables": [],
+        }
+        extraction = DocumentExtraction(
+            id=ex_id,
+            document_id=doc.id,
+            schema_version=1,
+            provider="landingai",
+            route_plan={},
+            raw_pipeline_results=[],
+            review_draft=draft_payload,
+            status=DocumentExtractionStatus.pending_review,
+        )
+        session.add(extraction)
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        job = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="x.pdf", source_hint="file",
+            status=IngestJobStatus.extracted, stage=IngestJobStage.done,
+            attempts=1,
+            document_id=doc.id,
+            extraction_id=ex_id,
+            result_json=draft_payload,
+        )
+        session.add(job)
+        await session.commit()
+        jid = str(job.id)
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.get(f"/api/win/ingest/jobs/{jid}")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body["review_draft"]["document"]["source_text"] == "已存"
+    finally:
+        await engine.dispose()
+
+
+# ---------- DELETE /jobs/{id} single-job history deletion ----------------
+
+
+@pytest.mark.asyncio
+async def test_delete_history_job_allowed_for_canceled(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_ensure_helpers(monkeypatch)
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        job = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="c.pdf", source_hint="file",
+            status=IngestJobStatus.canceled, stage=IngestJobStage.done,
+            attempts=1,
+        )
+        session.add(job)
+        await session.commit()
+        jid = str(job.id)
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.delete(f"/api/win/ingest/jobs/{jid}")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body == {"deleted": 1, "job_id": jid, "status": "canceled"}
+
+            after = await ac.get(f"/api/win/ingest/jobs/{jid}")
+            assert after.status_code == 404
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_delete_history_job_allowed_for_confirmed(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_ensure_helpers(monkeypatch)
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        job = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="ok.pdf", source_hint="file",
+            status=IngestJobStatus.confirmed, stage=IngestJobStage.done,
+            attempts=1,
+        )
+        session.add(job)
+        await session.commit()
+        jid = str(job.id)
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.delete(f"/api/win/ingest/jobs/{jid}")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body == {"deleted": 1, "job_id": jid, "status": "confirmed"}
+
+            after = await ac.get(f"/api/win/ingest/jobs/{jid}")
+            assert after.status_code == 404
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_delete_history_job_rejects_extracted_with_409(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_ensure_helpers(monkeypatch)
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        job = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="e.pdf", source_hint="file",
+            status=IngestJobStatus.extracted, stage=IngestJobStage.done,
+            attempts=1,
+        )
+        session.add(job)
+        await session.commit()
+        jid = str(job.id)
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.delete(f"/api/win/ingest/jobs/{jid}")
+            assert res.status_code == 409, res.text
+
+            after = await ac.get(f"/api/win/ingest/jobs/{jid}")
+            assert after.status_code == 200
+            assert after.json()["status"] == "extracted"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_delete_history_job_keeps_document_and_extraction(monkeypatch, tmp_path):
+    """Deleting an IngestJob row must not touch Document / DocumentExtraction
+    rows; we only remove the job row itself."""
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    _stub_ensure_helpers(monkeypatch)
+    _stub_queue(monkeypatch)
+    engine = await _make_engine()
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        doc = Document(
+            type=DocumentType.text_note,
+            file_url="file:///tmp/x.txt",
+            original_filename="k.pdf",
+            file_sha256="5" * 64,
+            file_size_bytes=10,
+            ocr_text="ocr",
+        )
+        session.add(doc)
+        await session.flush()
+        ex_id = uuid.uuid4()
+        extraction = DocumentExtraction(
+            id=ex_id,
+            document_id=doc.id,
+            schema_version=1,
+            provider="landingai",
+            route_plan={},
+            raw_pipeline_results=[],
+            review_draft={},
+            status=DocumentExtractionStatus.pending_review,
+        )
+        session.add(extraction)
+        b = IngestBatch(enterprise_id="tenant_test", source="seed")
+        session.add(b)
+        await session.flush()
+        job = IngestJob(
+            batch_id=b.id, enterprise_id="tenant_test",
+            original_filename="k.pdf", source_hint="file",
+            status=IngestJobStatus.confirmed, stage=IngestJobStage.done,
+            attempts=1,
+            document_id=doc.id,
+            extraction_id=ex_id,
+        )
+        session.add(job)
+        await session.commit()
+        jid = str(job.id)
+        doc_id = doc.id
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.delete(f"/api/win/ingest/jobs/{jid}")
+            assert res.status_code == 200, res.text
+
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            doc_row = (
+                await session.execute(
+                    select(Document).where(Document.id == doc_id)
+                )
+            ).scalar_one_or_none()
+            assert doc_row is not None
+            ext_row = (
+                await session.execute(
+                    select(DocumentExtraction).where(DocumentExtraction.id == ex_id)
+                )
+            ).scalar_one_or_none()
+            assert ext_row is not None
+            job_row = (
+                await session.execute(
+                    select(IngestJob).where(IngestJob.original_filename == "k.pdf")
+                )
+            ).scalar_one_or_none()
+            assert job_row is None
     finally:
         await engine.dispose()
 
