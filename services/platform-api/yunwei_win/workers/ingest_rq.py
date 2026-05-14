@@ -21,10 +21,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yunwei_win.db import ensure_ingest_job_tables, get_engine_for
+from yunwei_win.db import ensure_ingest_job_tables, ensure_ingest_v2_tables, get_engine_for
 from yunwei_win.models import IngestJob, IngestJobStage, IngestJobStatus
 from yunwei_win.services.ingest.auto import auto_ingest
 from yunwei_win.services.ingest.evidence import PreStoredFile
+from yunwei_win.services.ingest_v2 import auto_ingest_v2
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ async def process_ingest_job(job_id: str, enterprise_id: str) -> None:
 
     engine = await get_engine_for(enterprise_id)
     await ensure_ingest_job_tables(engine)
+    await ensure_ingest_v2_tables(engine)
 
     # Phase 1: load + mark running. Skip terminal/extracted jobs so a
     # duplicate enqueue (retry races, RQ replay) is idempotent.
@@ -217,38 +219,49 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
                     )
 
         source_hint = job.source_hint or "file"
+        workflow_version = (job.workflow_version or "v1").lower()
 
+        v1_result = None
+        v2_result = None
         try:
-            result = await auto_ingest(
-                session=session,
-                file_bytes=file_bytes,
-                original_filename=job.original_filename,
-                content_type=job.content_type,
-                text_content=job.text_content,
-                source_hint=source_hint,  # type: ignore[arg-type]
-                uploader=job.uploader,
-                progress=progress,
-                pre_stored=pre,
-            )
+            if workflow_version == "v2":
+                v2_result = await auto_ingest_v2(
+                    session=session,
+                    file_bytes=file_bytes,
+                    original_filename=job.original_filename,
+                    content_type=job.content_type,
+                    text_content=job.text_content,
+                    source_hint=source_hint,  # type: ignore[arg-type]
+                    uploader=job.uploader,
+                    progress=progress,
+                    pre_stored=pre,
+                )
+            else:
+                v1_result = await auto_ingest(
+                    session=session,
+                    file_bytes=file_bytes,
+                    original_filename=job.original_filename,
+                    content_type=job.content_type,
+                    text_content=job.text_content,
+                    source_hint=source_hint,  # type: ignore[arg-type]
+                    uploader=job.uploader,
+                    progress=progress,
+                    pre_stored=pre,
+                )
         except _CanceledMidFlight:
             logger.info("worker: job %s canceled mid-flight", job_uuid)
             return
 
-        # ``auto_ingest`` itself does not always commit — the Mistral path
-        # commits before its extractor fan-out, but the LandingAI path only
-        # ``flush()``-es Document inserts and the raw_llm_response update.
-        # The web /auto endpoint commits in its surrounding NDJSON stream
-        # wrapper; the worker has no such wrapper. Without an explicit
-        # commit here the ``async with`` exits and rolls back the Document
-        # INSERT → the follow-up session's UPDATE on IngestJob.document_id
-        # then violates the documents FK. This was the root cause of
-        # ``ForeignKeyViolationError: ingest_jobs_document_id_fkey`` on the
-        # SCYN250620 / LandingAI deploy.
+        # ``auto_ingest`` / ``auto_ingest_v2`` only ``flush()`` the Document
+        # row; we own the surrounding commit so the row survives this session
+        # context and the follow-up session can stamp ``IngestJob.document_id``
+        # without violating the documents FK. See SCYN250620 incident for the
+        # original V1 bug.
         await session.commit()
 
     # Persist result on a fresh session. The earlier commit above made the
-    # Document + raw_llm_response durable; this second session writes the
-    # IngestJob.document_id + result_json against committed data.
+    # Document + extraction rows durable; this second session writes the
+    # IngestJob columns against committed data.
     async with AsyncSession(engine, expire_on_commit=False) as session:
         j = (
             await session.execute(
@@ -259,35 +272,44 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
             return
         if j.status == IngestJobStatus.canceled:
             return
-        j.document_id = result.document_id
-        j.result_json = {
-            "document_id": str(result.document_id),
-            "plan": result.plan.model_dump(mode="json"),
-            "route_plan": (
-                result.route_plan.model_dump(mode="json")
-                if result.route_plan
-                else None
-            ),
-            "draft": result.draft.model_dump(mode="json"),
-            "pipeline_results": [
-                r.model_dump(mode="json")
-                for r in getattr(result.draft, "pipeline_results", [])
-            ],
-            "candidates": {
-                "customer": [
-                    _candidate_dict(c) for c in result.candidates.customer_candidates
+        if v2_result is not None:
+            j.document_id = v2_result.document_id
+            j.extraction_id = v2_result.extraction_id
+            j.result_json = v2_result.review_draft.model_dump(mode="json")
+            j.status = IngestJobStatus.extracted
+            j.stage = IngestJobStage.done
+            j.progress_message = "已生成 schema 草稿，待人工确认"
+            j.finished_at = datetime.now(timezone.utc)
+        elif v1_result is not None:
+            j.document_id = v1_result.document_id
+            j.result_json = {
+                "document_id": str(v1_result.document_id),
+                "plan": v1_result.plan.model_dump(mode="json"),
+                "route_plan": (
+                    v1_result.route_plan.model_dump(mode="json")
+                    if v1_result.route_plan
+                    else None
+                ),
+                "draft": v1_result.draft.model_dump(mode="json"),
+                "pipeline_results": [
+                    r.model_dump(mode="json")
+                    for r in getattr(v1_result.draft, "pipeline_results", [])
                 ],
-                "contacts": [
-                    [_candidate_dict(c) for c in slot]
-                    for slot in result.candidates.contact_candidates
-                ],
-            },
-            "needs_review_fields": list(result.draft.needs_review_fields),
-        }
-        j.status = IngestJobStatus.extracted
-        j.stage = IngestJobStage.done
-        j.progress_message = "已生成草稿，待人工确认"
-        j.finished_at = datetime.now(timezone.utc)
+                "candidates": {
+                    "customer": [
+                        _candidate_dict(c) for c in v1_result.candidates.customer_candidates
+                    ],
+                    "contacts": [
+                        [_candidate_dict(c) for c in slot]
+                        for slot in v1_result.candidates.contact_candidates
+                    ],
+                },
+                "needs_review_fields": list(v1_result.draft.needs_review_fields),
+            }
+            j.status = IngestJobStatus.extracted
+            j.stage = IngestJobStage.done
+            j.progress_message = "已生成草稿，待人工确认"
+            j.finished_at = datetime.now(timezone.utc)
         await session.commit()
 
 

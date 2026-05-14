@@ -1,10 +1,13 @@
 """Re-export all models so SQLAlchemy's mapper registry sees them.
 
-Two layers:
+Three layers:
   Entity layer:  customers / contacts / orders / contracts / documents
                  + field_provenance / llm_calls
   Memory layer:  customer_events / commitments / tasks / risk_signals
                  / memory_items / inbox_items
+  V2 schema layer: company_schema_tables / company_schema_fields /
+                   schema_change_proposals + foundation business tables
+                   (products / invoices / payments / shipments / ...)
 """
 
 # Customer-memory module first because document.py now imports its enums.
@@ -45,6 +48,30 @@ from yunwei_win.models.ingest_job import (
 from yunwei_win.models.llm_call import LLMCall
 from yunwei_win.models.order import Order
 
+# ---------------------------------------------------------------------------
+# V2 schema-first company data layer.
+# ---------------------------------------------------------------------------
+from yunwei_win.models.company_schema import (
+    CompanySchemaField,
+    CompanySchemaTable,
+    SchemaChangeProposal,
+)
+from yunwei_win.models.company_data import (
+    ContractPaymentMilestone,
+    CustomerJournalItem,
+    Invoice,
+    InvoiceItem,
+    Payment,
+    Product,
+    ProductRequirement,
+    Shipment,
+    ShipmentItem,
+)
+from yunwei_win.models.document_extraction import (
+    DocumentExtraction,
+    DocumentExtractionStatus,
+)
+
 __all__ = [
     # profile
     "Contact", "ContactRole",
@@ -65,4 +92,13 @@ __all__ = [
     "CustomerInboxItem", "InboxSourceKind", "InboxStatus",
     "DocumentProcessingStatus", "DocumentReviewStatus",
     "InputChannel", "InputModality",
+    # V2 schema catalog
+    "CompanySchemaTable", "CompanySchemaField", "SchemaChangeProposal",
+    # V2 company data foundation
+    "Product", "ProductRequirement", "ContractPaymentMilestone",
+    "Invoice", "InvoiceItem", "Payment",
+    "Shipment", "ShipmentItem",
+    "CustomerJournalItem",
+    # V2 extraction record
+    "DocumentExtraction", "DocumentExtractionStatus",
 ]

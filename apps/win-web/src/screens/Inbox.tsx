@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GoFn } from "../App";
 import { listIngestJobs, type IngestJob } from "../api/ingest";
+import { listIngestV2Jobs } from "../api/ingestV2";
+import type { IngestV2Job } from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { fmtRelative } from "../lib/format";
@@ -10,6 +12,7 @@ const IDLE_POLL_MS = 6000;
 const ERROR_POLL_MS = 5000;
 
 type TabId = "processing" | "pending" | "history";
+type InboxJob = IngestJob | IngestV2Job;
 
 const STAGE_LABEL: Record<string, string> = {
   received: "接收中",
@@ -24,8 +27,8 @@ const STAGE_LABEL: Record<string, string> = {
 
 export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, string> }) {
   const isDesktop = useIsDesktop();
-  const [activeJobs, setActiveJobs] = useState<IngestJob[]>([]);
-  const [historyJobs, setHistoryJobs] = useState<IngestJob[]>([]);
+  const [activeJobs, setActiveJobs] = useState<InboxJob[]>([]);
+  const [historyJobs, setHistoryJobs] = useState<InboxJob[]>([]);
   const [tab, setTab] = useState<TabId>("pending");
   const [selectedId, setSelectedId] = useState<string | null>(params.jobId ?? null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -38,7 +41,7 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
 
     async function tick() {
       try {
-        const rows = await listIngestJobs("active", 50);
+        const rows = await listInboxJobs("active", 50);
         if (cancelled) return;
         setActiveJobs(rows);
         const hasInFlight = rows.some((j) => j.status === "queued" || j.status === "running");
@@ -60,7 +63,7 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
     if (tab !== "history" || historyLoaded) return;
     let cancelled = false;
     setHistoryError(null);
-    listIngestJobs("history", 50)
+    listInboxJobs("history", 50)
       .then((rows) => {
         if (!cancelled) {
           setHistoryJobs(rows);
@@ -163,6 +166,24 @@ export function InboxScreen({ go, params }: { go: GoFn; params: Record<string, s
   );
 }
 
+async function listInboxJobs(
+  status: "active" | "history" | "all",
+  limit: number,
+): Promise<InboxJob[]> {
+  const [v1, v2] = await Promise.all([
+    listIngestJobs(status, limit),
+    listIngestV2Jobs(status, limit),
+  ]);
+  return [...v1, ...v2]
+    .sort((a, b) => jobSortTime(b) - jobSortTime(a))
+    .slice(0, limit);
+}
+
+function jobSortTime(job: InboxJob): number {
+  const raw = job.finished_at ?? job.updated_at ?? job.created_at;
+  return raw ? new Date(raw).getTime() || 0 : 0;
+}
+
 // ──────────────── tab strip ────────────────
 
 function TabStrip({
@@ -232,7 +253,7 @@ function TabStrip({
 
 // ──────────────── rows ────────────────
 
-function sourceIcon(job: IngestJob): JSX.Element {
+function sourceIcon(job: InboxJob): JSX.Element {
   const hint = job.source_hint;
   if (hint === "camera") return I.camera(14);
   if (hint === "pasted_text") return I.chat(14);
@@ -242,7 +263,7 @@ function sourceIcon(job: IngestJob): JSX.Element {
   return I.doc(14);
 }
 
-function SourceTile({ job, size = 32 }: { job: IngestJob; size?: number }) {
+function SourceTile({ job, size = 32 }: { job: InboxJob; size?: number }) {
   return (
     <div
       style={{
@@ -262,7 +283,7 @@ function SourceTile({ job, size = 32 }: { job: IngestJob; size?: number }) {
   );
 }
 
-function ProcessingRow({ job }: { job: IngestJob }) {
+function ProcessingRow({ job }: { job: InboxJob }) {
   // Backend doesn't expose a 0..1 progress, so approximate from stage order.
   const stages = ["received", "stored", "ocr", "route", "extract", "merge", "draft", "done"];
   const idx = Math.max(0, stages.indexOf(job.stage));
@@ -313,7 +334,7 @@ function PendingRow({
   active,
   onClick,
 }: {
-  job: IngestJob;
+  job: InboxJob;
   active: boolean;
   onClick: () => void;
 }) {
@@ -381,9 +402,9 @@ function HistoryList({
   error,
   onOpen,
 }: {
-  jobs: IngestJob[];
+  jobs: InboxJob[];
   error: string | null;
-  onOpen: (j: IngestJob) => void;
+  onOpen: (j: InboxJob) => void;
 }) {
   if (error) {
     return (
@@ -396,9 +417,9 @@ function HistoryList({
     return <EmptyHint text="暂无历史归档" />;
   }
   // Group by relative day buckets — today / yesterday / earlier.
-  const today: IngestJob[] = [];
-  const yesterday: IngestJob[] = [];
-  const earlier: IngestJob[] = [];
+  const today: InboxJob[] = [];
+  const yesterday: InboxJob[] = [];
+  const earlier: InboxJob[] = [];
   const now = Date.now();
   for (const j of jobs) {
     const when = j.finished_at ?? j.updated_at ?? j.created_at;
@@ -452,7 +473,7 @@ function DayHeader({ label }: { label: string }) {
   );
 }
 
-function HistoryRow({ job, onClick }: { job: IngestJob; onClick: () => void }) {
+function HistoryRow({ job, onClick }: { job: InboxJob; onClick: () => void }) {
   const when = job.finished_at ?? job.updated_at ?? job.created_at;
   const statusLabel =
     job.status === "confirmed" ? "已归档" :
@@ -500,7 +521,7 @@ function HistoryRow({ job, onClick }: { job: IngestJob; onClick: () => void }) {
 
 // ──────────────── right pane ────────────────
 
-function PreviewPane({ job, onReview }: { job: IngestJob; onReview: () => void }) {
+function PreviewPane({ job, onReview }: { job: InboxJob; onReview: () => void }) {
   const when = job.finished_at ?? job.updated_at ?? job.created_at;
   return (
     <div
@@ -744,7 +765,7 @@ function EmptyHint({
   );
 }
 
-function describeSource(job: IngestJob): string {
+function describeSource(job: InboxJob): string {
   if (job.source_hint === "camera") return "拍照";
   if (job.source_hint === "pasted_text") return "粘贴文本";
   const name = (job.original_filename || "").toLowerCase();

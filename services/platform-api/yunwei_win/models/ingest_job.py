@@ -127,6 +127,27 @@ class IngestJob(Base):
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ---- V2 schema-first ingest --------------------------------------------
+    # ``workflow_version`` lets the worker fork V1 vs V2 extraction without
+    # touching the row layout for legacy jobs. New uploads via /ingest/v2/jobs
+    # set this to ``"v2"``; pre-V2 rows stay on ``"v1"`` thanks to the
+    # server_default. ``extraction_id`` links to the DocumentExtraction that
+    # carries the materialized ReviewDraft for V2 jobs.
+    workflow_version: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="v1",
+        server_default="v1",
+        index=True,
+    )
+    extraction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("document_extractions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=_utcnow,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import type { GoFn } from "../App";
-import { createIngestJobs } from "../api/ingest";
+import { createIngestV2Jobs } from "../api/ingestV2";
 import { I } from "../icons";
 import { useIsDesktop, useIsTablet } from "../lib/breakpoints";
 import { markCustomersChanged } from "../lib/customerRefresh";
@@ -104,10 +104,9 @@ export function UploadScreen({ go }: { go: GoFn }) {
           ? "camera"
           : "file";
 
-      await createIngestJobs({
-        files: files.map((f) => f.blob),
-        text: hasText ? trimmedText : undefined,
+      await createIngestV2Jobs(files.map((f) => f.blob), {
         sourceHint,
+        textContent: hasText ? trimmedText : undefined,
       });
 
       for (const f of files) if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);

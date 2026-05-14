@@ -19,14 +19,25 @@ import {
   type Batch,
   type CustomerDecisionOverride,
 } from "../api/ingest";
+import {
+  confirmReviewDraft,
+  getIngestV2Job,
+  ignoreReviewDraft,
+  isReviewDraft,
+  type ApiError,
+} from "../api/ingestV2";
 import { EvidenceChip } from "../components/EvidenceChip";
 import { Mono } from "../components/Mono";
 import { Section } from "../components/Section";
+import { ReviewTableWorkspace } from "../components/review/ReviewTableWorkspace";
 import type {
+  ConfirmExtractionInvalidCell,
   CustomerListItem,
   EditableDraftPath,
   EditableFieldMeta,
   Review,
+  ReviewCellPatch,
+  ReviewDraft,
   ReviewExtraction,
   SchemaSummary,
   SchemaSummaryItem,
@@ -56,6 +67,13 @@ export function ReviewScreen({
   const isDesktop = useIsDesktop();
   const [review, setReview] = useState<Review | null>(null);
   const [batch, setBatch] = useState<Batch | null>(null);
+  // V2 schema-first state. When `draftV2` is set, the V2 workspace
+  // renders and the legacy V1 path is skipped entirely.
+  const [draftV2, setDraftV2] = useState<ReviewDraft | null>(null);
+  const [v2Loading, setV2Loading] = useState<boolean>(Boolean(params?.jobId));
+  const [v2Submitting, setV2Submitting] = useState(false);
+  const [v2SubmitError, setV2SubmitError] = useState<string | null>(null);
+  const [v2InvalidCells, setV2InvalidCells] = useState<ConfirmExtractionInvalidCell[]>([]);
   const [showEvidence, setShowEvidence] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -74,6 +92,47 @@ export function ReviewScreen({
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      // 0) V2 schema-first path. Try the V2 endpoint first; if the
+      //    backend reports 404 or the job is V1, fall through to the
+      //    V1 loader below. V2 always wins when both paths could load
+      //    the job — the backend marks V2 jobs explicitly.
+      if (jobId) {
+        try {
+          const v2Job = await getIngestV2Job(jobId);
+          if (cancelled) return;
+          if (v2Job.workflow_version === "v2") {
+            const draft =
+              v2Job.review_draft ??
+              (isReviewDraft(v2Job.result_json) ? (v2Job.result_json as ReviewDraft) : null);
+            if (draft) {
+              setDraftV2(draft);
+              setV2Loading(false);
+              return;
+            }
+            // V2 job exists but extraction is not ready yet — surface
+            // the same status messaging V1 uses.
+            setV2Loading(false);
+            setReviewError(
+              v2Job.status === "failed"
+                ? v2Job.error_message ?? "任务失败"
+                : v2Job.status === "canceled"
+                  ? "任务已取消"
+                  : "任务尚未生成草稿",
+            );
+            return;
+          }
+        } catch (e) {
+          const apiErr = e as ApiError;
+          if (apiErr.status !== 404) {
+            // Non-404 V2 errors shouldn't blow up the V1 fallback;
+            // log to console and continue.
+            console.warn("[review] V2 fetch failed, falling back to V1:", apiErr);
+          }
+        }
+        setV2Loading(false);
+      } else {
+        setV2Loading(false);
+      }
       // 1) Preferred path: a job_id in the URL — survives refresh and is
       //    how Upload.tsx hands off in job mode.
       if (jobId) {
@@ -268,6 +327,121 @@ export function ReviewScreen({
     } finally {
       setArchiving(false);
     }
+  }
+
+  // ───────────── V2 handlers ─────────────
+
+  async function handleV2Submit(patches: ReviewCellPatch[]): Promise<void> {
+    if (!draftV2 || v2Submitting) return;
+    setV2Submitting(true);
+    setV2SubmitError(null);
+    setV2InvalidCells([]);
+    try {
+      const res = await confirmReviewDraft(draftV2.extraction_id, {
+        review_draft: draftV2,
+        patches,
+      });
+      if (res.invalid_cells && res.invalid_cells.length > 0) {
+        setV2InvalidCells(res.invalid_cells);
+        setV2SubmitError("部分字段未通过校验，请检查后再次提交");
+        return;
+      }
+      markCustomersChanged();
+      setArchiveResult({ confirmedDocuments: 1, customerIds: [], warnings: [] });
+      setDone(true);
+    } catch (e) {
+      const apiErr = e as ApiError;
+      if (apiErr.detail && typeof apiErr.detail === "object") {
+        const d = apiErr.detail as { invalid_cells?: ConfirmExtractionInvalidCell[] };
+        if (Array.isArray(d.invalid_cells)) {
+          setV2InvalidCells(d.invalid_cells);
+        }
+      }
+      setV2SubmitError(apiErr.message || "归档失败");
+    } finally {
+      setV2Submitting(false);
+    }
+  }
+
+  async function handleV2Ignore(): Promise<void> {
+    if (!draftV2 || v2Submitting) return;
+    setV2Submitting(true);
+    setV2SubmitError(null);
+    try {
+      await ignoreReviewDraft(draftV2.extraction_id);
+      go("upload");
+    } catch (e) {
+      const apiErr = e as ApiError;
+      setV2SubmitError(apiErr.message || "忽略失败");
+    } finally {
+      setV2Submitting(false);
+    }
+  }
+
+  // V2 render branch — keep V1 untouched below.
+  if (v2Loading) {
+    return (
+      <div
+        className="screen"
+        style={{ background: "var(--bg)", alignItems: "center", justifyContent: "center", display: "flex" }}
+      >
+        <div style={{ color: "var(--ink-400)", fontSize: 14 }}>AI 整理中…</div>
+      </div>
+    );
+  }
+
+  if (draftV2 && done) {
+    return (
+      <div
+        className="screen"
+        style={{ background: "var(--bg)", alignItems: "center", justifyContent: "center", display: "flex" }}
+      >
+        <div style={{ textAlign: "center", padding: 24 }}>
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 36,
+              margin: "0 auto 16px",
+              background: "var(--ok-100)",
+              color: "var(--ok-700)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {I.check(36)}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--ink-900)" }}>
+            已确认入库
+          </div>
+          <div style={{ fontSize: 14, color: "var(--ink-500)", marginTop: 6 }}>
+            {draftV2.document.filename}
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 24 }}>
+            <button className="btn btn-secondary" onClick={() => go("upload")}>
+              继续上传
+            </button>
+            <button className="btn btn-primary" onClick={() => go("list")}>
+              返回客户列表
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (draftV2) {
+    return (
+      <ReviewTableWorkspace
+        draft={draftV2}
+        onSubmit={handleV2Submit}
+        onIgnore={handleV2Ignore}
+        busy={v2Submitting}
+        submitError={v2SubmitError}
+        invalidCells={v2InvalidCells}
+      />
+    );
   }
 
   if (reviewError && !review) {
