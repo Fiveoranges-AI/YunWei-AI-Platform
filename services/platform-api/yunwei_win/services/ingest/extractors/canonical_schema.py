@@ -1,13 +1,21 @@
-"""Build extractor JSON Schemas from the tenant company schema catalog.
+"""Legacy pipeline-keyed bridge to the vNext selected-tables schema builder.
 
-Extractor providers should ask models to emit the same table/field shape that
-``ReviewDraft`` renders and confirm writes. This keeps LandingAI and DeepSeek
-behind one canonical contract:
+Old extractor providers and the legacy review-draft materializer key off
+``PipelineName`` (``identity``, ``contract_order``, ``finance``, ...).
+The vNext extraction schema is built from a list of company-schema
+table names instead.
 
-    { "<company_table_name>": { "<company_field_name>": value } }
+To keep the old call sites alive while the vNext rewrite lands, this
+module:
+- Keeps ``PIPELINE_TABLES`` mapping pipeline names to canonical table
+  lists so old code (review draft, providers) still resolves.
+- Delegates ``build_pipeline_schema_json`` to
+  ``build_selected_tables_schema_json``, which enforces
+  ``field_role in (extractable, identity_key)`` and drops every
+  ``system_link`` / ``audit`` field.
 
-Array tables use a list of row objects. Missing scalar fields should be null;
-missing array tables should be [].
+Once Task 4+ rewires extractor providers and the orchestrator to call
+the vNext API directly, this bridge can be deleted.
 """
 
 from __future__ import annotations
@@ -16,6 +24,9 @@ import json
 from typing import Any
 
 from yunwei_win.services.ingest.pipeline_schemas import PipelineName
+from yunwei_win.services.schema_ingest.extraction_schema import (
+    build_selected_tables_schema_json,
+)
 
 
 PIPELINE_TABLES: dict[PipelineName, list[str]] = {
@@ -35,129 +46,23 @@ PIPELINE_TABLES: dict[PipelineName, list[str]] = {
 
 
 def build_pipeline_schema_json(pipeline_name: str, catalog: dict[str, Any]) -> str:
-    """Return a JSON Schema for one routed pipeline using active catalog fields."""
+    """Legacy pipeline-keyed JSON schema bridge.
 
-    table_names = PIPELINE_TABLES.get(pipeline_name, [])
-    tables = _active_tables_by_name(catalog)
-    properties: dict[str, Any] = {}
+    Resolves ``pipeline_name`` to a canonical table list, then defers to the
+    vNext selected-tables builder. The builder excludes system/audit fields,
+    so the returned schema only contains extractable + identity_key fields.
+    """
 
-    for table_name in table_names:
-        table = tables.get(table_name)
-        if table is None:
-            continue
-        properties[table_name] = _table_schema(table)
-
-    if not properties:
+    table_names = PIPELINE_TABLES.get(pipeline_name, [])  # type: ignore[arg-type]
+    if not table_names:
         schema = {
             "type": "object",
             "description": (
-                "No active company schema tables are selected for pipeline "
+                f"No active company schema tables are selected for pipeline "
                 f"{pipeline_name}."
             ),
             "properties": {},
         }
-    else:
-        schema = {
-            "type": "object",
-            "description": (
-                "Extract only these company data tables. Use the exact table "
-                "and field names. Use null for missing scalar fields and [] "
-                "for missing array tables."
-            ),
-            "properties": properties,
-        }
-    return json.dumps(schema, ensure_ascii=False, sort_keys=True)
+        return json.dumps(schema, ensure_ascii=False, sort_keys=True)
 
-
-def _active_tables_by_name(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    tables: dict[str, dict[str, Any]] = {}
-    for table in catalog.get("tables") or []:
-        if not isinstance(table, dict):
-            continue
-        if table.get("is_active", True) is False:
-            continue
-        table_name = table.get("table_name")
-        if not isinstance(table_name, str) or not table_name:
-            continue
-        tables[table_name] = table
-    return tables
-
-
-def _table_schema(table: dict[str, Any]) -> dict[str, Any]:
-    active_fields = [
-        f for f in table.get("fields") or []
-        if isinstance(f, dict) and f.get("is_active", True) is not False
-    ]
-    active_fields.sort(key=lambda f: (f.get("sort_order", 0), f.get("field_name", "")))
-
-    row_schema = {
-        "type": "object",
-        "description": _table_description(table),
-        "properties": {
-            field["field_name"]: _field_schema(field)
-            for field in active_fields
-            if isinstance(field.get("field_name"), str)
-        },
-    }
-
-    is_array_table = bool(table.get("is_array")) or any(
-        bool(field.get("is_array")) for field in active_fields
-    )
-    if is_array_table:
-        return {
-            "type": "array",
-            "description": _table_description(table),
-            "items": row_schema,
-        }
-    return row_schema
-
-
-def _table_description(table: dict[str, Any]) -> str:
-    label = table.get("label") or table.get("table_name") or "table"
-    purpose = table.get("purpose")
-    if purpose:
-        return f"{label}：{purpose}"
-    return str(label)
-
-
-def _field_schema(field: dict[str, Any]) -> dict[str, Any]:
-    data_type = str(field.get("data_type") or "text").lower()
-    schema: dict[str, Any]
-    if data_type in {"integer", "int"}:
-        # Keep as string so OCR amounts like "90 天" can be captured and
-        # normalized/validated later instead of being dropped by the model.
-        schema = {"type": "string"}
-    elif data_type in {"decimal", "number", "float"}:
-        schema = {"type": "string"}
-    elif data_type == "boolean":
-        schema = {"type": "boolean"}
-    elif data_type == "json":
-        schema = {"type": "object"}
-    else:
-        schema = {"type": "string"}
-        if data_type == "date":
-            schema["format"] = "date"
-        elif data_type == "datetime":
-            schema["format"] = "date-time"
-
-    enum_values = field.get("enum_values")
-    if isinstance(enum_values, list) and enum_values:
-        schema["enum"] = [str(v) for v in enum_values if v is not None]
-
-    schema["description"] = _field_description(field, data_type)
-    return schema
-
-
-def _field_description(field: dict[str, Any], data_type: str) -> str:
-    label = str(field.get("label") or field.get("field_name") or "field")
-    parts = [label]
-    description = field.get("description")
-    if description:
-        parts.append(str(description))
-    extraction_hint = field.get("extraction_hint")
-    if extraction_hint:
-        parts.append(str(extraction_hint))
-    parts.append(f"data_type={data_type}")
-    if field.get("required"):
-        parts.append("required")
-    return "；".join(parts)
+    return build_selected_tables_schema_json(table_names, catalog)

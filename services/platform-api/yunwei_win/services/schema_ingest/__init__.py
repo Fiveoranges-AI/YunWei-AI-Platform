@@ -10,6 +10,9 @@ Public exports:
 
 from yunwei_win.services.schema_ingest.auto import AutoIngestResult, auto_ingest
 from yunwei_win.services.schema_ingest.confirm import confirm_review_draft
+from yunwei_win.services.schema_ingest.extraction_schema import (
+    build_selected_tables_schema_json,
+)
 from yunwei_win.services.schema_ingest.review_draft import (
     PIPELINE_TABLES,
     materialize_review_draft,
@@ -30,16 +33,24 @@ from yunwei_win.services.schema_ingest.schemas import (
     ReviewRowOperation,
     ReviewTable,
 )
+from yunwei_win.services.schema_ingest.table_router import (
+    RejectedTable,
+    SelectedTable,
+    TableRouteResult,
+    route_tables,
+)
 
 __all__ = [
     "PIPELINE_TABLES",
     "AutoIngestResult",
     "auto_ingest",
+    "build_selected_tables_schema_json",
     "confirm_review_draft",
     "materialize_review_draft",
     "ConfirmExtractionRequest",
     "ConfirmExtractionResponse",
     "ExtractionStatus",
+    "RejectedTable",
     "ReviewCell",
     "ReviewCellEvidence",
     "ReviewCellPatch",
@@ -51,4 +62,7 @@ __all__ = [
     "ReviewRow",
     "ReviewRowOperation",
     "ReviewTable",
+    "SelectedTable",
+    "TableRouteResult",
+    "route_tables",
 ]

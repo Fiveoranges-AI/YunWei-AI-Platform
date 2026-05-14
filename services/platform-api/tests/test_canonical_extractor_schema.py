@@ -52,6 +52,45 @@ def test_contract_order_schema_is_generated_from_company_catalog():
     assert props["contacts"]["type"] == "array"
     assert props["contract_payment_milestones"]["type"] == "array"
 
+    # vNext: system_link FKs must never leak into extraction schemas.
+    assert "customer_id" not in props["orders"]["properties"]
+    assert "customer_id" not in props["contracts"]["properties"]
+    assert "customer_id" not in props["contacts"]["items"]["properties"]
+    assert (
+        "contract_id"
+        not in props["contract_payment_milestones"]["items"]["properties"]
+    )
+
+
+def test_journal_pipeline_excludes_audit_and_confidence_fields():
+    schema = json.loads(
+        build_pipeline_schema_json("commitment_task_risk", _catalog_from_default())
+    )
+    journal_props = schema["properties"]["customer_journal_items"]["items"][
+        "properties"
+    ]
+    tasks_props = schema["properties"]["customer_tasks"]["items"]["properties"]
+    assert "title" in journal_props
+    assert "document_id" not in journal_props
+    assert "confidence" not in journal_props
+    assert "customer_id" not in journal_props
+    assert "assignee" in tasks_props
+    assert "document_id" not in tasks_props
+    assert "customer_id" not in tasks_props
+
+
+def test_manufacturing_pipeline_excludes_source_document_id():
+    schema = json.loads(
+        build_pipeline_schema_json(
+            "manufacturing_requirement", _catalog_from_default()
+        )
+    )
+    req_props = schema["properties"]["product_requirements"]["items"]["properties"]
+    assert "requirement_text" in req_props
+    assert "source_document_id" not in req_props
+    assert "customer_id" not in req_props
+    assert "product_id" not in req_props
+
 
 def test_unknown_pipeline_generates_empty_object_schema():
     schema = json.loads(build_pipeline_schema_json("unknown", _catalog_from_default()))
