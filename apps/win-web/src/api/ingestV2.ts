@@ -51,7 +51,7 @@ export async function createIngestV2Jobs(
   for (const f of files) form.append("files", f);
   if (opts.sourceHint) form.append("source_hint", opts.sourceHint);
   if (opts.uploader) form.append("uploader", opts.uploader);
-  if (opts.textContent) form.append("text_content", opts.textContent);
+  if (opts.textContent) form.append("text", opts.textContent);
   const res = await fetch(`${API_BASE}/ingest/v2/jobs`, {
     method: "POST",
     body: form,
@@ -60,8 +60,11 @@ export async function createIngestV2Jobs(
   return jsonOrThrow(res);
 }
 
-export async function listIngestV2Jobs(limit = 50): Promise<{ jobs: IngestV2Job[] }> {
-  const res = await fetch(`${API_BASE}/ingest/v2/jobs?limit=${limit}`, {
+export async function listIngestV2Jobs(
+  status: "active" | "history" | "all" = "active",
+  limit = 50,
+): Promise<IngestV2Job[]> {
+  const res = await fetch(`${API_BASE}/ingest/v2/jobs?status=${status}&limit=${limit}`, {
     credentials: "include",
     cache: "no-store",
   });
