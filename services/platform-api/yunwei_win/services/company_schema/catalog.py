@@ -67,6 +67,8 @@ async def ensure_default_company_schema(session: AsyncSession) -> None:
                     field_name=field_spec["field_name"],
                     label=field_spec["label"],
                     data_type=field_spec["data_type"],
+                    field_role=field_spec.get("field_role", "extractable"),
+                    review_visible=bool(field_spec.get("review_visible", True)),
                     required=bool(field_spec.get("required", False)),
                     # 数组型字段标记：要么字段自己声明 is_array，要么继承自表的
                     # ``is_array`` 标记（让整张数组表的每个字段都带这个旗标，
@@ -92,6 +94,8 @@ def _field_to_dict(f: CompanySchemaField) -> dict[str, Any]:
         "field_name": f.field_name,
         "label": f.label,
         "data_type": f.data_type,
+        "field_role": f.field_role,
+        "review_visible": bool(f.review_visible),
         "required": bool(f.required),
         "is_array": bool(f.is_array),
         "enum_values": f.enum_values,

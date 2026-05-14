@@ -1,9 +1,11 @@
-"""Document extraction record.
+"""Document extraction record (vNext).
 
-Stores the durable AI proposal for one document: the route plan, raw pipeline
-results, and the materialized ReviewDraft. Confirm flips ``status`` and
-writes business rows in separate tables; the extraction row stays as the
-historical trail of "what AI found before humans touched it".
+One ``document_extractions`` row per extraction attempt over one parse
+attempt. Holds the selected-table router output, normalized extraction
+payload, validation warnings, entity-resolution proposal, server-side
+review draft, and lock/version metadata used by the review wizard.
+Confirm writeback flips ``status`` and stamps ``confirmed_by`` /
+``confirmed_at``; business rows go to dedicated tables elsewhere.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ from yunwei_win.db import Base
 
 
 def _utcnow() -> datetime:
-    """Client-side default — mirrors ``models/ingest_job._utcnow``."""
     return datetime.now(timezone.utc)
 
 
@@ -41,13 +42,6 @@ class DocumentExtractionStatus(str, enum.Enum):
 
 
 class DocumentExtraction(Base):
-    """One AI extraction attempt for one Document.
-
-    ``review_draft`` is the materialized table/cell payload the review UI
-    renders. ``raw_pipeline_results`` keeps the upstream extractor output
-    around for debugging / re-materialization without re-running OCR.
-    """
-
     __tablename__ = "document_extractions"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -57,21 +51,40 @@ class DocumentExtraction(Base):
         nullable=False,
         index=True,
     )
-    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    parse_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("document_parses.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    route_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    raw_pipeline_results: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    review_draft: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[DocumentExtractionStatus] = mapped_column(
         SQLEnum(DocumentExtractionStatus, name="document_extraction_status"),
         nullable=False,
         default=DocumentExtractionStatus.pending_review,
         index=True,
     )
-    warnings: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    selected_tables: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    extraction_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    validation_warnings: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    entity_resolution: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    review_draft: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    review_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lock_token: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    lock_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_reviewed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     confirmed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

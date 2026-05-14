@@ -99,6 +99,11 @@ class CompanySchemaField(Base):
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     # text | uuid | date | datetime | decimal | integer | boolean | enum | json
     data_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # extractable | identity_key | system_link | audit
+    field_role: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="extractable"
+    )
+    review_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_array: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enum_values: Mapped[Any | None] = mapped_column(JSON, nullable=True)
