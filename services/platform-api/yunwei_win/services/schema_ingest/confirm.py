@@ -436,12 +436,15 @@ def _validate_draft(
                 value_is_empty = _value_is_empty(cell.value)
                 if value_is_empty:
                     if bool(field_spec.get("required")) and row_is_create:
-                        # FK cells marked ``source=linked`` are filled by
-                        # writeback from a same-confirm parent. Only treat
-                        # them as missing when no writeable parent row
-                        # actually exists in the draft.
-                        if cell.source == "linked" and _draft_has_writeable_parent(
-                            draft, cell.field_name
+                        # FK fields are filled by writeback from a same-
+                        # confirm parent. The check is structural — based
+                        # on FK_FIELD_PARENTS + parent rows in the draft —
+                        # not the cell's ``source`` mark (which the
+                        # materializer sets for UI but may be absent in
+                        # drafts created before that change).
+                        if (
+                            cell.field_name in FK_FIELD_PARENTS
+                            and _draft_has_writeable_parent(draft, cell.field_name)
                         ):
                             continue
                         invalid.append({
