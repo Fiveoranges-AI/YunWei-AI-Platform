@@ -29,6 +29,11 @@ type Props = {
   onIgnore: () => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
   busy?: boolean;
+  // Render-only view for non-editable extractions (confirmed / ignored /
+  // failed / canceled). Hides 确认入库 / 忽略 buttons, disables every cell
+  // input, and hides per-row reject/append actions. Delete remains visible
+  // and the backend decides whether the operation is allowed.
+  readOnly?: boolean;
   submitError?: string | null;
   invalidCells?: ConfirmExtractionInvalidCell[];
   sourceText?: string | null;
@@ -84,6 +89,7 @@ export function ReviewTableWorkspace({
   onIgnore,
   onDelete,
   busy = false,
+  readOnly = false,
   submitError = null,
   invalidCells = [],
   sourceText = null,
@@ -380,23 +386,27 @@ export function ReviewTableWorkspace({
                 {deleting ? "删除中…" : "删除"}
               </button>
             )}
-            <button
-              className="btn btn-secondary"
-              onClick={() => void handleIgnore()}
-              disabled={busy}
-              style={{ padding: "8px 14px" }}
-            >
-              忽略
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => void handleSubmit()}
-              disabled={busy}
-              style={{ padding: "8px 18px" }}
-            >
-              {I.check(15, "#fff")}
-              <span>{busy ? "确认中…" : "确认入库"}</span>
-            </button>
+            {!readOnly && (
+              <>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => void handleIgnore()}
+                  disabled={busy}
+                  style={{ padding: "8px 14px" }}
+                >
+                  忽略
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => void handleSubmit()}
+                  disabled={busy}
+                  style={{ padding: "8px 18px" }}
+                >
+                  {I.check(15, "#fff")}
+                  <span>{busy ? "确认中…" : "确认入库"}</span>
+                </button>
+              </>
+            )}
           </div>
           {deleteError && (
             <div
@@ -478,6 +488,7 @@ export function ReviewTableWorkspace({
                 table={table}
                 invalidIndex={invalidIndex}
                 disabled={busy}
+                readOnly={readOnly}
                 onChangeCell={(rowId, fieldName, patch) =>
                   setCellPatch(table.table_name, rowId, fieldName, patch)
                 }
@@ -578,6 +589,7 @@ function TableSection({
   table,
   invalidIndex,
   disabled,
+  readOnly,
   onChangeCell,
   onRejectCell,
   onRejectRow,
@@ -587,6 +599,7 @@ function TableSection({
   table: ReviewTable;
   invalidIndex: Map<string, string>;
   disabled: boolean;
+  readOnly: boolean;
   onChangeCell: (
     rowId: string,
     fieldName: string,
@@ -667,6 +680,7 @@ function TableSection({
               index={idx}
               invalidIndex={invalidIndex}
               disabled={disabled}
+              readOnly={readOnly}
               onChangeCell={onChangeCell}
               onRejectCell={onRejectCell}
               onRejectRow={onRejectRow}
@@ -679,12 +693,13 @@ function TableSection({
               row={table.rows[0]}
               invalidIndex={invalidIndex}
               disabled={disabled}
+              readOnly={readOnly}
               onChangeCell={onChangeCell}
               onRejectCell={onRejectCell}
             />
           )}
 
-      {table.is_array && (
+      {table.is_array && !readOnly && (
         <button
           type="button"
           onClick={onAppendRow}
@@ -730,6 +745,7 @@ function CellGrid({
   row,
   invalidIndex,
   disabled,
+  readOnly,
   onChangeCell,
   onRejectCell,
 }: {
@@ -737,6 +753,7 @@ function CellGrid({
   row: ReviewRow;
   invalidIndex: Map<string, string>;
   disabled: boolean;
+  readOnly: boolean;
   onChangeCell: (
     rowId: string,
     fieldName: string,
@@ -762,7 +779,8 @@ function CellGrid({
               cell={cell}
               rowId={row.client_row_id}
               tableName={table.table_name}
-              disabled={disabled}
+              disabled={disabled || readOnly}
+              readOnly={readOnly}
               invalidReason={invalidIndex.get(key) ?? null}
               onChange={(p) => onChangeCell(row.client_row_id, cell.field_name, p)}
               onReject={() =>
@@ -782,6 +800,7 @@ function RowCard({
   index,
   invalidIndex,
   disabled,
+  readOnly,
   onChangeCell,
   onRejectCell,
   onRejectRow,
@@ -792,6 +811,7 @@ function RowCard({
   index: number;
   invalidIndex: Map<string, string>;
   disabled: boolean;
+  readOnly: boolean;
   onChangeCell: (
     rowId: string,
     fieldName: string,
@@ -834,23 +854,25 @@ function RowCard({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => (allRejected ? onRestoreRow(row) : onRejectRow(row))}
-          disabled={disabled}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: allRejected ? "var(--brand-600)" : "var(--ink-500)",
-            fontSize: 12,
-            cursor: disabled ? "not-allowed" : "pointer",
-            padding: "2px 4px",
-            textDecoration: "underline",
-            fontFamily: "var(--font)",
-          }}
-        >
-          {allRejected ? "恢复此行" : "删除此行"}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => (allRejected ? onRestoreRow(row) : onRejectRow(row))}
+            disabled={disabled}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: allRejected ? "var(--brand-600)" : "var(--ink-500)",
+              fontSize: 12,
+              cursor: disabled ? "not-allowed" : "pointer",
+              padding: "2px 4px",
+              textDecoration: "underline",
+              fontFamily: "var(--font)",
+            }}
+          >
+            {allRejected ? "恢复此行" : "删除此行"}
+          </button>
+        )}
       </div>
 
       <div
@@ -868,7 +890,8 @@ function RowCard({
                 cell={cell}
                 rowId={row.client_row_id}
                 tableName={table.table_name}
-                disabled={disabled}
+                disabled={disabled || readOnly}
+                readOnly={readOnly}
                 invalidReason={invalidIndex.get(key) ?? null}
                 onChange={(p) => onChangeCell(row.client_row_id, cell.field_name, p)}
                 onReject={() =>

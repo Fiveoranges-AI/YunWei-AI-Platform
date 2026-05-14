@@ -248,6 +248,25 @@ export type ConfirmExtractionResponse = {
   invalid_cells: ConfirmExtractionInvalidCell[];
 };
 
+// Returned by GET / PATCH / POST-ignore on /extractions/{id}. Mirrors
+// `_extraction_dict` in services/platform-api/yunwei_win/api/schema_ingest.py
+// — an envelope around the ReviewDraft, NOT the bare draft.
+export type ExtractionEnvelope = {
+  id: string;
+  document_id: string;
+  schema_version: number;
+  provider: string | null;
+  status: ReviewDraftStatus;
+  warnings: unknown;
+  review_draft: ReviewDraft | null;
+  route_plan: ReviewDraftRoutePlan | null;
+  created_by: string | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type CompanySchemaField = {
   id: string;
   field_name: string;

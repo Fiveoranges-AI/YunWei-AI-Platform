@@ -17,6 +17,10 @@ type Props = {
   onReject?: () => void;
   invalidReason?: string | null;
   disabled?: boolean;
+  // When true, hide the 拒绝/恢复 affordance. The `disabled` prop is the
+  // authoritative gate for input editability — `readOnly` is purely for
+  // hiding write-intent UI controls on historical / non-editable views.
+  readOnly?: boolean;
 };
 
 function borderColor(status: ReviewCellStatus, hasInvalid: boolean): string {
@@ -72,6 +76,7 @@ export function ReviewCellEditor({
   onReject,
   invalidReason,
   disabled,
+  readOnly,
 }: Props) {
   const isRejected = cell.status === "rejected";
   const isMissing = cell.status === "missing";
@@ -274,7 +279,7 @@ export function ReviewCellEditor({
             }
           />
         )}
-        {onReject && !isMissing && (
+        {onReject && !isMissing && !readOnly && (
           <button
             type="button"
             onClick={onReject}

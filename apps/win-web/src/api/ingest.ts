@@ -7,6 +7,7 @@
 import type {
   CompanySchema,
   ConfirmExtractionResponse,
+  ExtractionEnvelope,
   IngestJob,
   ReviewCellPatch,
   ReviewDraft,
@@ -18,23 +19,40 @@ export type ApiError = Error & { status?: number; detail?: unknown };
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let detail: unknown = undefined;
+    let body: unknown = undefined;
     try {
-      detail = await res.json();
+      body = await res.json();
     } catch {
       try {
-        detail = await res.text();
+        body = await res.text();
       } catch {
-        detail = undefined;
+        body = undefined;
       }
     }
-    const messageFromDetail =
-      typeof detail === "string"
-        ? detail
-        : detail && typeof detail === "object" && "detail" in (detail as Record<string, unknown>)
-          ? String((detail as Record<string, unknown>).detail)
-          : res.statusText;
-    const err: ApiError = new Error(messageFromDetail || `HTTP ${res.status}`);
+    // FastAPI wraps error payloads in {"detail": ...}. Unwrap so callers can
+    // read err.detail directly (it may be a string, object, or array).
+    let detail: unknown = body;
+    if (
+      body !== null &&
+      typeof body === "object" &&
+      "detail" in (body as Record<string, unknown>)
+    ) {
+      detail = (body as Record<string, unknown>).detail;
+    }
+    let message: string;
+    if (typeof detail === "string") {
+      message = detail;
+    } else if (
+      detail &&
+      typeof detail === "object" &&
+      "message" in (detail as Record<string, unknown>) &&
+      typeof (detail as Record<string, unknown>).message === "string"
+    ) {
+      message = String((detail as Record<string, unknown>).message);
+    } else {
+      message = res.statusText || `HTTP ${res.status}`;
+    }
+    const err: ApiError = new Error(message);
     err.status = res.status;
     err.detail = detail;
     throw err;
@@ -78,7 +96,7 @@ export async function getIngestJob(jobId: string): Promise<IngestJob> {
   return jsonOrThrow(res);
 }
 
-export async function getReviewDraft(extractionId: string): Promise<ReviewDraft> {
+export async function getReviewDraft(extractionId: string): Promise<ExtractionEnvelope> {
   const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}`, {
     credentials: "include",
     cache: "no-store",
@@ -89,7 +107,7 @@ export async function getReviewDraft(extractionId: string): Promise<ReviewDraft>
 export async function patchReviewDraft(
   extractionId: string,
   draft: ReviewDraft,
-): Promise<ReviewDraft> {
+): Promise<ExtractionEnvelope> {
   const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}`, {
     method: "PATCH",
     credentials: "include",
@@ -112,7 +130,7 @@ export async function confirmReviewDraft(
   return jsonOrThrow(res);
 }
 
-export async function ignoreReviewDraft(extractionId: string): Promise<{ status: string }> {
+export async function ignoreReviewDraft(extractionId: string): Promise<ExtractionEnvelope> {
   const res = await fetch(`${API_BASE}/ingest/extractions/${extractionId}/ignore`, {
     method: "POST",
     credentials: "include",
@@ -147,7 +165,7 @@ export async function cancelIngestJob(jobId: string): Promise<IngestJob> {
 export type DeleteIngestJobResult = {
   deleted: number;
   job_id: string;
-  status: "confirmed" | "failed" | "canceled";
+  status: "confirmed" | "failed" | "canceled" | "extracted";
 };
 
 export async function deleteIngestJob(jobId: string): Promise<DeleteIngestJobResult> {
