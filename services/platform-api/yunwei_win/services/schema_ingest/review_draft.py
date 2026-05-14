@@ -20,6 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from yunwei_win.services.ingest.extractors.canonical_schema import PIPELINE_TABLES
+from yunwei_win.services.schema_ingest.fk_links import FK_FIELD_PARENTS
 from yunwei_win.services.schema_ingest.schemas import (
     ReviewCell,
     ReviewCellEvidence,
@@ -78,7 +79,13 @@ def materialize_review_draft(
         table_name = table_spec["table_name"]
         if table_name not in selected_table_names:
             continue
-        tables.append(_build_review_table(table_spec, extraction_by_table.get(table_name)))
+        tables.append(
+            _build_review_table(
+                table_spec,
+                extraction_by_table.get(table_name),
+                selected_table_names=selected_table_names,
+            )
+        )
 
     # Tables in route plan that don't exist in the catalog are dropped here;
     # surface that as a schema warning so a missing-schema bug isn't silent.
@@ -210,6 +217,8 @@ def _extract_table_payload(payload: dict[str, Any], table_name: str) -> Any:
 def _build_review_table(
     table_spec: dict[str, Any],
     raw_extraction: Any,
+    *,
+    selected_table_names: set[str],
 ) -> ReviewTable:
     fields: list[dict[str, Any]] = [
         f for f in table_spec.get("fields") or [] if f.get("is_active", True)
@@ -226,7 +235,10 @@ def _build_review_table(
         items = [{}]
 
     for idx, item_data in enumerate(items):
-        cells = [_build_cell(field, item_data) for field in fields]
+        cells = [
+            _build_cell(field, item_data, selected_table_names=selected_table_names)
+            for field in fields
+        ]
         rows.append(
             ReviewRow(
                 client_row_id=f"{table_spec['table_name']}:{idx}",
@@ -277,7 +289,12 @@ def _coerce_to_rows(raw_extraction: Any, is_array_table: bool) -> list[dict[str,
 # --- per-cell materialization -------------------------------------------
 
 
-def _build_cell(field: dict[str, Any], item_data: dict[str, Any]) -> ReviewCell:
+def _build_cell(
+    field: dict[str, Any],
+    item_data: dict[str, Any],
+    *,
+    selected_table_names: set[str],
+) -> ReviewCell:
     """Decide value/status/source/confidence/evidence for one cell.
 
     Status decision tree:
@@ -285,7 +302,11 @@ def _build_cell(field: dict[str, Any], item_data: dict[str, Any]) -> ReviewCell:
          when confidence < threshold), source ``ai``.
       2. Field has a non-uuid, non-required ``default_value`` -> use it,
          status ``extracted``, source ``default``.
-      3. Otherwise -> status ``missing``, source ``empty``.
+      3. FK field whose parent table is also being materialized in this
+         draft -> status ``missing``, source ``linked``. Confirm fills the
+         UUID at writeback; the UI shows a "auto-linked" chip instead of a
+         "missing required" warning.
+      4. Otherwise -> status ``missing``, source ``empty``.
 
     Per-field evidence/confidence may live two ways and we accept both:
       a) Wrapped: ``item_data[field_name] = {"value": ..., "confidence": ..., "evidence": {...}}``
@@ -318,6 +339,15 @@ def _build_cell(field: dict[str, Any], item_data: dict[str, Any]) -> ReviewCell:
         value = field.get("default_value")
         status = "extracted"
         source = "default"
+        confidence = None
+        evidence = None
+    elif _is_auto_linked_fk(field_name, selected_table_names):
+        # Parent table is being confirmed in the same draft; confirm
+        # writeback fills this UUID — the reviewer should not be asked to
+        # provide it.
+        value = None
+        status = "missing"
+        source = "linked"
         confidence = None
         evidence = None
     else:
@@ -444,6 +474,15 @@ def _can_use_default(field: dict[str, Any]) -> bool:
     if (field.get("data_type") or "").lower() == "uuid":
         return False
     return True
+
+
+def _is_auto_linked_fk(field_name: str, selected_table_names: set[str]) -> bool:
+    """True when ``field_name`` is an FK whose parent is in the same draft."""
+
+    parent_table = FK_FIELD_PARENTS.get(field_name)
+    if parent_table is None:
+        return False
+    return parent_table in selected_table_names
 
 
 # --- warnings ------------------------------------------------------------

@@ -124,10 +124,13 @@ def test_orders_with_partial_extraction_shows_all_six_cells():
         assert cell.status == "extracted", f"{name} expected extracted"
         assert cell.source == "ai"
 
-    # customer_id is required uuid with no default -> missing.
+    # customer_id is a required FK to a same-confirm parent (contract_order
+    # selects ``customers`` too) -> status missing, source linked. Confirm
+    # writeback fills the UUID from the customers row that will be inserted
+    # in the same confirm.
     customer_id_cell = cell_by_name["customer_id"]
     assert customer_id_cell.status == "missing"
-    assert customer_id_cell.source == "empty"
+    assert customer_id_cell.source == "linked"
     assert customer_id_cell.value is None
 
     # delivery_address is optional text with no default -> missing.
@@ -261,7 +264,12 @@ def test_array_table_with_no_items_creates_one_empty_row():
     for cell in contacts.rows[0].cells:
         assert cell.status == "missing"
         assert cell.value is None
-        assert cell.source == "empty"
+        # contract_order also selects customers, so contacts.customer_id is
+        # the auto-linked FK; every other cell is plain empty.
+        if cell.field_name == "customer_id":
+            assert cell.source == "linked"
+        else:
+            assert cell.source == "empty"
 
 
 def test_unknown_pipeline_is_ignored_not_crashed():
@@ -323,6 +331,29 @@ def test_low_confidence_marks_low_confidence_status():
     assert amount.value == 999
     assert amount.confidence == pytest.approx(0.3)
     assert amount.source == "ai"
+
+
+def test_fk_cell_without_parent_in_draft_stays_empty():
+    """``commitment_task_risk`` selects only journal/task tables. The
+    ``customer_id`` FK on each of those has no parent ``customers`` in the
+    same draft, so it must stay ``source="empty"`` — confirm will then ask
+    the user to provide a real customer link."""
+
+    catalog = _catalog_from_default()
+    route_plan = {"selected_pipelines": [{"name": "commitment_task_risk"}]}
+    draft = materialize_review_draft(
+        extraction_id=uuid4(),
+        document_id=uuid4(),
+        schema_version=1,
+        document_filename="memo.pdf",
+        route_plan=route_plan,
+        pipeline_results=[],
+        catalog=catalog,
+    )
+
+    journal = _table(draft, "customer_journal_items")
+    customer_id_cell = next(c for c in journal.rows[0].cells if c.field_name == "customer_id")
+    assert customer_id_cell.source == "empty"
 
 
 def test_pipeline_tables_map_matches_spec():

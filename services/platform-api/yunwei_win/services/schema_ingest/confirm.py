@@ -67,6 +67,7 @@ from yunwei_win.services.company_schema import (
     ensure_default_company_schema,
     get_company_schema,
 )
+from yunwei_win.services.schema_ingest.fk_links import FK_FIELD_PARENTS
 from yunwei_win.services.schema_ingest.schemas import (
     ConfirmExtractionRequest,
     ConfirmExtractionResponse,
@@ -111,18 +112,8 @@ WRITE_PHASES: list[list[str]] = [
 ]
 
 
-# FK reference fields that auto-resolve from client_row_id mappings.
-# field_name -> parent table whose mapping to look up.
-FK_FIELD_PARENTS: dict[str, str] = {
-    "customer_id": "customers",
-    "contract_id": "contracts",
-    "invoice_id": "invoices",
-    "order_id": "orders",
-    "shipment_id": "shipments",
-    "product_id": "products",
-    "document_id": "documents",
-    "source_document_id": "documents",
-}
+# FK auto-resolve map lives in ``fk_links.py`` so the materializer and the
+# writeback path stay in sync.
 
 
 async def confirm_review_draft(
@@ -445,6 +436,14 @@ def _validate_draft(
                 value_is_empty = _value_is_empty(cell.value)
                 if value_is_empty:
                     if bool(field_spec.get("required")) and row_is_create:
+                        # FK cells marked ``source=linked`` are filled by
+                        # writeback from a same-confirm parent. Only treat
+                        # them as missing when no writeable parent row
+                        # actually exists in the draft.
+                        if cell.source == "linked" and _draft_has_writeable_parent(
+                            draft, cell.field_name
+                        ):
+                            continue
                         invalid.append({
                             "table_name": table.table_name,
                             "client_row_id": row.client_row_id,
@@ -474,6 +473,29 @@ def _row_has_required(
             continue
         if bool(spec.get("required")):
             return True
+    return False
+
+
+def _draft_has_writeable_parent(draft: ReviewDraft, fk_field_name: str) -> bool:
+    """True when an FK cell can rely on a same-confirm parent at writeback.
+
+    Mirrors the runtime decision in ``_persist_row`` / ``_lookup_single_parent``:
+    a parent row will be written when (a) it has an ``entity_id`` (update path)
+    or (b) at least one non-rejected cell has a value (fresh insert). Rows
+    with every cell rejected are not written and do not satisfy the link.
+    """
+
+    parent_table = FK_FIELD_PARENTS.get(fk_field_name)
+    if parent_table is None:
+        return False
+    for t in draft.tables:
+        if t.table_name != parent_table:
+            continue
+        for row in t.rows:
+            if row.entity_id is not None:
+                return True
+            if not _row_is_empty(row):
+                return True
     return False
 
 

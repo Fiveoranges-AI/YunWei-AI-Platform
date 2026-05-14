@@ -28,7 +28,7 @@ ReviewCellStatus = Literal[
     "rejected",
     "invalid",
 ]
-ReviewCellSource = Literal["ai", "default", "edited", "empty"]
+ReviewCellSource = Literal["ai", "default", "edited", "empty", "linked"]
 ReviewRowOperation = Literal["create", "update"]
 ExtractionStatus = Literal["pending_review", "confirmed", "ignored", "failed"]
 
