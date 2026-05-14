@@ -47,6 +47,7 @@ from yunwei_win.services.landingai_ade_client import (
     LandingAIExtractResult,
     LandingAIUnavailable,
 )
+from tests.test_ingest_review_draft import _catalog_from_default
 
 
 def _make_input(selections: list[PipelineSelection], markdown: str = "甲方：测试客户有限公司") -> ExtractionInput:
@@ -57,6 +58,19 @@ def _make_input(selections: list[PipelineSelection], markdown: str = "甲方：�
         session=SimpleNamespace(),  # type: ignore[arg-type]
         markdown=markdown,
         selections=selections,
+    )
+
+
+def _make_schema_input(
+    selections: list[PipelineSelection],
+    markdown: str = "甲方：测试客户有限公司",
+) -> ExtractionInput:
+    return ExtractionInput(
+        document_id=uuid.uuid4(),
+        session=SimpleNamespace(),  # type: ignore[arg-type]
+        markdown=markdown,
+        selections=selections,
+        company_schema=_catalog_from_default(),
     )
 
 
@@ -103,6 +117,36 @@ async def test_extract_selected_runs_each_schema(monkeypatch):
     # Markdown forwarded unchanged to every call.
     assert all(md == "甲方：测试客户有限公司" for _, md in calls)
     assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_extract_selected_uses_company_schema_when_available(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_extract_with_schema(*, schema_json: str, markdown: str) -> LandingAIExtractResult:
+        calls.append(schema_json)
+        return LandingAIExtractResult(
+            extraction={"orders": {"amount_total": "30000"}},
+            extraction_metadata={},
+            metadata={},
+        )
+
+    def fail_static_schema_loader(name: str) -> str:
+        raise AssertionError(f"static schema loader should not be used for {name}")
+
+    monkeypatch.setattr(provider_module, "extract_with_schema", fake_extract_with_schema)
+    monkeypatch.setattr(provider_module, "load_schema_json", fail_static_schema_loader)
+
+    provider = LandingAIExtractorProvider()
+    results = await provider.extract_selected(
+        _make_schema_input([PipelineSelection(name="contract_order", confidence=0.9)])
+    )
+
+    assert results[0].extraction == {"orders": {"amount_total": "30000"}}
+    assert len(calls) == 1
+    assert '"orders"' in calls[0]
+    assert '"amount_total"' in calls[0]
+    assert '"total_amount"' not in calls[0]
 
 
 @pytest.mark.asyncio

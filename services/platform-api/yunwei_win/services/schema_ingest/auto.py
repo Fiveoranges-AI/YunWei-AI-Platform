@@ -110,7 +110,13 @@ async def auto_ingest(
         progress=progress,
     )
 
-    # --- 3. Run extractor providers over the selected pipelines --------
+    # --- 3. Catalog -----------------------------------------------------
+    # The extractor schema is generated from the tenant company catalog, so
+    # providers are constrained to emit canonical table/field names.
+    await ensure_default_company_schema(session)
+    catalog = await get_company_schema(session)
+
+    # --- 4. Run extractor providers over the selected pipelines --------
     pipeline_dump: list[dict] = []
     extract_warnings: list[str] = []
     await emit_progress(progress, "extract", "正在执行 schema 抽取")
@@ -121,6 +127,7 @@ async def auto_ingest(
             session=session,
             markdown=evidence.ocr_text,
             selections=route_plan.selected_pipelines,
+            company_schema=catalog,
         )
         pipeline_results = await extractor.extract_selected(
             extraction_input,
@@ -132,12 +139,8 @@ async def auto_ingest(
         extract_warnings.append(f"extraction failed: {type(exc).__name__}: {exc!s}")
         pipeline_dump = []
 
-    # --- 4. Catalog -----------------------------------------------------
-    await emit_progress(progress, "merge", "拼装 schema-first 草稿")
-    await ensure_default_company_schema(session)
-    catalog = await get_company_schema(session)
-
     # --- 5. Materialize the ReviewDraft --------------------------------
+    await emit_progress(progress, "merge", "拼装 schema-first 草稿")
     extraction_id = uuid.uuid4()
     route_plan_dump = route_plan.model_dump(mode="json")
     general_warnings = list(extract_warnings)

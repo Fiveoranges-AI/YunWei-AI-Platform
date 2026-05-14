@@ -40,6 +40,7 @@ from yunwei_win.services.ingest.unified_schemas import (
     PipelineExtractResult,
     PipelineSelection,
 )
+from tests.test_ingest_review_draft import _catalog_from_default
 
 
 # ---------- helpers -------------------------------------------------------
@@ -65,6 +66,20 @@ def _make_input(session: Any, selections=None, markdown="some OCR markdown") -> 
         session=session,
         markdown=markdown,
         selections=selections if selections is not None else _selections(),
+    )
+
+
+def _make_schema_input(
+    session: Any,
+    selections=None,
+    markdown="some OCR markdown",
+) -> ExtractionInput:
+    return ExtractionInput(
+        document_id=uuid.uuid4(),
+        session=session,
+        markdown=markdown,
+        selections=selections if selections is not None else _selections(),
+        company_schema=_catalog_from_default(),
     )
 
 
@@ -126,6 +141,41 @@ async def test_extract_selected_happy_path(monkeypatch) -> None:
     assert call_log[1]["session"] is session_sentinel
     # Model is settings.model_parse.
     assert call_log[0]["model"] == settings.model_parse
+
+
+@pytest.mark.asyncio
+async def test_extract_selected_uses_company_schema_when_available(monkeypatch) -> None:
+    call_log: list[dict[str, Any]] = []
+
+    async def fake_call_claude(messages, *, purpose, session, **kwargs):
+        call_log.append({"tools": kwargs.get("tools"), "messages": messages})
+        return SimpleNamespace(content=[])
+
+    def fake_extract_tool_use_input(response, tool_name):
+        return {"orders": {"amount_total": "30000"}}
+
+    def fail_static_schema_loader(name: str) -> str:
+        raise AssertionError(f"static schema loader should not be used for {name}")
+
+    monkeypatch.setattr(deepseek_module, "call_claude", fake_call_claude)
+    monkeypatch.setattr(
+        deepseek_module, "extract_tool_use_input", fake_extract_tool_use_input
+    )
+    monkeypatch.setattr(deepseek_module, "load_schema_json", fail_static_schema_loader)
+
+    provider = DeepSeekSchemaExtractorProvider()
+    results = await provider.extract_selected(
+        _make_schema_input(
+            SimpleNamespace(),
+            selections=[PipelineSelection(name="contract_order", confidence=0.9)],
+        )
+    )
+
+    assert results[0].extraction == {"orders": {"amount_total": "30000"}}
+    input_schema = call_log[0]["tools"][0]["input_schema"]
+    assert "orders" in input_schema["properties"]
+    assert "amount_total" in input_schema["properties"]["orders"]["properties"]
+    assert "total_amount" not in input_schema["properties"]["orders"]["properties"]
 
 
 # ---------- session is forwarded ------------------------------------------

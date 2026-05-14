@@ -1,9 +1,9 @@
 """LandingAI extractor provider.
 
-Wraps the existing ``extract_selected_pipelines`` behavior behind the generic
-``ExtractorProvider`` contract: for each ``PipelineSelection`` we load the
-static schema JSON and call LandingAI Extract with
-``markdown=input.markdown``, then return one ``PipelineExtractResult``.
+For schema-first ingest, each ``PipelineSelection`` is converted into a
+tenant-catalog JSON Schema so LandingAI emits canonical company table/field
+names. Older internal callers that do not pass ``company_schema`` still fall
+back to the static pipeline schemas.
 
 Per-schema failures are soft. Any exception raised by either the schema
 loader or the LandingAI call is caught, logged, and surfaced as a result
@@ -11,8 +11,6 @@ with an empty extraction and a warning of the form
 ``"LandingAI extract failed for {name}: {error}"`` — so one bad schema
 never aborts the batch.
 
-This is behavior-equivalent to ``services/ingest/landingai_extract.py`` —
-the legacy module stays in place until the orchestrator is rewired.
 """
 
 from __future__ import annotations
@@ -20,6 +18,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from yunwei_win.services.ingest.extractors.canonical_schema import (
+    build_pipeline_schema_json,
+)
 from yunwei_win.services.ingest.landingai_schemas.registry import load_schema_json
 from yunwei_win.services.ingest.unified_schemas import (
     PipelineExtractResult,
@@ -41,7 +42,12 @@ class LandingAIExtractorProvider(ExtractorProvider):
         return list(
             await asyncio.gather(
                 *[
-                    _extract_one(selection, input.markdown, progress)
+                    _extract_one(
+                        selection,
+                        input.markdown,
+                        input.company_schema,
+                        progress,
+                    )
                     for selection in input.selections
                 ]
             )
@@ -51,13 +57,18 @@ class LandingAIExtractorProvider(ExtractorProvider):
 async def _extract_one(
     selection: PipelineSelection,
     markdown: str,
+    company_schema: dict | None,
     progress: ProgressCallback | None,
 ) -> PipelineExtractResult:
     if progress is not None:
         await progress("pipeline_started", {"name": selection.name})
 
     try:
-        schema = load_schema_json(selection.name)
+        schema = (
+            build_pipeline_schema_json(selection.name, company_schema)
+            if company_schema is not None
+            else load_schema_json(selection.name)
+        )
         response = await extract_with_schema(
             schema_json=schema,
             markdown=markdown,

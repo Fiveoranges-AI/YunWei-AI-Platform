@@ -19,6 +19,7 @@ from yunwei_win.services.schema_ingest import (
     ReviewDraft,
     materialize_review_draft,
 )
+from yunwei_win.services.ingest.unified_schemas import PipelineExtractResult
 
 
 # ---- helpers ----------------------------------------------------------
@@ -134,6 +135,68 @@ def test_orders_with_partial_extraction_shows_all_six_cells():
     assert delivery_cell.status == "missing"
     assert delivery_cell.source == "empty"
     assert delivery_cell.value is None
+
+
+def test_materializer_consumes_pipeline_extract_result_extraction_envelope():
+    """Providers return ``PipelineExtractResult.model_dump()`` with the
+    extracted payload under ``extraction``. The ReviewDraft materializer must
+    consume that canonical envelope directly."""
+
+    catalog = _catalog_from_default()
+    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
+    pipeline_results = [
+        PipelineExtractResult(
+            name="contract_order",
+            extraction={
+                "orders": {
+                    "amount_total": "30000",
+                    "amount_currency": "USD",
+                    "delivery_promised_date": "2026-06-01",
+                    "description": "客户订单",
+                },
+                "contracts": {
+                    "contract_no_external": "HT-001",
+                    "amount_total": "30000",
+                    "amount_currency": "USD",
+                },
+                "contract_payment_milestones": [
+                    {
+                        "name": "预付款",
+                        "ratio": "0.3",
+                        "trigger_event": "contract_signed",
+                        "raw_text": "合同签订后支付 30%",
+                    }
+                ],
+            },
+        ).model_dump(mode="json")
+    ]
+
+    draft = materialize_review_draft(
+        extraction_id=uuid4(),
+        document_id=uuid4(),
+        schema_version=1,
+        document_filename="order.pdf",
+        route_plan=route_plan,
+        pipeline_results=pipeline_results,
+        catalog=catalog,
+    )
+
+    orders = _table(draft, "orders")
+    order_cells = {c.field_name: c for c in orders.rows[0].cells}
+    assert order_cells["amount_total"].value == "30000"
+    assert order_cells["amount_total"].status == "extracted"
+    assert order_cells["amount_currency"].value == "USD"
+
+    contracts = _table(draft, "contracts")
+    contract_cells = {c.field_name: c for c in contracts.rows[0].cells}
+    assert contract_cells["contract_no_external"].value == "HT-001"
+    assert contract_cells["amount_total"].value == "30000"
+
+    milestones = _table(draft, "contract_payment_milestones")
+    assert len(milestones.rows) == 1
+    milestone_cells = {c.field_name: c for c in milestones.rows[0].cells}
+    assert milestone_cells["name"].value == "预付款"
+    assert milestone_cells["ratio"].value == "0.3"
 
 
 def test_default_values_fill_missing_cells():

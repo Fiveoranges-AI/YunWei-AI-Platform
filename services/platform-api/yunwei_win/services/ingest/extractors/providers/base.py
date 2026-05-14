@@ -31,6 +31,7 @@ class ExtractionInput:
     session: AsyncSession
     markdown: str
     selections: list[PipelineSelection]
+    company_schema: dict[str, Any] | None = None
 
 
 class ExtractorProvider(Protocol):

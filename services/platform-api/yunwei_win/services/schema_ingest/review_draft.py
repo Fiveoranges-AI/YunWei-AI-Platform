@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from yunwei_win.services.ingest.extractors.canonical_schema import PIPELINE_TABLES
 from yunwei_win.services.schema_ingest.schemas import (
     ReviewCell,
     ReviewCellEvidence,
@@ -30,22 +31,6 @@ from yunwei_win.services.schema_ingest.schemas import (
     ReviewRow,
     ReviewTable,
 )
-
-
-PIPELINE_TABLES: dict[str, list[str]] = {
-    "identity": ["customers", "contacts"],
-    "contract_order": [
-        "customers",
-        "contacts",
-        "contracts",
-        "contract_payment_milestones",
-        "orders",
-    ],
-    "finance": ["invoices", "invoice_items", "payments"],
-    "logistics": ["shipments", "shipment_items"],
-    "manufacturing_requirement": ["products", "product_requirements"],
-    "commitment_task_risk": ["customer_journal_items", "customer_tasks"],
-}
 
 
 _LOW_CONFIDENCE_THRESHOLD = 0.6
@@ -197,7 +182,8 @@ def _extraction_by_table(
         if not covered_tables:
             continue
         payload = (
-            result_entry.get("result")
+            result_entry.get("extraction")
+            or result_entry.get("result")
             or result_entry.get("data")
             or result_entry.get("raw")
             or {}
