@@ -75,6 +75,40 @@ The current `main` branch already has a schema-first ingest surface:
 
 The remaining issue is architectural: parse, routing, extraction, entity matching, and review are still centered around a markdown-like evidence layer and table/cell drafts. The new design introduces an explicit parse layer, provider-specific extraction choices, entity resolution proposals, and progressive review state.
 
+## Current DB Schema Review Findings
+
+A parallel read-only schema review of ORM models, the default company catalog, confirm/writeback code, and API/frontend consumers found these issues that the redesign must address before implementation:
+
+1. `document_parses` does not exist yet. The current tenant DB has `documents` and `document_extractions`, but no durable parse attempt layer. The redesign must add `document_parses` instead of storing only flattened text on `documents`.
+
+2. `company_schema_fields` does not have `field_role` or `review_visible`. The current extractor schema builder emits every active catalog field, so relationship/source UUID fields such as `customer_id`, `order_id`, `invoice_id`, `shipment_id`, `product_id`, `document_id`, and `source_document_id` are treated as normal LLM-extractable fields. This is unsafe. These fields must become `system_link` or `audit` fields and be excluded from extraction and normal review UI.
+
+3. `customer_tasks.owner` is a hard catalog/ORM mismatch. The default catalog defines `owner`, while the ORM/API/frontend use `assignee`. Non-empty `owner` cells will fail confirm parity because there is no ORM destination. vNext should standardize on `assignee`; there should be no alias layer unless a later migration needs one for existing data.
+
+4. `contacts.role` is semantically wrong in the current catalog. The catalog labels it as a free-text job title, but the ORM column is a constrained `ContactRole` enum. The actual free-text fields `title`, `phone`, and `address` exist in ORM/API/frontend but are absent from the current catalog. vNext should add `title`, `phone`, and `address`; `role` should either be an enum with explicit `enum_values` or system-defaulted to `other` and not extracted from free text.
+
+5. Contract fields are split between new schema-first columns and legacy surfaces. `contracts.delivery_terms` and `contracts.penalty_terms` exist in ORM and are useful extractable fields but are absent from the current catalog. Legacy `contract_no_internal`, JSON `payment_milestones`, and `confidence_overall` are still visible in some read/assistant paths but should not be part of the new extraction schema. vNext should use `contracts.amount_total`, `contracts.amount_currency`, and `contract_payment_milestones` as the canonical contract money/payment model.
+
+6. Required/nullability mismatches need an explicit policy. Examples: catalog requires `contacts.customer_id` and `contracts.customer_id`, while ORM columns are nullable; catalog requires `product_requirements.requirement_text`, while ORM allows null. In vNext, catalog `required` is a review/writeback policy, not proof that the document contains a value. System-managed required FKs must be validated through row links, not through extracted UUID cells.
+
+7. Default-only rows can currently become real rows. The materializer can create a row with only defaults such as `amount_currency="CNY"` and linked FK cells, and confirm may treat it as non-empty. vNext row writeability must be based on AI-extracted values, user edits, or explicit user row decisions. Defaults should be applied only after a row is otherwise selected for creation/update.
+
+8. Current FK auto-link behavior is too implicit. Validation can waive a missing required FK if any parent row exists, while writeback can only fill the FK when exactly one parent row exists. With multiple parent rows, validation can pass and writeback can still fail or create orphan nullable rows. vNext must use explicit row-level link metadata: child rows reference a parent `client_row_id` or selected existing entity.
+
+9. Schema version drift can silently skip validation. Current confirm validates against the active catalog but only walks cells present in the stored draft. If the catalog changes after extraction, new required fields may be missed and removed fields may be skipped. vNext must snapshot the field specs used for extraction/review into `document_extractions` and either validate against that snapshot or force rematerialization on version mismatch.
+
+10. Provenance is incomplete. Current provenance is mainly written for AI evidence or user edits and stores raw cell values. vNext provenance must record final persisted values and review actions for `ai`, `edited`, `default`, `linked`, and `system` values, including `parse_id`, `extraction_id`, and source refs.
+
+11. Several confirmed schema-first tables are not visible after writeback. Confirm can write products, requirements, invoices, invoice items, payments, shipments, shipment items, payment milestones, journal items, and tasks, while current profile/frontend/assistant reads focus mostly on customers, contacts, orders, contracts, and legacy memory tables. vNext must either make every first-version review-visible table readable in profile/assistant surfaces or defer that table from first-version review.
+
+12. `customers.industry` and `customers.notes` exist in ORM/catalog but are not surfaced in current customer profile/edit APIs and frontend models. Either add them to read/edit/profile surfaces, or mark them `review_visible=false` until there is a user-facing home.
+
+13. `contacts.needs_review` is a legacy workflow flag. It is returned by some APIs, not used by the frontend, and not written by the current contact management flow. vNext review state belongs in `document_extractions.review_draft`, `ReviewCell.status`, `row_decision`, and review lock/version fields. `contacts.needs_review` should not be extracted, shown, or written; it can be dropped if destructive schema cleanup is allowed.
+
+14. Source document display is inconsistent. Backend timeline/read paths can expose documents and raw OCR/LLM payloads, while frontend profile code currently does not consistently consume source documents. vNext should make source refs and document preview a first-class review/profile capability backed by `document_parses`; raw parser/LLM payloads should stay debug-only.
+
+15. Frontend customer `tag` filters are mock-era fields without a backend source of truth. They should not be treated as ingest schema fields. Either add real customer segmentation/risk fields later or remove tag-based UX from the ingest redesign scope.
+
 ## Tenant Data Boundary
 
 All ingest business data belongs in the enterprise tenant database:
@@ -261,6 +295,39 @@ review_visible = true
 ```
 
 Final confirm fills `system_link` fields after parent rows are confirmed or created.
+
+### vNext Field Classification
+
+The first implementation should seed or migrate the catalog toward this classification. `id`, timestamps, primary keys, raw parser/LLM fields, workflow status fields, and relationship UUIDs are omitted from extractor schemas unless listed as extractable.
+
+| Table | Extractable / Review-Visible | Identity Keys | System-Managed / Hidden |
+| --- | --- | --- | --- |
+| `customers` | `short_name`, `address`, `industry`, `notes` if surfaced in profile | `full_name`, `tax_id` | `id`, timestamps |
+| `contacts` | `name`, `title`, `phone`, `mobile`, `email`, `wechat_id`, `address` | `mobile`, `email`, `name + customer` | `customer_id`, `id`, timestamps, `needs_review`; `role` is enum/system default unless made explicit enum |
+| `products` | `sku`, `name`, `description`, `specification`, `unit` | `sku`, `name` | `id`, timestamps |
+| `product_requirements` | `requirement_type`, `requirement_text`, `tolerance` | none in first version | `customer_id`, `product_id`, `source_document_id`, `id`, timestamps |
+| `contracts` | `contract_no_external`, `signing_date`, `effective_date`, `expiry_date`, `amount_total`, `amount_currency`, `delivery_terms`, `penalty_terms` | `contract_no_external + customer` | `customer_id`, `order_id`, `id`, `contract_no_internal`, legacy `payment_milestones`, `confidence_overall`, timestamps |
+| `contract_payment_milestones` | `name`, `ratio`, `amount`, `trigger_event`, `trigger_offset_days`, `due_date`, `raw_text` | none in first version | `contract_id`, `id`, `sort_order`, timestamps |
+| `orders` | `amount_total`, `amount_currency`, `delivery_promised_date`, `delivery_address`, `description` | external order number if added later | `customer_id`, `id`, timestamps |
+| `invoices` | `invoice_no`, `issue_date`, `amount_total`, `amount_currency`, `tax_amount`, `status` | `invoice_no + customer` | `customer_id`, `order_id`, `id`, timestamps |
+| `invoice_items` | `description`, `quantity`, `unit_price`, `amount` | none in first version | `invoice_id`, `product_id`, `id`, timestamps |
+| `payments` | `payment_date`, `amount`, `currency`, `method`, `reference_no` | `reference_no` when reliable | `customer_id`, `invoice_id`, `id`, timestamps |
+| `shipments` | `shipment_no`, `carrier`, `tracking_no`, `ship_date`, `delivery_date`, `delivery_address`, `status` | `shipment_no`, `tracking_no` | `customer_id`, `order_id`, `id`, timestamps |
+| `shipment_items` | `description`, `quantity`, `unit` | none in first version | `shipment_id`, `product_id`, `id`, timestamps |
+| `customer_journal_items` | `item_type`, `title`, `content`, `occurred_at`, `due_date`, `severity`, `status`, `raw_excerpt` | none in first version | `customer_id`, `document_id`, `confidence`, `id`, timestamps |
+| `customer_tasks` | `title`, `description`, `assignee`, `due_date`, `priority` | none in first version | `customer_id`, `document_id`, `id`, timestamps; `status` defaults to open unless explicitly reviewed |
+
+### Catalog Parity Requirements
+
+Before the new workflow ships, add tests that assert:
+
+```text
+every active extractable/review-visible catalog field maps to an ORM destination
+no system_link/audit field is emitted in extractor JSON schema
+no default catalog field name differs from ORM without an explicit alias
+required system_link fields are satisfied by row links, not extracted values
+read/profile/assistant surfaces expose every table that first-version review can confirm
+```
 
 ## ParseArtifact Contract
 
@@ -946,4 +1013,3 @@ Recommended order:
 10. Final confirm writeback and provenance.
 11. Frontend wizard.
 ```
-
