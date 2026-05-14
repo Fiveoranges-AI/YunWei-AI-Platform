@@ -89,6 +89,9 @@ def _patch_engine_routing(monkeypatch, engine):
     monkeypatch.setattr(
         worker_module, "ensure_ingest_job_tables", fake_ensure_tables
     )
+    monkeypatch.setattr(
+        worker_module, "ensure_ingest_v2_tables", fake_ensure_tables
+    )
 
 
 # ---------- happy path ----------------------------------------------------
@@ -408,5 +411,117 @@ async def test_worker_uses_supplied_enterprise_id(monkeypatch):
         await worker_module.process_ingest_job(job_id, "tenant_alpha")
 
         assert seen["eid"] == "tenant_alpha"
+    finally:
+        await engine.dispose()
+
+
+# ---------- V2 dispatch --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_v2_worker_dispatches_to_auto_ingest_v2_and_persists_review_draft(monkeypatch):
+    """A job with ``workflow_version="v2"`` routes to ``auto_ingest_v2`` and
+    the worker persists the ReviewDraft onto ``result_json`` + sets
+    ``extraction_id``. V1 ``auto_ingest`` MUST NOT be called."""
+
+    import uuid
+    from yunwei_win.models import Document, DocumentType
+    from yunwei_win.models.document_extraction import (
+        DocumentExtraction,
+        DocumentExtractionStatus,
+    )
+    from yunwei_win.services.ingest_v2 import (
+        AutoIngestV2Result,
+        ReviewDraft,
+        ReviewDraftDocument,
+        ReviewDraftRoutePlan,
+    )
+    from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan
+
+    engine = await _make_engine()
+    _patch_engine_routing(monkeypatch, engine)
+
+    fake_extraction_id = uuid.uuid4()
+    v1_calls = {"n": 0}
+
+    async def boom_v1(**_kwargs):
+        v1_calls["n"] += 1
+        raise AssertionError("V1 auto_ingest must not be called for V2 jobs")
+
+    async def fake_v2(**kwargs):
+        sess: AsyncSession = kwargs["session"]
+        doc = Document(
+            type=DocumentType.text_note,
+            file_url="/tmp/fake.txt",
+            original_filename="x.pdf",
+            file_sha256="0" * 64,
+            file_size_bytes=0,
+            ocr_text="some text",
+        )
+        sess.add(doc)
+        await sess.flush()
+        draft = ReviewDraft(
+            extraction_id=fake_extraction_id,
+            document_id=doc.id,
+            schema_version=1,
+            status="pending_review",
+            document=ReviewDraftDocument(filename="x.pdf"),
+            route_plan=ReviewDraftRoutePlan(),
+            tables=[],
+        )
+        # Persist the extraction row so the IngestJob.extraction_id FK
+        # holds — mirror what the real auto_ingest_v2 does.
+        sess.add(
+            DocumentExtraction(
+                id=fake_extraction_id,
+                document_id=doc.id,
+                schema_version=1,
+                provider="fake",
+                review_draft=draft.model_dump(mode="json"),
+                status=DocumentExtractionStatus.pending_review,
+            )
+        )
+        await sess.flush()
+        return AutoIngestV2Result(
+            document_id=doc.id,
+            extraction_id=fake_extraction_id,
+            route_plan=PipelineRoutePlan(),
+            review_draft=draft,
+        )
+
+    monkeypatch.setattr(worker_module, "auto_ingest", boom_v1)
+    monkeypatch.setattr(worker_module, "auto_ingest_v2", fake_v2)
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            batch = IngestBatch(enterprise_id="tenant_test", total_jobs=1)
+            session.add(batch)
+            await session.flush()
+            job = IngestJob(
+                batch_id=batch.id,
+                enterprise_id="tenant_test",
+                original_filename="x.pdf",
+                content_type="application/pdf",
+                source_hint="pasted_text",
+                text_content="t",
+                status=IngestJobStatus.queued,
+                workflow_version="v2",
+            )
+            session.add(job)
+            await session.commit()
+            job_id = str(job.id)
+
+        await worker_module.process_ingest_job(job_id, "tenant_test")
+
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            j = (await session.execute(select(IngestJob))).scalar_one()
+            assert j.status == IngestJobStatus.extracted
+            assert j.stage == IngestJobStage.done
+            assert j.workflow_version == "v2"
+            assert j.extraction_id == fake_extraction_id
+            assert j.result_json is not None
+            assert j.result_json["extraction_id"] == str(fake_extraction_id)
+            assert j.result_json["tables"] == []
+            assert v1_calls["n"] == 0
     finally:
         await engine.dispose()
