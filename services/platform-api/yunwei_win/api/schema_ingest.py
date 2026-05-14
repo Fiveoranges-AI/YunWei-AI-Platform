@@ -386,33 +386,54 @@ async def get_ingest_job(
     return payload
 
 
+_DELETABLE_STATUSES = (
+    IngestJobStatus.confirmed,
+    IngestJobStatus.failed,
+    IngestJobStatus.canceled,
+    IngestJobStatus.extracted,
+)
+
+
 @router.delete("/jobs/{job_id}")
 async def delete_history_job(
     job_id: UUID,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Delete a single history IngestJob row.
+    """Delete a single IngestJob row.
 
-    Only allowed when status is in ``_HISTORY_STATUSES`` (confirmed / failed /
-    canceled). Active jobs return 409. Linked Document / DocumentExtraction
-    rows and any business data are left intact — only the job row is removed.
+    Allowed source statuses: ``confirmed | failed | canceled | extracted``.
+    ``queued`` and ``running`` jobs return 409 — they must be canceled first.
+
+    For ``extracted`` (pending review) jobs we additionally flip the linked
+    ``DocumentExtraction`` from ``pending_review`` to ``ignored``, mirroring
+    the ``/extractions/{id}/ignore`` semantic. The underlying ``Document``
+    row and any business data are left untouched in every case.
     """
 
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
     await ensure_schema_ingest_tables_for(enterprise_id)
     j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
-    if j.status not in _HISTORY_STATUSES:
+    if j.status not in _DELETABLE_STATUSES:
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "job_not_deletable",
-                "message": "Only confirmed / failed / canceled jobs can be deleted.",
+                "message": (
+                    "Only confirmed / failed / canceled / extracted jobs can be deleted."
+                ),
                 "status": j.status.value,
             },
         )
     deleted_status = j.status.value
+    if j.status == IngestJobStatus.extracted and j.extraction_id is not None:
+        extraction = await session.get(DocumentExtraction, j.extraction_id)
+        if (
+            extraction is not None
+            and extraction.status == DocumentExtractionStatus.pending_review
+        ):
+            extraction.status = DocumentExtractionStatus.ignored
     await session.delete(j)
     await session.commit()
     return {"deleted": 1, "job_id": str(job_id), "status": deleted_status}
