@@ -178,6 +178,7 @@ export function ReviewScreen({
         busy={busy}
         submitError={error}
         invalidCells={invalidCells}
+        sourceText={draft.document.source_text ?? null}
       />
     );
   }

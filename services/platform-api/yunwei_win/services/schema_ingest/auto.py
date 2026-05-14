@@ -152,6 +152,7 @@ async def auto_ingest(
         pipeline_results=pipeline_dump,
         catalog=catalog,
         document_summary=route_plan.document_summary or None,
+        document_source_text=evidence.ocr_text or None,
         warnings=general_warnings or None,
     )
 

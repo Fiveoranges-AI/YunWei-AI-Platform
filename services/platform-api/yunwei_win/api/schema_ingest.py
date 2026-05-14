@@ -146,6 +146,30 @@ async def _load_job(
     return j
 
 
+def _ensure_draft_source_text(
+    draft: dict[str, Any] | None, document: Document | None
+) -> dict[str, Any] | None:
+    """Enrich an in-memory review_draft with ``Document.ocr_text`` when its
+    ``document.source_text`` is missing.
+
+    Returns a shallow copy of the draft; never writes back to the DB.
+    """
+
+    if not draft or not document:
+        return draft
+    doc_part = draft.get("document") or {}
+    if doc_part.get("source_text"):
+        return draft
+    ocr = getattr(document, "ocr_text", None)
+    if not ocr:
+        return draft
+    enriched_doc = dict(doc_part)
+    enriched_doc["source_text"] = ocr
+    enriched = dict(draft)
+    enriched["document"] = enriched_doc
+    return enriched
+
+
 # ---- POST /jobs -----------------------------------------------------
 
 
@@ -341,12 +365,58 @@ async def get_ingest_job(
                 select(DocumentExtraction).where(DocumentExtraction.id == j.extraction_id)
             )
         ).scalar_one_or_none()
-        payload["review_draft"] = extraction.review_draft if extraction else None
+        document: Document | None = None
+        if j.document_id is not None:
+            document = (
+                await session.execute(
+                    select(Document).where(Document.id == j.document_id)
+                )
+            ).scalar_one_or_none()
+        elif extraction is not None:
+            document = (
+                await session.execute(
+                    select(Document).where(Document.id == extraction.document_id)
+                )
+            ).scalar_one_or_none()
+        review_draft = extraction.review_draft if extraction else None
+        payload["review_draft"] = _ensure_draft_source_text(review_draft, document)
         payload["extraction"] = _extraction_dict(extraction) if extraction else None
     else:
         payload["review_draft"] = None
         payload["extraction"] = None
     return payload
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_history_job(
+    job_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Delete a single history IngestJob row.
+
+    Only allowed when status is in ``_HISTORY_STATUSES`` (confirmed / failed /
+    canceled). Active jobs return 409. Linked Document / DocumentExtraction
+    rows and any business data are left intact — only the job row is removed.
+    """
+
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
+    j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
+    if j.status not in _HISTORY_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "job_not_deletable",
+                "message": "Only confirmed / failed / canceled jobs can be deleted.",
+                "status": j.status.value,
+            },
+        )
+    deleted_status = j.status.value
+    await session.delete(j)
+    await session.commit()
+    return {"deleted": 1, "job_id": str(job_id), "status": deleted_status}
 
 
 # ---- retry / cancel ------------------------------------------------
@@ -445,7 +515,17 @@ async def get_extraction(
 ) -> dict[str, Any]:
     _ = _enterprise_id_from_request(request)
     await ensure_schema_ingest_tables_for(request.state.enterprise_id)
-    return _extraction_dict(await _load_extraction(session, extraction_id))
+    extraction = await _load_extraction(session, extraction_id)
+    payload = _extraction_dict(extraction)
+    document = (
+        await session.execute(
+            select(Document).where(Document.id == extraction.document_id)
+        )
+    ).scalar_one_or_none()
+    payload["review_draft"] = _ensure_draft_source_text(
+        payload.get("review_draft"), document
+    )
+    return payload
 
 
 @router.patch("/extractions/{extraction_id}")

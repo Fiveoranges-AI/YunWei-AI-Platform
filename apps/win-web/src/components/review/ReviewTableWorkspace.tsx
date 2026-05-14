@@ -30,6 +30,7 @@ type Props = {
   busy?: boolean;
   submitError?: string | null;
   invalidCells?: ConfirmExtractionInvalidCell[];
+  sourceText?: string | null;
 };
 
 type PatchKey = string;
@@ -83,6 +84,7 @@ export function ReviewTableWorkspace({
   busy = false,
   submitError = null,
   invalidCells = [],
+  sourceText = null,
 }: Props) {
   const isDesktop = useIsDesktop();
   const [patches, setPatches] = useState<Map<PatchKey, ReviewCellPatch>>(new Map());
@@ -260,6 +262,8 @@ export function ReviewTableWorkspace({
   const filename = draft.document?.filename ?? "(未命名文档)";
   const summary = draft.document?.summary;
   const routeChips = draft.route_plan?.selected_pipelines ?? [];
+  const showSourcePanel = sourceText !== undefined;
+  const hasSource = typeof sourceText === "string" && sourceText.trim().length > 0;
 
   return (
     <div
@@ -369,7 +373,7 @@ export function ReviewTableWorkspace({
         style={{
           flex: 1,
           padding: isDesktop ? "20px 32px 100px" : "12px 16px 100px",
-          maxWidth: isDesktop ? 1080 : undefined,
+          maxWidth: isDesktop && showSourcePanel ? 1320 : isDesktop ? 1080 : undefined,
           width: "100%",
           margin: "0 auto",
         }}
@@ -391,65 +395,132 @@ export function ReviewTableWorkspace({
           </div>
         )}
 
-        {renderedTables.length === 0 && (
-          <div
-            className="card"
-            style={{
-              padding: 24,
-              textAlign: "center",
-              color: "var(--ink-500)",
-              fontSize: 13,
-            }}
-          >
-            未识别到任何 schema 表。请检查文档质量或调整路由设置。
+        <div
+          style={
+            isDesktop && showSourcePanel
+              ? {
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) 360px",
+                  gap: 16,
+                  alignItems: "start",
+                }
+              : undefined
+          }
+        >
+          {showSourcePanel && !isDesktop && (
+            <SourceTextPanel sourceText={sourceText ?? null} hasSource={hasSource} />
+          )}
+
+          <div style={{ minWidth: 0 }}>
+            {renderedTables.length === 0 && (
+              <div
+                className="card"
+                style={{
+                  padding: 24,
+                  textAlign: "center",
+                  color: "var(--ink-500)",
+                  fontSize: 13,
+                }}
+              >
+                未识别到任何 schema 表。请检查文档质量或调整路由设置。
+              </div>
+            )}
+
+            {renderedTables.map((table) => (
+              <TableSection
+                key={table.table_name}
+                table={table}
+                invalidIndex={invalidIndex}
+                disabled={busy}
+                onChangeCell={(rowId, fieldName, patch) =>
+                  setCellPatch(table.table_name, rowId, fieldName, patch)
+                }
+                onRejectCell={(rowId, fieldName, currentlyRejected) => {
+                  if (currentlyRejected) {
+                    setCellPatch(table.table_name, rowId, fieldName, { status: "extracted" });
+                  } else {
+                    setCellPatch(table.table_name, rowId, fieldName, { status: "rejected" });
+                  }
+                }}
+                onRejectRow={(row) => rejectRow(table, row)}
+                onRestoreRow={(row) => restoreRow(table, row)}
+                onAppendRow={() => appendRow(table)}
+              />
+            ))}
+
+            {(draft.schema_warnings.length > 0 || draft.general_warnings.length > 0) && (
+              <Section title="提示">
+                <div className="card" style={{ padding: 12 }}>
+                  {[...draft.schema_warnings, ...draft.general_warnings].map((w, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--warn-700)",
+                        background: "var(--warn-50)",
+                        border: "1px solid var(--warn-100)",
+                        borderRadius: 6,
+                        padding: "6px 8px",
+                        marginBottom: 6,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {w}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
           </div>
-        )}
 
-        {renderedTables.map((table) => (
-          <TableSection
-            key={table.table_name}
-            table={table}
-            invalidIndex={invalidIndex}
-            disabled={busy}
-            onChangeCell={(rowId, fieldName, patch) =>
-              setCellPatch(table.table_name, rowId, fieldName, patch)
-            }
-            onRejectCell={(rowId, fieldName, currentlyRejected) => {
-              if (currentlyRejected) {
-                setCellPatch(table.table_name, rowId, fieldName, { status: "extracted" });
-              } else {
-                setCellPatch(table.table_name, rowId, fieldName, { status: "rejected" });
-              }
-            }}
-            onRejectRow={(row) => rejectRow(table, row)}
-            onRestoreRow={(row) => restoreRow(table, row)}
-            onAppendRow={() => appendRow(table)}
-          />
-        ))}
-
-        {(draft.schema_warnings.length > 0 || draft.general_warnings.length > 0) && (
-          <Section title="提示">
-            <div className="card" style={{ padding: 12 }}>
-              {[...draft.schema_warnings, ...draft.general_warnings].map((w, i) => (
-                <div
-                  key={i}
+          {showSourcePanel && isDesktop && (
+            <aside
+              style={{
+                position: "sticky",
+                top: 12,
+                maxHeight: "calc(100vh - 160px)",
+                overflow: "auto",
+                background: "var(--surface)",
+                border: "1px solid var(--ink-100)",
+                borderRadius: 10,
+                padding: 14,
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--ink-500)",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  marginBottom: 8,
+                }}
+              >
+                源文件内容
+              </div>
+              {hasSource ? (
+                <pre
                   style={{
-                    fontSize: 11.5,
-                    color: "var(--warn-700)",
-                    background: "var(--warn-50)",
-                    border: "1px solid var(--warn-100)",
-                    borderRadius: 6,
-                    padding: "6px 8px",
-                    marginBottom: 6,
-                    lineHeight: 1.4,
+                    margin: 0,
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: 12,
+                    lineHeight: 1.55,
+                    color: "var(--ink-700)",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
                   }}
                 >
-                  {w}
+                  {sourceText}
+                </pre>
+              ) : (
+                <div style={{ color: "var(--ink-400)", fontSize: 12.5 }}>
+                  暂无可展示的源文件文本
                 </div>
-              ))}
-            </div>
-          </Section>
-        )}
+              )}
+            </aside>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -762,6 +833,96 @@ function RowCard({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// Mobile-only collapsible source-text panel. Rendered above tables in a
+// single column. Starts collapsed so it never dominates the small screen.
+function SourceTextPanel({
+  sourceText,
+  hasSource,
+}: {
+  sourceText: string | null;
+  hasSource: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      style={{
+        border: "1px solid var(--ink-100)",
+        background: "var(--surface)",
+        borderRadius: 10,
+        marginBottom: 12,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 12px",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          fontFamily: "var(--font)",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "var(--ink-500)",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          源文件内容
+        </span>
+        <span
+          style={{
+            color: "var(--ink-400)",
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 150ms ease",
+            display: "inline-flex",
+          }}
+        >
+          {I.chev(13)}
+        </span>
+      </button>
+      {open && (
+        <div
+          style={{
+            padding: "0 12px 12px",
+            maxHeight: 280,
+            overflow: "auto",
+          }}
+        >
+          {hasSource ? (
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                fontSize: 12,
+                lineHeight: 1.55,
+                color: "var(--ink-700)",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {sourceText}
+            </pre>
+          ) : (
+            <div style={{ color: "var(--ink-400)", fontSize: 12.5 }}>
+              暂无可展示的源文件文本
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

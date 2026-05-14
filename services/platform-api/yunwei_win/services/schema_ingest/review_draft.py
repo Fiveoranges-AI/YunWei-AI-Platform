@@ -61,6 +61,7 @@ def materialize_review_draft(
     pipeline_results: list[dict[str, Any]],
     catalog: dict[str, Any],
     document_summary: str | None = None,
+    document_source_text: str | None = None,
     warnings: list[str] | None = None,
 ) -> ReviewDraft:
     """Build a complete table/cell ReviewDraft.
@@ -110,7 +111,9 @@ def materialize_review_draft(
         schema_version=schema_version,
         status="pending_review",
         document=ReviewDraftDocument(
-            filename=document_filename, summary=document_summary
+            filename=document_filename,
+            summary=document_summary,
+            source_text=document_source_text,
         ),
         route_plan=ReviewDraftRoutePlan(
             selected_pipelines=[

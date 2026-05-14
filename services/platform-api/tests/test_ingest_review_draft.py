@@ -274,3 +274,39 @@ def test_pipeline_tables_map_matches_spec():
         "orders",
     ]
     assert PIPELINE_TABLES["finance"] == ["invoices", "invoice_items", "payments"]
+
+
+def test_materializer_threads_source_text_into_document():
+    """The materializer accepts ``document_source_text`` and stamps it onto
+    ``ReviewDraft.document.source_text``."""
+
+    catalog = _catalog_from_default()
+    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
+    draft = materialize_review_draft(
+        extraction_id=uuid4(),
+        document_id=uuid4(),
+        schema_version=1,
+        document_filename="x.pdf",
+        route_plan=route_plan,
+        pipeline_results=[],
+        catalog=catalog,
+        document_source_text="OCR 文本",
+    )
+    assert draft.document.source_text == "OCR 文本"
+
+
+def test_materializer_source_text_defaults_to_none():
+    """``document_source_text`` is optional; default is ``None``."""
+
+    catalog = _catalog_from_default()
+    route_plan = {"selected_pipelines": [{"name": "contract_order"}]}
+    draft = materialize_review_draft(
+        extraction_id=uuid4(),
+        document_id=uuid4(),
+        schema_version=1,
+        document_filename="x.pdf",
+        route_plan=route_plan,
+        pipeline_results=[],
+        catalog=catalog,
+    )
+    assert draft.document.source_text is None
