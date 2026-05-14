@@ -132,6 +132,111 @@ Platform-level auth, enterprise registration, sessions, and permissions remain i
 
 Original file bytes should stay in storage. Tenant DB rows store file metadata and storage URLs.
 
+## First-Principles Tenant Schema
+
+Because the redesign does not need backward compatibility and can assume no existing tenant data, vNext should simplify the tenant database around three responsibilities:
+
+```text
+1. Evidence
+   What did the user upload, and how did parsers/extractors interpret it?
+
+2. Review process
+   What did AI propose, what did humans change, and who confirmed it?
+
+3. Confirmed business facts
+   What official customer/company data should downstream UI and assistant use?
+```
+
+### Keep / Build
+
+Evidence and review:
+
+```text
+documents
+document_parses
+document_extractions
+ingest_batches
+ingest_jobs
+llm_calls
+```
+
+Schema metadata:
+
+```text
+company_schema_tables
+company_schema_fields
+schema_change_proposals
+```
+
+Confirmed business facts:
+
+```text
+customers
+contacts
+products
+product_requirements
+orders
+contracts
+contract_payment_milestones
+invoices
+invoice_items
+payments
+shipments
+shipment_items
+customer_journal_items
+customer_tasks
+field_provenance
+```
+
+### Drop From vNext Mainline
+
+These old customer-memory/inbox tables should not remain first-class vNext ingest targets:
+
+```text
+customer_events
+customer_commitments
+customer_risk_signals
+customer_memory_items
+customer_inbox_items
+```
+
+Their responsibilities collapse into:
+
+```text
+customer_journal_items
+  item_type = event | commitment | risk | note | preference | complaint | meeting | delivery | payment | other
+
+customer_tasks
+```
+
+This removes duplicate ways to represent the same customer timeline and prevents the assistant/UI from needing to merge several parallel memory models.
+
+### Core Extraction Principle
+
+LLMs extract business facts. The system owns identity, relationships, audit, source, workflow, and versioning.
+
+Therefore extractor schemas may include only:
+
+```text
+field_role = extractable
+field_role = identity_key
+```
+
+Extractor schemas must exclude:
+
+```text
+primary keys
+foreign keys
+document/source ids
+timestamps
+workflow statuses
+model confidence fields
+sort order fields
+raw parser/LLM payload fields
+```
+
+Confirm writeback fills relationships and audit fields from entity resolution, review row decisions, current document/extraction context, and DB-generated values.
+
 ## Provider Matrix
 
 First version:
