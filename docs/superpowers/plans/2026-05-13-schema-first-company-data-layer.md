@@ -2,42 +2,42 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild Win ingest around the tenant company schema: upload/OCR/extract produces a table-based `ReviewDraft` containing every field defined by the selected schema tables, the user reviews/fills missing cells, and confirmation writes only reviewed data into the tenant company data layer.
+**Goal:** Rebuild Win ingest around tenant company schema tables so extraction review always shows every active schema field, including empty fields AI did not extract.
 
-**Architecture:** Keep OCR, schema routing, and extractor providers, but replace the old `UnifiedDraft -> Review` surface with a schema-first contract. The tenant schema catalog is stored in tenant Postgres, is readable by AI and humans, and drives extraction prompts, review tables, validation, and confirm writeback. AI writes `document_extractions`, `field_provenance`, and optional `schema_change_proposals`; business tables are updated only after human confirmation.
+**Architecture:** Add a V2 ingest surface under `/api/win/ingest/v2/*` while keeping V1 available. Store tenant schema metadata in each per-enterprise Win database, materialize a table/cell `ReviewDraft` from extractor output plus the schema catalog, and confirm reviewed cells into company data tables with provenance. Frontend V2 review renders `ReviewDraft.tables` directly instead of the old `UnifiedDraft -> batchToReview()` summary.
 
-**Tech Stack:** FastAPI, SQLAlchemy async sessions, Pydantic v2, existing RQ ingest queue, existing OCR/extractor provider layer, React + TypeScript Vite app, pytest/pytest-asyncio, `npm run check`.
+**Tech Stack:** FastAPI, SQLAlchemy async sessions, Pydantic v2, RQ worker, existing OCR/extractor provider layer, React 18 + TypeScript + Vite, pytest/pytest-asyncio.
 
 ---
 
-## Design Constraints
+## Ground Rules
 
-Follow `/Users/eason/agent-platform/coding-principle.md`:
+Use the current v3 repo structure:
 
-- **Simple first:** do not patch the current `batchToReview()` mapping with more special cases. The root problem is the contract: the UI only renders fields that survived into `UnifiedDraft`.
-- **Surgical boundary:** keep the existing `/win/api/ingest/jobs` and `/win/api/ingest/auto` working until the V2 flow is verified. Add `/win/api/ingest/v2/*` and switch Upload/Review after tests pass.
-- **Explicit schema:** table/field definitions live in tenant DB catalog tables, not hard-coded frontend arrays. Backend may seed defaults, but runtime review uses `GET /win/api/company-schema`.
-- **Human gate:** AI never directly writes high-impact business tables. Confirmation writes reviewed cells into `customers`, `orders`, `invoices`, etc.
-- **Verifiable goal:** a selected `orders` table with 6 schema fields and only 4 extracted values must render 6 review cells: 4 filled, 2 empty/missing and editable.
+- Backend: `services/platform-api/yunwei_win/`
+- Backend tests: `services/platform-api/tests/`
+- Frontend: `apps/win-web/`
+- Frontend tests/typecheck: `apps/win-web`
+- API prefix: `/api/win/*`
+- SPA route: `/win/`
 
-Reference design from `yinhu-brain` repo:
+Do not use legacy paths:
 
-- `DocumentExtraction`: persist an extraction attempt separately from the business rows.
-- `FieldProvenance`: attach evidence to the field/cell, not only the document.
-- Inbox/review separation: AI proposal is durable; confirmation applies the proposal.
-- Pydantic extraction schemas generate LLM/tool contracts and avoid frontend-only schema drift.
+- `platform/yinhu_brain/*`
+- `platform/app-win/*`
+- `/win/api/*`
+
+Follow `/Users/eason/agent-platform/coding-principle.md`: small focused changes, explicit contracts, no speculative abstractions, tests for new behavior.
 
 ## Current Root Cause
 
-Current backend stores a merged `UnifiedDraft` in `IngestJob.result_json`. `normalize_pipeline_results()` only maps `identity`, `contract_order`, and `commitment_task_risk` into the draft. `finance`, `logistics`, and `manufacturing_requirement` stay in raw `pipeline_results`.
+`services/platform-api/yunwei_win/services/ingest/auto.py` returns rich `pipeline_results`, but `landingai_normalize.py` folds only part of that into `UnifiedDraft`. `apps/win-web/src/api/ingest.ts::batchToReview()` then renders a fixed subset of `UnifiedDraft`, so fields from `finance`, `logistics`, and `manufacturing_requirement` can disappear from the main review.
 
-Frontend `Review.tsx` calls `jobToBatch()` then `batchToReview()`. `batchToReview()` renders only selected draft paths such as `customer.full_name`, `contract.contract_no_external`, `order.amount_total`, contacts, payment milestones, commitments, tasks, risks, memory items, and events. It does not render schema fields as tables. Therefore the schema summary can be rich while "AI 提取结论" is sparse.
+The V2 fix is a new schema-first review contract. Do not keep adding paths to `batchToReview()`.
 
-The fix is a new table/cell review contract, not another normalizer patch.
+## Target Contract
 
-## Target ReviewDraft Contract
-
-Backend returns this shape from `GET /win/api/ingest/v2/extractions/{extraction_id}` and from extracted jobs:
+`ReviewDraft` is the V2 review payload:
 
 ```json
 {
@@ -47,21 +47,16 @@ Backend returns this shape from `GET /win/api/ingest/v2/extractions/{extraction_
   "status": "pending_review",
   "document": {
     "filename": "order.pdf",
-    "summary": "客户订单，包含总金额和交付地址"
-  },
-  "route_plan": {
-    "selected_pipelines": [
-      { "name": "contract_order", "confidence": 0.92, "reason": "包含订单号、金额、交付条款" }
-    ]
+    "summary": "客户订单"
   },
   "tables": [
     {
       "table_name": "orders",
       "label": "订单",
-      "purpose": "客户订单主表",
       "rows": [
         {
           "client_row_id": "orders:0",
+          "entity_id": null,
           "operation": "create",
           "cells": [
             {
@@ -92,149 +87,297 @@ Backend returns this shape from `GET /win/api/ingest/v2/extractions/{extraction_
         }
       ]
     }
-  ],
-  "schema_warnings": [],
-  "general_warnings": []
+  ]
 }
 ```
 
-Cell status values:
-
-- `extracted`: AI produced a value.
-- `missing`: schema field was expected for the selected table but no value was extracted.
-- `low_confidence`: AI produced a value below confidence threshold.
-- `edited`: user changed the value before confirm.
-- `rejected`: user explicitly excludes this cell from confirm.
-- `invalid`: user value fails server validation.
+Invariant: selected table fields are complete. For example, if `orders` has six active catalog fields and AI extracts four values, the review draft still has six `orders` cells.
 
 ## File Structure
 
 Create:
 
-- `platform/yinhu_brain/models/company_schema.py`
-- `platform/yinhu_brain/models/company_data.py`
-- `platform/yinhu_brain/models/document_extraction.py`
-- `platform/yinhu_brain/services/company_schema/__init__.py`
-- `platform/yinhu_brain/services/company_schema/default_catalog.py`
-- `platform/yinhu_brain/services/company_schema/catalog.py`
-- `platform/yinhu_brain/services/ingest_v2/__init__.py`
-- `platform/yinhu_brain/services/ingest_v2/schemas.py`
-- `platform/yinhu_brain/services/ingest_v2/review_draft.py`
-- `platform/yinhu_brain/services/ingest_v2/auto.py`
-- `platform/yinhu_brain/services/ingest_v2/confirm.py`
-- `platform/yinhu_brain/api/company_schema.py`
-- `platform/yinhu_brain/api/ingest_v2.py`
-- `platform/app-win/src/api/ingestV2.ts`
-- `platform/app-win/src/components/review/ReviewTableWorkspace.tsx`
-- `platform/app-win/src/components/review/ReviewCellEditor.tsx`
-- `platform/tests/test_company_schema_catalog.py`
-- `platform/tests/test_ingest_v2_review_draft.py`
-- `platform/tests/test_ingest_v2_api.py`
-- `platform/tests/test_ingest_v2_confirm.py`
+- `services/platform-api/yunwei_win/models/company_schema.py`
+- `services/platform-api/yunwei_win/models/company_data.py`
+- `services/platform-api/yunwei_win/models/document_extraction.py`
+- `services/platform-api/yunwei_win/services/company_schema/__init__.py`
+- `services/platform-api/yunwei_win/services/company_schema/default_catalog.py`
+- `services/platform-api/yunwei_win/services/company_schema/catalog.py`
+- `services/platform-api/yunwei_win/services/ingest_v2/__init__.py`
+- `services/platform-api/yunwei_win/services/ingest_v2/schemas.py`
+- `services/platform-api/yunwei_win/services/ingest_v2/review_draft.py`
+- `services/platform-api/yunwei_win/services/ingest_v2/auto.py`
+- `services/platform-api/yunwei_win/services/ingest_v2/confirm.py`
+- `services/platform-api/yunwei_win/api/company_schema.py`
+- `services/platform-api/yunwei_win/api/ingest_v2.py`
+- `apps/win-web/src/api/ingestV2.ts`
+- `apps/win-web/src/components/review/ReviewTableWorkspace.tsx`
+- `apps/win-web/src/components/review/ReviewCellEditor.tsx`
+- `services/platform-api/tests/test_company_schema_catalog.py`
+- `services/platform-api/tests/test_ingest_v2_review_draft.py`
+- `services/platform-api/tests/test_ingest_v2_api.py`
+- `services/platform-api/tests/test_ingest_v2_confirm.py`
 
 Modify:
 
-- `platform/yinhu_brain/models/__init__.py`
-- `platform/yinhu_brain/models/field_provenance.py`
-- `platform/yinhu_brain/models/ingest_job.py`
-- `platform/yinhu_brain/db.py`
-- `platform/yinhu_brain/workers/ingest_rq.py`
-- `platform/yinhu_brain/__init__.py`
-- `platform/app-win/src/api/ingest.ts`
-- `platform/app-win/src/data/types.ts`
-- `platform/app-win/src/screens/Upload.tsx`
-- `platform/app-win/src/screens/Review.tsx`
+- `services/platform-api/yunwei_win/models/__init__.py`
+- `services/platform-api/yunwei_win/models/field_provenance.py`
+- `services/platform-api/yunwei_win/models/ingest_job.py`
+- `services/platform-api/yunwei_win/db.py`
+- `services/platform-api/yunwei_win/routes.py`
+- `services/platform-api/yunwei_win/workers/ingest_rq.py`
+- `apps/win-web/src/api/ingest.ts`
+- `apps/win-web/src/data/types.ts`
+- `apps/win-web/src/screens/Upload.tsx`
+- `apps/win-web/src/screens/Review.tsx`
 
-## Task 1: Add Tenant Schema Catalog Models
+## Task 1: Company Schema Catalog
 
 **Files:**
-- Create: `platform/yinhu_brain/models/company_schema.py`
-- Modify: `platform/yinhu_brain/models/__init__.py`
-- Test: `platform/tests/test_company_schema_catalog.py`
+- Create: `services/platform-api/yunwei_win/models/company_schema.py`
+- Create: `services/platform-api/yunwei_win/services/company_schema/__init__.py`
+- Create: `services/platform-api/yunwei_win/services/company_schema/default_catalog.py`
+- Create: `services/platform-api/yunwei_win/services/company_schema/catalog.py`
+- Create: `services/platform-api/yunwei_win/api/company_schema.py`
+- Modify: `services/platform-api/yunwei_win/models/__init__.py`
+- Modify: `services/platform-api/yunwei_win/routes.py`
+- Test: `services/platform-api/tests/test_company_schema_catalog.py`
 
-- [ ] **Step 1: Write model registration test**
+- [ ] **Step 1: Write failing model/API tests**
 
-Create a test that imports `yinhu_brain.models`, runs `Base.metadata.create_all()` on SQLite, and asserts these tables exist:
+Create `services/platform-api/tests/test_company_schema_catalog.py` using the same in-memory SQLite pattern from `test_ingest_jobs.py`.
+
+Include these tests:
 
 ```python
-expected = {
-    "company_schema_tables",
-    "company_schema_fields",
-    "schema_change_proposals",
-}
-assert expected.issubset(set(Base.metadata.tables))
+def test_company_schema_models_are_registered():
+    assert "company_schema_tables" in Base.metadata.tables
+    assert "company_schema_fields" in Base.metadata.tables
+    assert "schema_change_proposals" in Base.metadata.tables
 ```
 
-- [ ] **Step 2: Implement catalog models**
+```python
+@pytest.mark.asyncio
+async def test_get_company_schema_seeds_default_catalog():
+    engine = await _make_engine()
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            res = await ac.get("/api/win/company-schema")
+            assert res.status_code == 200, res.text
+            body = res.json()
+            table_names = [t["table_name"] for t in body["tables"]]
+            assert "orders" in table_names
+            orders = next(t for t in body["tables"] if t["table_name"] == "orders")
+            fields = [f["field_name"] for f in orders["fields"]]
+            assert fields[:6] == [
+                "customer_id",
+                "amount_total",
+                "amount_currency",
+                "delivery_promised_date",
+                "delivery_address",
+                "description",
+            ]
+    finally:
+        await engine.dispose()
+```
 
-Create `CompanySchemaTable`, `CompanySchemaField`, and `SchemaChangeProposal`.
+```python
+@pytest.mark.asyncio
+async def test_company_schema_seed_is_idempotent():
+    engine = await _make_engine()
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            assert (await ac.get("/api/win/company-schema")).status_code == 200
+            assert (await ac.get("/api/win/company-schema")).status_code == 200
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            table_count = await session.scalar(select(func.count()).select_from(CompanySchemaTable))
+            assert table_count == len(DEFAULT_COMPANY_SCHEMA)
+    finally:
+        await engine.dispose()
+```
 
-Required columns:
+```python
+@pytest.mark.asyncio
+async def test_approve_add_field_proposal_adds_field():
+    engine = await _make_engine()
+    app = _build_app(engine)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+            proposal = await ac.post(
+                "/api/win/company-schema/change-proposals",
+                json={
+                    "proposal_type": "add_field",
+                    "table_name": "orders",
+                    "field_name": "external_po_no",
+                    "proposed_payload": {
+                        "label": "外部采购单号",
+                        "data_type": "text",
+                        "required": False,
+                        "description": "客户侧采购单号",
+                    },
+                    "reason": "Document mentions PO No.",
+                    "created_by": "ai",
+                },
+            )
+            assert proposal.status_code == 200, proposal.text
+            pid = proposal.json()["id"]
+            approved = await ac.post(f"/api/win/company-schema/change-proposals/{pid}/approve")
+            assert approved.status_code == 200, approved.text
+            schema = (await ac.get("/api/win/company-schema")).json()
+            orders = next(t for t in schema["tables"] if t["table_name"] == "orders")
+            assert "external_po_no" in [f["field_name"] for f in orders["fields"]]
+    finally:
+        await engine.dispose()
+```
 
-- `company_schema_tables`: `id`, `table_name`, `label`, `purpose`, `category`, `version`, `is_active`, `sort_order`, timestamps.
-- `company_schema_fields`: `id`, `table_id`, `field_name`, `label`, `data_type`, `required`, `is_array`, `enum_values`, `default_value`, `description`, `extraction_hint`, `validation`, `sort_order`, `is_active`, timestamps.
-- `schema_change_proposals`: `id`, `source_document_id`, `source_extraction_id`, `proposal_type`, `table_name`, `field_name`, `proposed_payload`, `reason`, `status`, `created_by`, `reviewed_by`, timestamps.
-
-Use plain SQLAlchemy models and JSON columns for `enum_values`, `validation`, and `proposed_payload`.
-
-- [ ] **Step 3: Export models**
-
-Update `platform/yinhu_brain/models/__init__.py` so `create_all()` sees the new tables.
-
-- [ ] **Step 4: Verify**
+- [ ] **Step 2: Run failing tests**
 
 Run:
 
 ```bash
-cd platform && ./.venv/bin/pytest tests/test_company_schema_catalog.py -q
+cd services/platform-api
+./.venv/bin/pytest tests/test_company_schema_catalog.py -q
 ```
+
+Expected: fails because `company_schema` modules do not exist.
+
+- [ ] **Step 3: Add SQLAlchemy models**
+
+Create `company_schema.py` with `CompanySchemaTable`, `CompanySchemaField`, and `SchemaChangeProposal`.
+
+Use these constraints:
+
+- Unique `company_schema_tables(table_name, version)`.
+- Unique `company_schema_fields(table_id, field_name)`.
+- JSON columns for `enum_values`, `default_value`, `validation`, `proposed_payload`.
+- Timestamp columns match the style in `models/ingest_job.py`.
+
+- [ ] **Step 4: Add default catalog**
+
+`default_catalog.py` exports `DEFAULT_COMPANY_SCHEMA`, a list of table dictionaries. Include these table names:
+
+```python
+[
+    "customers",
+    "contacts",
+    "products",
+    "product_requirements",
+    "contracts",
+    "contract_payment_milestones",
+    "orders",
+    "invoices",
+    "invoice_items",
+    "payments",
+    "shipments",
+    "shipment_items",
+    "customer_journal_items",
+    "customer_tasks",
+]
+```
+
+The `orders` table must define these first six fields in order:
+
+```python
+[
+    {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
+    {"field_name": "amount_total", "label": "订单金额", "data_type": "decimal", "required": False},
+    {"field_name": "amount_currency", "label": "币种", "data_type": "text", "required": False, "default_value": "CNY"},
+    {"field_name": "delivery_promised_date", "label": "承诺交期", "data_type": "date", "required": False},
+    {"field_name": "delivery_address", "label": "交付地址", "data_type": "text", "required": False},
+    {"field_name": "description", "label": "订单说明", "data_type": "text", "required": False},
+]
+```
+
+- [ ] **Step 5: Add catalog service and API**
+
+`catalog.py` exposes:
+
+```python
+async def ensure_default_company_schema(session: AsyncSession) -> None: ...
+async def get_company_schema(session: AsyncSession) -> dict: ...
+async def create_schema_change_proposal(session: AsyncSession, payload: dict) -> dict: ...
+async def approve_schema_change_proposal(session: AsyncSession, proposal_id: UUID, reviewer: str | None = None) -> dict: ...
+```
+
+`api/company_schema.py` uses `APIRouter(prefix="/company-schema")`. Because `routes.py` is mounted at `/api/win`, final paths are `/api/win/company-schema`.
+
+- [ ] **Step 6: Register router and models**
+
+Update:
+
+- `models/__init__.py` to import/export new models.
+- `routes.py` to include `_company_schema_router`.
+
+- [ ] **Step 7: Verify**
+
+Run:
+
+```bash
+cd services/platform-api
+./.venv/bin/pytest tests/test_company_schema_catalog.py -q
+```
+
+Expected: all tests pass.
 
 Commit:
 
 ```bash
-git add platform/yinhu_brain/models/company_schema.py platform/yinhu_brain/models/__init__.py platform/tests/test_company_schema_catalog.py
-git commit -m "feat(ingest): add company schema catalog models"
+git add \
+  services/platform-api/yunwei_win/models/company_schema.py \
+  services/platform-api/yunwei_win/services/company_schema \
+  services/platform-api/yunwei_win/api/company_schema.py \
+  services/platform-api/yunwei_win/models/__init__.py \
+  services/platform-api/yunwei_win/routes.py \
+  services/platform-api/tests/test_company_schema_catalog.py
+git commit -m "feat(win): add tenant company schema catalog"
 ```
 
-## Task 2: Add Company Data Foundation Tables
+## Task 2: Company Data Foundation Tables
 
 **Files:**
-- Create: `platform/yinhu_brain/models/company_data.py`
-- Modify: `platform/yinhu_brain/models/__init__.py`
-- Modify: `platform/yinhu_brain/models/field_provenance.py`
-- Test: extend `platform/tests/test_company_schema_catalog.py`
+- Create: `services/platform-api/yunwei_win/models/company_data.py`
+- Modify: `services/platform-api/yunwei_win/models/__init__.py`
+- Modify: `services/platform-api/yunwei_win/models/field_provenance.py`
+- Test: extend `services/platform-api/tests/test_company_schema_catalog.py`
 
-- [ ] **Step 1: Add missing business tables**
+- [ ] **Step 1: Extend model registration test**
 
-Keep existing `customers`, `contacts`, `orders`, and `contracts`. Add these tables for the schema-first company data layer:
+Add assertions for:
 
-- `products`
-- `product_requirements`
-- `contract_payment_milestones`
-- `invoices`
-- `invoice_items`
-- `payments`
-- `shipments`
-- `shipment_items`
-- `customer_journal_items`
+```python
+expected = {
+    "products",
+    "product_requirements",
+    "contract_payment_milestones",
+    "invoices",
+    "invoice_items",
+    "payments",
+    "shipments",
+    "shipment_items",
+    "customer_journal_items",
+}
+assert expected.issubset(Base.metadata.tables)
+```
 
-Use simple columns only. Do not add speculative workflow fields.
+- [ ] **Step 2: Add company data models**
 
-Important fields:
+Create simple SQLAlchemy models for the missing tables. Use existing `Base` and `TimestampMixin` where appropriate. Keep columns minimal and aligned with the spec:
 
-- `products`: `sku`, `name`, `description`, `specification`, `unit`.
-- `product_requirements`: `customer_id`, `product_id`, `requirement_type`, `requirement_text`, `tolerance`, `source_document_id`.
-- `contract_payment_milestones`: `contract_id`, `name`, `ratio`, `amount`, `trigger_event`, `trigger_offset_days`, `due_date`, `raw_text`.
-- `invoices`: `customer_id`, `order_id`, `invoice_no`, `issue_date`, `amount_total`, `amount_currency`, `tax_amount`, `status`.
-- `invoice_items`: `invoice_id`, `product_id`, `description`, `quantity`, `unit_price`, `amount`.
-- `payments`: `customer_id`, `invoice_id`, `payment_date`, `amount`, `currency`, `method`, `reference_no`.
-- `shipments`: `customer_id`, `order_id`, `shipment_no`, `carrier`, `tracking_no`, `ship_date`, `delivery_date`, `delivery_address`, `status`.
-- `shipment_items`: `shipment_id`, `product_id`, `description`, `quantity`, `unit`.
-- `customer_journal_items`: `customer_id`, `document_id`, `item_type`, `title`, `content`, `occurred_at`, `due_date`, `severity`, `status`, `confidence`, `raw_excerpt`.
+- `Product`: `sku`, `name`, `description`, `specification`, `unit`.
+- `ProductRequirement`: `customer_id`, `product_id`, `requirement_type`, `requirement_text`, `tolerance`, `source_document_id`.
+- `ContractPaymentMilestone`: `contract_id`, `name`, `ratio`, `amount`, `trigger_event`, `trigger_offset_days`, `due_date`, `raw_text`.
+- `Invoice`: `customer_id`, `order_id`, `invoice_no`, `issue_date`, `amount_total`, `amount_currency`, `tax_amount`, `status`.
+- `InvoiceItem`: `invoice_id`, `product_id`, `description`, `quantity`, `unit_price`, `amount`.
+- `Payment`: `customer_id`, `invoice_id`, `payment_date`, `amount`, `currency`, `method`, `reference_no`.
+- `Shipment`: `customer_id`, `order_id`, `shipment_no`, `carrier`, `tracking_no`, `ship_date`, `delivery_date`, `delivery_address`, `status`.
+- `ShipmentItem`: `shipment_id`, `product_id`, `description`, `quantity`, `unit`.
+- `CustomerJournalItem`: `customer_id`, `document_id`, `item_type`, `title`, `content`, `occurred_at`, `due_date`, `severity`, `status`, `confidence`, `raw_excerpt`.
 
-- [ ] **Step 2: Widen provenance entity enum**
+- [ ] **Step 3: Extend provenance enum**
 
-Extend `EntityType` in `platform/yinhu_brain/models/field_provenance.py` to include:
+In `field_provenance.py`, extend `EntityType` with:
 
 ```python
 product = "product"
@@ -249,125 +392,64 @@ customer_journal_item = "customer_journal_item"
 customer_task = "customer_task"
 ```
 
-- [ ] **Step 3: Verify tables**
+- [ ] **Step 4: Register models and verify**
 
-Extend the model test to assert all new table names are registered.
-
-Run:
+Update `models/__init__.py`, then run:
 
 ```bash
-cd platform && ./.venv/bin/pytest tests/test_company_schema_catalog.py -q
+cd services/platform-api
+./.venv/bin/pytest tests/test_company_schema_catalog.py -q
 ```
 
 Commit:
 
 ```bash
-git add platform/yinhu_brain/models/company_data.py platform/yinhu_brain/models/__init__.py platform/yinhu_brain/models/field_provenance.py platform/tests/test_company_schema_catalog.py
-git commit -m "feat(ingest): add company data foundation tables"
+git add \
+  services/platform-api/yunwei_win/models/company_data.py \
+  services/platform-api/yunwei_win/models/__init__.py \
+  services/platform-api/yunwei_win/models/field_provenance.py \
+  services/platform-api/tests/test_company_schema_catalog.py
+git commit -m "feat(win): add company data foundation tables"
 ```
 
-## Task 3: Seed And Serve The Tenant Schema Catalog
+## Task 3: ReviewDraft Schemas And Materializer
 
 **Files:**
-- Create: `platform/yinhu_brain/services/company_schema/default_catalog.py`
-- Create: `platform/yinhu_brain/services/company_schema/catalog.py`
-- Create: `platform/yinhu_brain/api/company_schema.py`
-- Modify: `platform/yinhu_brain/__init__.py`
-- Test: `platform/tests/test_company_schema_catalog.py`
+- Create: `services/platform-api/yunwei_win/models/document_extraction.py`
+- Create: `services/platform-api/yunwei_win/services/ingest_v2/__init__.py`
+- Create: `services/platform-api/yunwei_win/services/ingest_v2/schemas.py`
+- Create: `services/platform-api/yunwei_win/services/ingest_v2/review_draft.py`
+- Modify: `services/platform-api/yunwei_win/models/__init__.py`
+- Test: `services/platform-api/tests/test_ingest_v2_review_draft.py`
 
-- [ ] **Step 1: Define default catalog**
+- [ ] **Step 1: Write failing ReviewDraft tests**
 
-`default_catalog.py` exports `DEFAULT_COMPANY_SCHEMA`. Each table entry includes `table_name`, `label`, `purpose`, `category`, and ordered `fields`.
+Create tests for these cases:
 
-Minimum default tables for V2:
+1. `orders` has six active catalog fields and extraction has four values; materializer returns six cells.
+2. Missing fields are present with `status == "missing"`.
+3. Array table selected with no extracted items returns one empty row.
 
-- `customers`
-- `contacts`
-- `products`
-- `product_requirements`
-- `contracts`
-- `contract_payment_milestones`
-- `orders`
-- `invoices`
-- `invoice_items`
-- `payments`
-- `shipments`
-- `shipment_items`
-- `customer_journal_items`
-- `customer_tasks`
-
-For `orders`, include at least these six fields to lock the missing-cell behavior:
+The central assertion:
 
 ```python
-{
-    "table_name": "orders",
-    "label": "订单",
-    "fields": [
-        {"field_name": "customer_id", "label": "客户", "data_type": "uuid", "required": True},
-        {"field_name": "amount_total", "label": "订单金额", "data_type": "decimal", "required": False},
-        {"field_name": "amount_currency", "label": "币种", "data_type": "text", "required": False, "default_value": "CNY"},
-        {"field_name": "delivery_promised_date", "label": "承诺交期", "data_type": "date", "required": False},
-        {"field_name": "delivery_address", "label": "交付地址", "data_type": "text", "required": False},
-        {"field_name": "description", "label": "订单说明", "data_type": "text", "required": False},
-    ],
+orders = next(t for t in draft.tables if t.table_name == "orders")
+cells = {c.field_name: c for c in orders.rows[0].cells}
+assert set(cells) == {
+    "customer_id",
+    "amount_total",
+    "amount_currency",
+    "delivery_promised_date",
+    "delivery_address",
+    "description",
 }
+assert cells["amount_total"].status == "extracted"
+assert cells["delivery_address"].status == "missing"
 ```
 
-- [ ] **Step 2: Implement idempotent seed/read service**
+- [ ] **Step 2: Add `DocumentExtraction` model**
 
-`catalog.py` exposes:
-
-```python
-async def ensure_default_company_schema(session: AsyncSession) -> None: ...
-async def get_company_schema(session: AsyncSession) -> CompanySchemaDTO: ...
-async def create_schema_change_proposal(session: AsyncSession, payload: SchemaChangeProposalCreate) -> SchemaChangeProposalDTO: ...
-async def approve_schema_change_proposal(session: AsyncSession, proposal_id: UUID, reviewer: str | None) -> CompanySchemaDTO: ...
-```
-
-The seed operation must not duplicate existing active tables/fields.
-
-- [ ] **Step 3: Add API**
-
-`platform/yinhu_brain/api/company_schema.py`:
-
-- `GET /api/company-schema`
-- `POST /api/company-schema/change-proposals`
-- `POST /api/company-schema/change-proposals/{proposal_id}/approve`
-
-Include router in `yinhu_brain/__init__.py`, so mounted paths become `/win/api/company-schema`.
-
-- [ ] **Step 4: Verify**
-
-Tests:
-
-- `GET /win/api/company-schema` seeds and returns ordered tables.
-- Calling it twice does not duplicate rows.
-- Approving an `add_field` proposal creates a new active field.
-
-Run:
-
-```bash
-cd platform && ./.venv/bin/pytest tests/test_company_schema_catalog.py -q
-```
-
-Commit:
-
-```bash
-git add platform/yinhu_brain/services/company_schema platform/yinhu_brain/api/company_schema.py platform/yinhu_brain/__init__.py platform/tests/test_company_schema_catalog.py
-git commit -m "feat(ingest): serve tenant company schema catalog"
-```
-
-## Task 4: Add DocumentExtraction And ReviewDraft Schemas
-
-**Files:**
-- Create: `platform/yinhu_brain/models/document_extraction.py`
-- Create: `platform/yinhu_brain/services/ingest_v2/schemas.py`
-- Modify: `platform/yinhu_brain/models/__init__.py`
-- Test: `platform/tests/test_ingest_v2_review_draft.py`
-
-- [ ] **Step 1: Add `DocumentExtraction` model**
-
-Required columns:
+Columns:
 
 - `id`
 - `document_id`
@@ -376,17 +458,16 @@ Required columns:
 - `route_plan`
 - `raw_pipeline_results`
 - `review_draft`
-- `status`: `pending_review`, `confirmed`, `ignored`, `failed`
+- `status`
 - `warnings`
 - `created_by`
 - `confirmed_by`
+- `confirmed_at`
 - timestamps
 
-This model mirrors the `yinhu-brain` reference: extraction attempts are durable and separate from confirmed business rows.
+- [ ] **Step 3: Add Pydantic schemas**
 
-- [ ] **Step 2: Add Pydantic schemas**
-
-`services/ingest_v2/schemas.py` defines:
+`schemas.py` defines:
 
 - `ReviewCellEvidence`
 - `ReviewCell`
@@ -397,34 +478,11 @@ This model mirrors the `yinhu-brain` reference: extraction attempts are durable 
 - `ConfirmExtractionRequest`
 - `ConfirmExtractionResponse`
 
-Keep values typed as `Any | None`; validation happens using `data_type` from catalog.
+Use `Any | None` for cell values and explicit string literal unions for statuses.
 
-- [ ] **Step 3: Verify schema serialization**
+- [ ] **Step 4: Add materializer**
 
-Test `ReviewDraft.model_validate(...).model_dump(mode="json")` for one table with one extracted and one missing cell.
-
-Run:
-
-```bash
-cd platform && ./.venv/bin/pytest tests/test_ingest_v2_review_draft.py -q
-```
-
-Commit:
-
-```bash
-git add platform/yinhu_brain/models/document_extraction.py platform/yinhu_brain/services/ingest_v2 platform/yinhu_brain/models/__init__.py platform/tests/test_ingest_v2_review_draft.py
-git commit -m "feat(ingest): add document extraction review schemas"
-```
-
-## Task 5: Materialize Table-Based Review Drafts
-
-**Files:**
-- Create: `platform/yinhu_brain/services/ingest_v2/review_draft.py`
-- Test: `platform/tests/test_ingest_v2_review_draft.py`
-
-- [ ] **Step 1: Define pipeline-to-table mapping**
-
-In `review_draft.py`:
+`review_draft.py` defines `PIPELINE_TABLES` exactly:
 
 ```python
 PIPELINE_TABLES = {
@@ -437,8 +495,6 @@ PIPELINE_TABLES = {
 }
 ```
 
-- [ ] **Step 2: Implement materializer**
-
 Expose:
 
 ```python
@@ -450,86 +506,102 @@ def materialize_review_draft(
     document_filename: str,
     route_plan: dict[str, Any],
     pipeline_results: list[dict[str, Any]],
-    catalog: CompanySchemaDTO,
+    catalog: dict[str, Any],
     document_summary: str | None = None,
     warnings: list[str] | None = None,
-) -> ReviewDraft: ...
+) -> ReviewDraft:
+    ...
 ```
 
 Rules:
 
-- Use selected pipelines from `route_plan.selected_pipelines`.
-- For every selected table, render every active field from the catalog.
-- If the extracted object has a value, status is `extracted`.
-- If the value is empty and field has `default_value`, use default with source `default`.
-- If the value is empty and no default exists, status is `missing`.
-- Preserve raw extraction under `ReviewTable.raw_extraction` for debugging, but UI should render cells.
-- For array tables (`contacts`, `invoice_items`, `shipment_items`, `contract_payment_milestones`, `customer_tasks`, `customer_journal_items`), create one row per extracted item. If none extracted, create one empty row so the user can add values.
-- Evidence is attached by matching `field_provenance` paths when provider returns them; otherwise keep `evidence=null`.
+- Selected pipelines decide selected tables.
+- Selected table cells are generated from catalog fields.
+- Value present -> `status="extracted"`, `source="ai"`.
+- Default present and value missing -> default value with `source="default"`.
+- Value missing and no default -> `status="missing"`, `source="empty"`.
+- Array tables with no extracted rows get one empty row.
 
-- [ ] **Step 3: Add the key failing test**
-
-Test case:
-
-- Catalog has `orders` with 6 fields.
-- Route selects `contract_order`.
-- Pipeline extraction contains only `amount_total`, `amount_currency`, `delivery_promised_date`, `description`.
-- `materialize_review_draft()` returns an `orders` table with exactly 6 cells.
-- `delivery_address` and `customer_id` are present with `status == "missing"`.
-
-- [ ] **Step 4: Verify**
+- [ ] **Step 5: Verify**
 
 Run:
 
 ```bash
-cd platform && ./.venv/bin/pytest tests/test_ingest_v2_review_draft.py -q
+cd services/platform-api
+./.venv/bin/pytest tests/test_ingest_v2_review_draft.py -q
 ```
 
 Commit:
 
 ```bash
-git add platform/yinhu_brain/services/ingest_v2/review_draft.py platform/tests/test_ingest_v2_review_draft.py
-git commit -m "feat(ingest): materialize schema review drafts"
+git add \
+  services/platform-api/yunwei_win/models/document_extraction.py \
+  services/platform-api/yunwei_win/services/ingest_v2 \
+  services/platform-api/yunwei_win/models/__init__.py \
+  services/platform-api/tests/test_ingest_v2_review_draft.py
+git commit -m "feat(win): materialize schema-first review drafts"
 ```
 
-## Task 6: Add V2 Ingest Orchestrator And Worker Dispatch
+## Task 4: V2 Ingest Job API And Worker Dispatch
 
 **Files:**
-- Create: `platform/yinhu_brain/services/ingest_v2/auto.py`
-- Modify: `platform/yinhu_brain/models/ingest_job.py`
-- Modify: `platform/yinhu_brain/db.py`
-- Modify: `platform/yinhu_brain/workers/ingest_rq.py`
-- Test: `platform/tests/test_ingest_rq_worker.py`
+- Create: `services/platform-api/yunwei_win/services/ingest_v2/auto.py`
+- Create: `services/platform-api/yunwei_win/api/ingest_v2.py`
+- Modify: `services/platform-api/yunwei_win/models/ingest_job.py`
+- Modify: `services/platform-api/yunwei_win/db.py`
+- Modify: `services/platform-api/yunwei_win/routes.py`
+- Modify: `services/platform-api/yunwei_win/workers/ingest_rq.py`
+- Test: `services/platform-api/tests/test_ingest_v2_api.py`
+- Test: `services/platform-api/tests/test_ingest_rq_worker.py`
 
-- [ ] **Step 1: Extend `IngestJob` minimally**
+- [ ] **Step 1: Write API and worker tests**
 
-Add nullable columns:
+Test expectations:
 
-- `workflow_version`: string, default `"v1"`.
-- `extraction_id`: FK to `document_extractions.id`, nullable.
+- `POST /api/win/ingest/v2/jobs` creates jobs with `workflow_version == "v2"`.
+- `GET /api/win/ingest/v2/jobs/{id}` returns `review_draft` when extracted.
+- Worker dispatches V2 jobs to `auto_ingest_v2()`.
+- Existing V1 `tests/test_ingest_jobs.py` still passes.
 
-Add an idempotent ensure helper in `db.py` for existing tenant DBs:
+- [ ] **Step 2: Extend `IngestJob`**
+
+Add nullable/minimal columns:
+
+- `workflow_version: str`, default `"v1"`.
+- `extraction_id: UUID | None`, FK to `document_extractions.id`.
+
+Update `_job_dict()` equivalent in V2 API to include both fields.
+
+- [ ] **Step 3: Add existing-tenant ensure helper**
+
+In `db.py`, add:
 
 ```python
 async def ensure_ingest_v2_tables(engine: AsyncEngine) -> None:
     ...
 ```
 
-It must create new V2 tables and add missing `ingest_jobs.workflow_version` / `ingest_jobs.extraction_id` columns for already-provisioned tenant databases.
+It must:
 
-- [ ] **Step 2: Implement `auto_ingest_v2()`**
+- create V2 tables with `Base.metadata.create_all(..., checkfirst=True)`;
+- add missing columns `ingest_jobs.workflow_version` and `ingest_jobs.extraction_id` for already-provisioned tenant DBs using idempotent DDL.
 
-`auto_ingest_v2()` follows the existing `auto_ingest()` stages:
+Keep the existing `ensure_ingest_job_tables_for()` behavior intact for V1.
+
+- [ ] **Step 4: Implement `auto_ingest_v2()`**
+
+Use the same stages as V1:
 
 1. `collect_evidence()`
 2. `route_schemas()`
 3. `get_extractor_provider().extract_selected()`
 4. `ensure_default_company_schema()`
-5. `materialize_review_draft()`
-6. Insert `DocumentExtraction`
-7. Set `Document.raw_llm_response` to include `workflow_version="v2"` and `extraction_id`
+5. `get_company_schema()`
+6. `materialize_review_draft()`
+7. insert `DocumentExtraction`
+8. set `Document.raw_llm_response` with `workflow_version="v2"`
 
-It returns:
+Return:
 
 ```python
 @dataclass
@@ -540,9 +612,26 @@ class AutoIngestV2Result:
     review_draft: ReviewDraft
 ```
 
-- [ ] **Step 3: Dispatch worker by `workflow_version`**
+- [ ] **Step 5: Add V2 API router**
 
-In `workers/ingest_rq.py`, after loading the job:
+`api/ingest_v2.py` uses `APIRouter(prefix="/ingest/v2")`, because parent mount is `/api/win`.
+
+Implement:
+
+- `POST /jobs`
+- `GET /jobs`
+- `GET /jobs/{job_id}`
+- `POST /jobs/{job_id}/retry`
+- `POST /jobs/{job_id}/cancel`
+- `GET /extractions/{extraction_id}`
+- `PATCH /extractions/{extraction_id}`
+- `POST /extractions/{extraction_id}/ignore`
+
+Do not implement confirm here; Task 5 owns confirm.
+
+- [ ] **Step 6: Dispatch worker by workflow version**
+
+In `workers/ingest_rq.py`, branch inside extraction:
 
 ```python
 if job.workflow_version == "v2":
@@ -551,100 +640,79 @@ else:
     result = await auto_ingest(...)
 ```
 
-For V2 jobs:
+For V2 success, write:
 
-- set `j.extraction_id`
-- set `j.document_id`
-- set `j.result_json = review_draft.model_dump(mode="json")`
-- set `j.status = extracted`, `j.stage = done`
+- `j.document_id`
+- `j.extraction_id`
+- `j.result_json = review_draft.model_dump(mode="json")`
+- `j.status = extracted`
+- `j.stage = done`
 
-Do not break existing V1 worker tests.
-
-- [ ] **Step 4: Verify**
-
-Add worker test with monkeypatched `auto_ingest_v2()` returning a small `ReviewDraft`. Assert the job has `workflow_version == "v2"`, `status == extracted`, `extraction_id` set, and `result_json.tables[0].table_name == "orders"`.
+- [ ] **Step 7: Verify**
 
 Run:
 
 ```bash
-cd platform && ./.venv/bin/pytest tests/test_ingest_rq_worker.py -q
+cd services/platform-api
+./.venv/bin/pytest \
+  tests/test_ingest_v2_api.py \
+  tests/test_ingest_rq_worker.py \
+  tests/test_ingest_jobs.py \
+  -q
 ```
 
 Commit:
 
 ```bash
-git add platform/yinhu_brain/services/ingest_v2/auto.py platform/yinhu_brain/models/ingest_job.py platform/yinhu_brain/db.py platform/yinhu_brain/workers/ingest_rq.py platform/tests/test_ingest_rq_worker.py
-git commit -m "feat(ingest): run schema-first v2 worker jobs"
+git add \
+  services/platform-api/yunwei_win/services/ingest_v2/auto.py \
+  services/platform-api/yunwei_win/api/ingest_v2.py \
+  services/platform-api/yunwei_win/models/ingest_job.py \
+  services/platform-api/yunwei_win/db.py \
+  services/platform-api/yunwei_win/routes.py \
+  services/platform-api/yunwei_win/workers/ingest_rq.py \
+  services/platform-api/tests/test_ingest_v2_api.py \
+  services/platform-api/tests/test_ingest_rq_worker.py
+git commit -m "feat(win): add schema-first v2 ingest jobs"
 ```
 
-## Task 7: Add V2 API Surface
+## Task 5: Confirm Reviewed Tables
 
 **Files:**
-- Create: `platform/yinhu_brain/api/ingest_v2.py`
-- Modify: `platform/yinhu_brain/__init__.py`
-- Test: `platform/tests/test_ingest_v2_api.py`
+- Create: `services/platform-api/yunwei_win/services/ingest_v2/confirm.py`
+- Modify: `services/platform-api/yunwei_win/api/ingest_v2.py`
+- Test: `services/platform-api/tests/test_ingest_v2_confirm.py`
 
-- [ ] **Step 1: Add endpoints**
+- [ ] **Step 1: Write confirm tests**
 
-`APIRouter(prefix="/api/ingest/v2")`:
+Cover:
 
-- `POST /jobs`: same multipart input as V1, but creates jobs with `workflow_version="v2"`.
-- `GET /jobs/{job_id}`: returns job plus `review_draft` when extracted.
-- `GET /extractions/{extraction_id}`: returns persisted `DocumentExtraction.review_draft`.
-- `PATCH /extractions/{extraction_id}`: accepts cell patches and updates `review_draft`.
-- `POST /extractions/{extraction_id}/ignore`: marks extraction ignored.
-- `POST /extractions/{extraction_id}/confirm`: confirm reviewed draft.
+- confirming an `orders` draft creates/updates an `orders` row;
+- user-filled missing cells persist;
+- provenance rows are created for AI and edited cells;
+- missing required cells return `400` and do not mark extraction confirmed.
 
-Keep V2 separate from V1 so upload can switch without breaking history.
+- [ ] **Step 2: Implement validation**
 
-- [ ] **Step 2: Include router**
+Support catalog data types:
 
-Update `yinhu_brain/__init__.py`:
+- `text`
+- `uuid`
+- `date`
+- `datetime`
+- `decimal`
+- `integer`
+- `boolean`
+- `enum`
+- `json`
 
-```python
-from yinhu_brain.api.ingest_v2 import router as _ingest_v2_router
-router.include_router(_ingest_v2_router)
-```
+Rules:
 
-- [ ] **Step 3: Verify API**
+- Empty required non-rejected cell is invalid.
+- `rejected` cells are skipped.
+- Invalid confirm response includes `invalid_cells`.
 
-Tests:
-
-- `POST /win/api/ingest/v2/jobs` creates queued V2 jobs.
-- `GET /win/api/ingest/v2/jobs/{id}` returns `workflow_version == "v2"`.
-- `GET /win/api/ingest/v2/extractions/{id}` returns tables from persisted draft.
-- `PATCH` changes one cell to `edited`.
-- `ignore` is idempotent.
-
-Run:
-
-```bash
-cd platform && ./.venv/bin/pytest tests/test_ingest_v2_api.py -q
-```
-
-Commit:
-
-```bash
-git add platform/yinhu_brain/api/ingest_v2.py platform/yinhu_brain/__init__.py platform/tests/test_ingest_v2_api.py
-git commit -m "feat(ingest): expose schema-first v2 APIs"
-```
-
-## Task 8: Confirm Reviewed Tables Into Business Tables
-
-**Files:**
-- Create: `platform/yinhu_brain/services/ingest_v2/confirm.py`
-- Modify: `platform/yinhu_brain/api/ingest_v2.py`
-- Test: `platform/tests/test_ingest_v2_confirm.py`
-
-- [ ] **Step 1: Implement validation helpers**
-
-Validate values using catalog `data_type`:
-
-- `text`, `uuid`, `date`, `datetime`, `decimal`, `integer`, `boolean`, `enum`, `json`.
-- Empty required fields return 400 with `invalid_cells`.
-- Rejected cells are skipped.
-
-- [ ] **Step 2: Implement confirm writer**
+- [ ] **Step 3: Implement writeback**
 
 Expose:
 
@@ -655,59 +723,69 @@ async def confirm_review_draft(
     extraction_id: UUID,
     request: ConfirmExtractionRequest,
     confirmed_by: str | None,
-) -> ConfirmExtractionResponse: ...
+) -> ConfirmExtractionResponse:
+    ...
 ```
 
-Rules:
+Write parent rows before child rows:
 
-- Load `DocumentExtraction` and catalog.
-- Apply submitted patches to server copy of `review_draft`.
-- Upsert/create parent rows before child rows: `customers -> contacts/orders/products -> contracts/invoices/shipments -> line items/milestones/payments/journal/tasks`.
-- Insert `FieldProvenance` for every confirmed non-empty cell, including edited values with `extracted_by="human"` when source is user edited.
-- Mark `DocumentExtraction.status = confirmed`.
-- Mark linked `Document.review_status = confirmed`.
-- If invoked through V2 job confirm, mark `IngestJob.status = confirmed`.
-
-- [ ] **Step 3: Keep linking simple**
+```text
+customers
+contacts / orders / products
+contracts / invoices / shipments / product_requirements
+contract_payment_milestones / invoice_items / shipment_items / payments
+customer_journal_items / customer_tasks
+```
 
 For MVP:
 
-- If a table row has an existing entity id in `ReviewRow.entity_id`, update that row.
-- Otherwise create a new row.
-- If a child row needs a parent created in the same confirm request, use table order and in-memory `client_row_id -> entity_id` mapping.
-- Do not implement fuzzy merge in V2 confirm. Existing V1 merge logic can remain untouched.
+- update by `ReviewRow.entity_id` when present;
+- otherwise create;
+- use `client_row_id -> entity_id` mapping inside the same confirm request;
+- no fuzzy merge.
 
-- [ ] **Step 4: Verify**
+- [ ] **Step 4: Wire confirm endpoint**
 
-Tests:
+Add:
 
-- Confirm an `orders` draft with two missing cells filled by user; assert `orders` row contains user values.
-- Confirm an `invoices` draft writes `invoices` and `invoice_items`.
-- Confirm writes `field_provenance` rows for AI and human-edited cells.
-- Missing required `customer_id` returns 400 and does not mark extraction confirmed.
+```text
+POST /api/win/ingest/v2/extractions/{extraction_id}/confirm
+```
+
+Mark:
+
+- `DocumentExtraction.status = confirmed`
+- `Document.review_status = confirmed`
+- linked `IngestJob.status = confirmed`
+
+- [ ] **Step 5: Verify**
 
 Run:
 
 ```bash
-cd platform && ./.venv/bin/pytest tests/test_ingest_v2_confirm.py -q
+cd services/platform-api
+./.venv/bin/pytest tests/test_ingest_v2_confirm.py -q
 ```
 
 Commit:
 
 ```bash
-git add platform/yinhu_brain/services/ingest_v2/confirm.py platform/yinhu_brain/api/ingest_v2.py platform/tests/test_ingest_v2_confirm.py
-git commit -m "feat(ingest): confirm reviewed tables into company data"
+git add \
+  services/platform-api/yunwei_win/services/ingest_v2/confirm.py \
+  services/platform-api/yunwei_win/api/ingest_v2.py \
+  services/platform-api/tests/test_ingest_v2_confirm.py
+git commit -m "feat(win): confirm reviewed schema tables"
 ```
 
-## Task 9: Add Frontend V2 Types And API Client
+## Task 6: Frontend V2 API Types
 
 **Files:**
-- Create: `platform/app-win/src/api/ingestV2.ts`
-- Modify: `platform/app-win/src/data/types.ts`
+- Create: `apps/win-web/src/api/ingestV2.ts`
+- Modify: `apps/win-web/src/data/types.ts`
 
-- [ ] **Step 1: Add TypeScript types**
+- [ ] **Step 1: Add frontend V2 types**
 
-Mirror backend schema names:
+Define:
 
 - `ReviewCellEvidence`
 - `ReviewCellStatus`
@@ -718,171 +796,168 @@ Mirror backend schema names:
 - `ReviewCellPatch`
 - `IngestV2Job`
 - `ConfirmExtractionResponse`
+- `CompanySchema`
 
-Do not reuse `ReviewField`, `ReviewExtraction`, or `SchemaSummary` for V2; those are summary-card concepts.
+Do not reuse V1 `ReviewField` or `ReviewExtraction` for V2 table state.
 
-- [ ] **Step 2: Add API functions**
+- [ ] **Step 2: Add API client**
 
-`ingestV2.ts` exports:
+`ingestV2.ts` uses base:
 
 ```ts
-export async function createIngestV2Jobs(input: { files: File[]; text?: string; sourceHint: SourceHint; uploader?: string }): Promise<CreateIngestV2JobsResponse>
-export async function getIngestV2Job(jobId: string): Promise<IngestV2Job>
-export async function getReviewDraft(extractionId: string): Promise<ReviewDraft>
-export async function patchReviewDraft(extractionId: string, patches: ReviewCellPatch[]): Promise<ReviewDraft>
-export async function confirmReviewDraft(extractionId: string, patches: ReviewCellPatch[]): Promise<ConfirmExtractionResponse>
-export async function ignoreReviewDraft(extractionId: string): Promise<void>
-export async function getCompanySchema(): Promise<CompanySchema>
+const API_BASE = "/api/win";
 ```
+
+Exports:
+
+```ts
+createIngestV2Jobs()
+listIngestV2Jobs()
+getIngestV2Job()
+getReviewDraft()
+patchReviewDraft()
+confirmReviewDraft()
+ignoreReviewDraft()
+getCompanySchema()
+```
+
+Endpoints must use `/api/win/ingest/v2/*` and `/api/win/company-schema`.
 
 - [ ] **Step 3: Verify**
 
 Run:
 
 ```bash
-cd platform/app-win && npm run check
+cd apps/win-web
+npm run check
 ```
 
 Commit:
 
 ```bash
-git add platform/app-win/src/api/ingestV2.ts platform/app-win/src/data/types.ts
-git commit -m "feat(win): add schema-first ingest api client"
+git add apps/win-web/src/api/ingestV2.ts apps/win-web/src/data/types.ts
+git commit -m "feat(win-web): add schema-first ingest client"
 ```
 
-## Task 10: Replace Review Screen With Table Workspace For V2 Jobs
+## Task 7: Frontend Table Review UI
 
 **Files:**
-- Create: `platform/app-win/src/components/review/ReviewTableWorkspace.tsx`
-- Create: `platform/app-win/src/components/review/ReviewCellEditor.tsx`
-- Modify: `platform/app-win/src/screens/Review.tsx`
+- Create: `apps/win-web/src/components/review/ReviewTableWorkspace.tsx`
+- Create: `apps/win-web/src/components/review/ReviewCellEditor.tsx`
+- Modify: `apps/win-web/src/screens/Review.tsx`
+- Modify: `apps/win-web/src/screens/Upload.tsx`
+- Modify: `apps/win-web/src/api/ingest.ts` only if legacy job detection needs compatibility types.
 
-- [ ] **Step 1: Add table workspace component**
+- [ ] **Step 1: Add table workspace**
 
 Render `ReviewDraft.tables` directly:
 
-- One section per table.
-- One grid/table per `ReviewTable`.
-- Columns are schema fields in catalog order.
-- Rows are `ReviewRow[]`.
-- Empty/missing cells are visible, editable, and styled as missing.
-- Evidence chip opens excerpt/page when available.
-- Users can reject a cell.
-- Users can add a row for array/line-item tables.
+- one section per table;
+- columns/cells follow backend catalog order;
+- `missing` cells are visible and editable;
+- `rejected` cells are visible but skipped on confirm;
+- evidence excerpt/page is visible when present;
+- array tables support adding one local row.
 
-Do not place cards inside cards. Use the existing app visual language and keep the layout dense.
+Use the existing Win design language from `apps/win-web/src/components/*`. Keep the workspace dense and operational, not marketing-style.
 
-- [ ] **Step 2: Wire V2 job loading**
+- [ ] **Step 2: Wire Review screen**
 
 In `Review.tsx`:
 
-- If `params.jobId` loads a V2 job (`workflow_version === "v2"` or `result_json.tables` exists), render `ReviewTableWorkspace`.
-- Keep legacy `batchToReview()` path only for V1 jobs and cold preview fallback.
+- load V2 job when `workflow_version === "v2"` or `result_json.tables` exists;
+- render `ReviewTableWorkspace` for V2;
+- keep V1 `jobToBatch()` / `batchToReview()` path for legacy jobs.
 
-- [ ] **Step 3: Wire confirm/ignore**
+- [ ] **Step 3: Wire Upload screen**
+
+Switch new upload submissions to `createIngestV2Jobs()` after backend V2 API tests pass.
+
+V1 APIs can remain for history/fallback.
+
+- [ ] **Step 4: Wire confirm/ignore**
 
 For V2:
 
-- Confirm sends all local edits as `ReviewCellPatch[]` to `/extractions/{id}/confirm`.
-- Ignore calls `/extractions/{id}/ignore`.
-- On confirm success, clear local V2 draft state and navigate consistently with current archive flow.
+- confirm sends local patches to `/api/win/ingest/v2/extractions/{id}/confirm`;
+- ignore calls `/api/win/ingest/v2/extractions/{id}/ignore`;
+- success clears local state and navigates consistently with current archive flow.
 
-- [ ] **Step 4: Verify with compile**
+- [ ] **Step 5: Verify**
 
 Run:
 
 ```bash
-cd platform/app-win && npm run check
+cd apps/win-web
+npm run check
 ```
 
 Commit:
 
 ```bash
-git add platform/app-win/src/components/review platform/app-win/src/screens/Review.tsx
-git commit -m "feat(win): review extracted data as schema tables"
+git add \
+  apps/win-web/src/components/review \
+  apps/win-web/src/screens/Review.tsx \
+  apps/win-web/src/screens/Upload.tsx \
+  apps/win-web/src/api/ingest.ts
+git commit -m "feat(win-web): review extracted data as schema tables"
 ```
 
-## Task 11: Switch Upload To V2 Jobs
+## Task 8: Final Verification
 
 **Files:**
-- Modify: `platform/app-win/src/screens/Upload.tsx`
-- Modify: `platform/app-win/src/api/ingest.ts` only if shared job list types need compatibility.
-
-- [ ] **Step 1: Submit new uploads to V2**
-
-Replace upload creation call in `Upload.tsx`:
-
-- From `createIngestJobs()`
-- To `createIngestV2Jobs()`
-
-Keep active/history polling compatible by either:
-
-- using V2 job list endpoints in `ingestV2.ts`, or
-- adding `workflow_version` to the shared `IngestJob` type and filtering both V1/V2 from their own endpoints.
-
-Prefer the simpler path: V2 upload screen uses V2 list endpoints.
-
-- [ ] **Step 2: Preserve legacy history**
-
-Do not delete V1 job history or V1 API client functions. Existing confirmed/failed V1 rows should still render in history if the current screen expects them.
-
-- [ ] **Step 3: Verify**
-
-Run:
-
-```bash
-cd platform/app-win && npm run check
-```
-
-Commit:
-
-```bash
-git add platform/app-win/src/screens/Upload.tsx platform/app-win/src/api/ingest.ts
-git commit -m "feat(win): route uploads through schema-first ingest"
-```
-
-## Task 12: End-To-End Verification And Cleanup
-
-**Files:**
-- Modify docs only if implementation details changed from this plan.
+- Update docs only if implementation differs from this plan.
 
 - [ ] **Step 1: Run backend tests**
 
 ```bash
-cd platform && ./.venv/bin/pytest tests/test_company_schema_catalog.py tests/test_ingest_v2_review_draft.py tests/test_ingest_v2_api.py tests/test_ingest_v2_confirm.py tests/test_ingest_rq_worker.py tests/test_ingest_jobs.py -q
+cd services/platform-api
+./.venv/bin/pytest \
+  tests/test_company_schema_catalog.py \
+  tests/test_ingest_v2_review_draft.py \
+  tests/test_ingest_v2_api.py \
+  tests/test_ingest_v2_confirm.py \
+  tests/test_ingest_rq_worker.py \
+  tests/test_ingest_jobs.py \
+  -q
 ```
 
 - [ ] **Step 2: Run frontend typecheck**
 
 ```bash
-cd platform/app-win && npm run check
+cd apps/win-web
+npm run check
 ```
 
-- [ ] **Step 3: Manual flow**
+- [ ] **Step 3: Manual smoke**
 
-Start backend/frontend as normally used in this repo, then verify:
+Verify:
 
-1. Upload a document.
-2. Job progresses through OCR/route/extract.
-3. Review opens a table workspace.
-4. `orders` table displays all schema fields, including empty missing cells.
-5. Fill a missing field and confirm.
-6. Confirmed business rows and `field_provenance` exist in tenant DB.
+1. User opens `/win/`.
+2. Upload creates V2 job via `/api/win/ingest/v2/jobs`.
+3. Job reaches `extracted`.
+4. Review page renders schema tables.
+5. `orders` table displays every active field including empty `missing` cells.
+6. User fills a missing field and confirms.
+7. Tenant DB contains confirmed business row and `field_provenance`.
 
-- [ ] **Step 4: Final commit**
-
-If all checks pass and no extra files remain:
+- [ ] **Step 4: Commit final docs if needed**
 
 ```bash
 git status --short
-git commit -m "feat(ingest): rebuild review flow around company schema"
+git add \
+  docs/superpowers/specs/2026-05-13-schema-first-company-data-layer-design.md \
+  docs/superpowers/plans/2026-05-13-schema-first-company-data-layer.md \
+  docs/superpowers/task-briefs/2026-05-13-schema-first-company-data-layer.md
+git commit -m "docs(win): align schema-first ingest plan with v3 layout"
 ```
 
-Do not include unrelated `.gitignore` changes unless they were intentionally made for this implementation.
+## Notes For Subagents
 
-## Execution Notes
-
-- Keep old V1 code in place until the V2 Upload/Review path is verified.
-- Prefer small commits after each task. If a task becomes too large, split by file ownership: backend models/catalog, backend ingest, frontend API, frontend UI.
-- Do not add a schema editor UI in this implementation unless all ingest V2 tasks are complete. The required maintenance surface for this pass is the catalog API and `schema_change_proposals`.
-- Do not hide missing fields. Missing schema fields are first-class review cells.
+- You are not alone in the codebase. Do not revert edits made by other agents.
+- If splitting work across agents, use disjoint file ownership:
+  - Agent A: schema catalog.
+  - Agent B: ReviewDraft schemas/materializer.
+  - Agent C: V2 API/worker/confirm.
+  - Agent D: frontend V2 client/UI.
+- Do not dispatch multiple agents that both edit `routes.py`, `models/__init__.py`, or `apps/win-web/src/screens/Review.tsx` at the same time.
