@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import ensure_ingest_job_tables, ensure_schema_ingest_tables, get_engine_for
 from yunwei_win.models import IngestJob, IngestJobStage, IngestJobStatus
-from yunwei_win.services.ingest.evidence import PreStoredFile
+from yunwei_win.services.schema_ingest.upload import PreStoredFile
 from yunwei_win.services.schema_ingest import auto_ingest as schema_auto_ingest
 
 logger = logging.getLogger(__name__)

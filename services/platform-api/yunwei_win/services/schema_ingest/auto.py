@@ -47,8 +47,8 @@ from yunwei_win.services.company_schema import (
     ensure_default_company_schema,
     get_company_schema,
 )
-from yunwei_win.services.ingest.evidence import PreStoredFile
 from yunwei_win.services.ingest.progress import ProgressCallback, emit_progress
+from yunwei_win.services.schema_ingest.upload import PreStoredFile
 from yunwei_win.services.schema_ingest import entity_resolution as entity_resolution_module
 from yunwei_win.services.schema_ingest import extraction_validation as validation_module
 from yunwei_win.services.schema_ingest import extractors as extractors_module
