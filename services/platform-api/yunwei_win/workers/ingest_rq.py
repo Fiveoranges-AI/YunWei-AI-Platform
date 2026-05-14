@@ -1,9 +1,9 @@
-"""RQ worker function for /win/api/ingest/jobs.
+"""RQ worker function for /api/win/ingest jobs.
 
 Enqueued by ``yunwei_win.services.ingest.job_queue.enqueue_ingest_job``.
 The queue carries two strings — ``job_id`` and ``enterprise_id`` — under
 JSONSerializer. The worker reads the IngestJob row from the tenant DB,
-drives ``auto_ingest``, and persists ``result_json`` + status transitions.
+dispatches V1/V2 extraction, and persists result pointers + status transitions.
 
 Tenant routing: the enqueue path passes ``enterprise_id`` as a positional
 arg so the worker can resolve the tenant engine directly via
@@ -183,7 +183,7 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
                 await sub.commit()
 
         # Reuse the API-staged file via PreStoredFile when one exists. Text
-        # jobs (pasted_text) go through the legacy text_content path.
+        # jobs (pasted_text) go through the existing text_content path.
         pre: PreStoredFile | None = None
         if job.staged_file_url:
             pre = PreStoredFile(
