@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Uuid
+from sqlalchemy import String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yunwei_win.db import Base
@@ -24,6 +24,8 @@ class Customer(Base, TimestampMixin):
     short_name: Mapped[str | None] = mapped_column(String, nullable=True)
     address: Mapped[str | None] = mapped_column(String, nullable=True)
     tax_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    industry: Mapped[str | None] = mapped_column(String, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     contacts: Mapped[list[Contact]] = relationship(back_populates="customer")
     orders: Mapped[list[Order]] = relationship(back_populates="customer")
