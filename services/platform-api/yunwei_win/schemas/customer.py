@@ -89,6 +89,25 @@ class CustomerMemoryItemOut(_Out):
     created_at: datetime
 
 
+class CustomerJournalItemOut(_Out):
+    """vNext unified customer timeline entry (replaces the legacy
+    customer_events / commitments / risks / memory split for new ingest)."""
+
+    id: UUID
+    customer_id: UUID
+    document_id: UUID | None = None
+    item_type: str
+    title: str | None = None
+    content: str | None = None
+    occurred_at: datetime | None = None
+    due_date: date | None = None
+    severity: str | None = None
+    status: str | None = None
+    confidence: Decimal | None = None
+    raw_excerpt: str | None = None
+    created_at: datetime
+
+
 class CustomerInboxItemOut(_Out):
     id: UUID
     customer_id: UUID
@@ -108,9 +127,22 @@ class CustomerInboxItemOut(_Out):
 
 class TimelineEntry(BaseModel):
     """One row of the merged customer timeline. `kind` discriminates which
-    sub-shape lives in `payload`. `at` is the canonical sort key."""
+    sub-shape lives in `payload`. `at` is the canonical sort key.
 
-    kind: Literal["event", "commitment", "task", "risk", "memory", "document"]
+    ``journal`` is the vNext consolidated kind that replaces the legacy
+    event / commitment / risk / memory split for new ingest. The older
+    kinds stay so legacy data still renders.
+    """
+
+    kind: Literal[
+        "event",
+        "commitment",
+        "task",
+        "risk",
+        "memory",
+        "document",
+        "journal",
+    ]
     at: datetime
     title: str
     summary: str | None = None

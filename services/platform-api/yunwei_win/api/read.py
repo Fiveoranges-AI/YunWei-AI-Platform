@@ -20,13 +20,30 @@ from yunwei_win.models import (
     Contact,
     Contract,
     Customer,
+    CustomerTask,
     Document,
     EntityType,
     FieldProvenance,
     Order,
 )
+from yunwei_win.models.company_data import (
+    ContractPaymentMilestone,
+    CustomerJournalItem,
+    Invoice,
+    InvoiceItem,
+    Payment,
+    Product,
+    ProductRequirement,
+    Shipment,
+    ShipmentItem,
+)
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# serializers
+# ---------------------------------------------------------------------------
 
 
 def _customer_dict(c: Customer) -> dict:
@@ -36,16 +53,53 @@ def _customer_dict(c: Customer) -> dict:
         "short_name": c.short_name,
         "address": c.address,
         "tax_id": c.tax_id,
+        "industry": c.industry,
+        "notes": c.notes,
         "created_at": c.created_at.isoformat(),
+    }
+
+
+def _contact_dict(ct: Contact) -> dict:
+    return {
+        "id": str(ct.id),
+        "name": ct.name,
+        "title": ct.title,
+        "phone": ct.phone,
+        "mobile": ct.mobile,
+        "email": ct.email,
+        "role": ct.role.value,
+        "address": ct.address,
+        "wechat_id": ct.wechat_id,
+        # Legacy field — keep on the response so old frontend code that still
+        # reads it doesn't crash, but vNext review state lives on
+        # ``DocumentExtraction.review_draft`` instead.
+        "needs_review": ct.needs_review,
+    }
+
+
+def _order_dict(o: Order) -> dict:
+    return {
+        "id": str(o.id),
+        "customer_id": str(o.customer_id),
+        "amount_total": float(o.amount_total) if o.amount_total is not None else None,
+        "amount_currency": o.amount_currency,
+        "delivery_promised_date": (
+            o.delivery_promised_date.isoformat() if o.delivery_promised_date else None
+        ),
+        "delivery_address": o.delivery_address,
+        "description": o.description,
     }
 
 
 def _contract_dict(k: Contract) -> dict:
     return {
         "id": str(k.id),
-        "order_id": str(k.order_id),
+        "customer_id": str(k.customer_id) if k.customer_id else None,
+        "order_id": str(k.order_id) if k.order_id else None,
         "contract_no_external": k.contract_no_external,
         "contract_no_internal": k.contract_no_internal,
+        "amount_total": float(k.amount_total) if k.amount_total is not None else None,
+        "amount_currency": k.amount_currency,
         "payment_milestones": k.payment_milestones,
         "delivery_terms": k.delivery_terms,
         "penalty_terms": k.penalty_terms,
@@ -55,6 +109,158 @@ def _contract_dict(k: Contract) -> dict:
         "confidence_overall": k.confidence_overall,
         "created_at": k.created_at.isoformat(),
     }
+
+
+def _milestone_dict(m: ContractPaymentMilestone) -> dict:
+    return {
+        "id": str(m.id),
+        "contract_id": str(m.contract_id),
+        "name": m.name,
+        "ratio": float(m.ratio) if m.ratio is not None else None,
+        "amount": float(m.amount) if m.amount is not None else None,
+        "trigger_event": m.trigger_event,
+        "trigger_offset_days": m.trigger_offset_days,
+        "due_date": m.due_date.isoformat() if m.due_date else None,
+        "raw_text": m.raw_text,
+    }
+
+
+def _product_dict(p: Product) -> dict:
+    return {
+        "id": str(p.id),
+        "sku": p.sku,
+        "name": p.name,
+        "description": p.description,
+        "specification": p.specification,
+        "unit": p.unit,
+    }
+
+
+def _product_requirement_dict(r: ProductRequirement) -> dict:
+    return {
+        "id": str(r.id),
+        "customer_id": str(r.customer_id) if r.customer_id else None,
+        "product_id": str(r.product_id) if r.product_id else None,
+        "requirement_type": r.requirement_type,
+        "requirement_text": r.requirement_text,
+        "tolerance": r.tolerance,
+        "source_document_id": (
+            str(r.source_document_id) if r.source_document_id else None
+        ),
+    }
+
+
+def _invoice_dict(i: Invoice) -> dict:
+    return {
+        "id": str(i.id),
+        "customer_id": str(i.customer_id),
+        "order_id": str(i.order_id) if i.order_id else None,
+        "invoice_no": i.invoice_no,
+        "issue_date": i.issue_date.isoformat() if i.issue_date else None,
+        "amount_total": float(i.amount_total) if i.amount_total is not None else None,
+        "amount_currency": i.amount_currency,
+        "tax_amount": float(i.tax_amount) if i.tax_amount is not None else None,
+        "status": i.status,
+    }
+
+
+def _invoice_item_dict(it: InvoiceItem) -> dict:
+    return {
+        "id": str(it.id),
+        "invoice_id": str(it.invoice_id),
+        "product_id": str(it.product_id) if it.product_id else None,
+        "description": it.description,
+        "quantity": float(it.quantity) if it.quantity is not None else None,
+        "unit_price": float(it.unit_price) if it.unit_price is not None else None,
+        "amount": float(it.amount) if it.amount is not None else None,
+    }
+
+
+def _payment_dict(p: Payment) -> dict:
+    return {
+        "id": str(p.id),
+        "customer_id": str(p.customer_id),
+        "invoice_id": str(p.invoice_id) if p.invoice_id else None,
+        "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+        "amount": float(p.amount) if p.amount is not None else None,
+        "currency": p.currency,
+        "method": p.method,
+        "reference_no": p.reference_no,
+    }
+
+
+def _shipment_dict(s: Shipment) -> dict:
+    return {
+        "id": str(s.id),
+        "customer_id": str(s.customer_id),
+        "order_id": str(s.order_id) if s.order_id else None,
+        "shipment_no": s.shipment_no,
+        "carrier": s.carrier,
+        "tracking_no": s.tracking_no,
+        "ship_date": s.ship_date.isoformat() if s.ship_date else None,
+        "delivery_date": s.delivery_date.isoformat() if s.delivery_date else None,
+        "delivery_address": s.delivery_address,
+        "status": s.status,
+    }
+
+
+def _shipment_item_dict(it: ShipmentItem) -> dict:
+    return {
+        "id": str(it.id),
+        "shipment_id": str(it.shipment_id),
+        "product_id": str(it.product_id) if it.product_id else None,
+        "description": it.description,
+        "quantity": float(it.quantity) if it.quantity is not None else None,
+        "unit": it.unit,
+    }
+
+
+def _journal_item_dict(j: CustomerJournalItem) -> dict:
+    return {
+        "id": str(j.id),
+        "customer_id": str(j.customer_id),
+        "document_id": str(j.document_id) if j.document_id else None,
+        "item_type": j.item_type,
+        "title": j.title,
+        "content": j.content,
+        "occurred_at": j.occurred_at.isoformat() if j.occurred_at else None,
+        "due_date": j.due_date.isoformat() if j.due_date else None,
+        "severity": j.severity,
+        "status": j.status,
+        "confidence": float(j.confidence) if j.confidence is not None else None,
+        "raw_excerpt": j.raw_excerpt,
+    }
+
+
+def _task_dict(t: CustomerTask) -> dict:
+    return {
+        "id": str(t.id),
+        "customer_id": str(t.customer_id),
+        "document_id": str(t.document_id) if t.document_id else None,
+        "title": t.title,
+        "description": t.description,
+        "assignee": t.assignee,
+        "due_date": t.due_date.isoformat() if t.due_date else None,
+        "priority": t.priority.value,
+        "status": t.status.value,
+    }
+
+
+def _document_ref_dict(d: Document) -> dict:
+    return {
+        "id": str(d.id),
+        "type": d.type.value,
+        "original_filename": d.original_filename,
+        "content_type": d.content_type,
+        "uploader": d.uploader,
+        "review_status": d.review_status.value,
+        "created_at": d.created_at.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.get("/customers")
@@ -70,6 +276,10 @@ async def list_customers(
     return [_customer_dict(c) for c in rows]
 
 
+async def _scalars(session: AsyncSession, stmt):
+    return (await session.execute(stmt)).scalars().all()
+
+
 @router.get("/customers/{customer_id}")
 async def get_customer(
     customer_id: UUID, session: AsyncSession = Depends(get_session)
@@ -80,47 +290,138 @@ async def get_customer(
     if c is None:
         raise HTTPException(404, "customer not found")
 
-    contacts = (
-        await session.execute(select(Contact).where(Contact.customer_id == customer_id))
-    ).scalars().all()
-    orders = (
-        await session.execute(select(Order).where(Order.customer_id == customer_id))
-    ).scalars().all()
-    contracts = (
-        await session.execute(
-            select(Contract).where(Contract.order_id.in_([o.id for o in orders] or [None]))
+    contacts = await _scalars(
+        session, select(Contact).where(Contact.customer_id == customer_id)
+    )
+    orders = await _scalars(
+        session, select(Order).where(Order.customer_id == customer_id)
+    )
+    order_ids = [o.id for o in orders] or [None]
+
+    # Contracts: prefer the direct customer_id link added by Task 1; fall back
+    # to the legacy ``order_id`` join so older rows still surface.
+    contracts = await _scalars(
+        session,
+        select(Contract).where(
+            (Contract.customer_id == customer_id)
+            | (Contract.order_id.in_(order_ids))
+        ),
+    )
+    contract_ids = [k.id for k in contracts] or [None]
+    milestones = await _scalars(
+        session,
+        select(ContractPaymentMilestone).where(
+            ContractPaymentMilestone.contract_id.in_(contract_ids)
+        ),
+    )
+
+    invoices = await _scalars(
+        session, select(Invoice).where(Invoice.customer_id == customer_id)
+    )
+    invoice_ids = [i.id for i in invoices] or [None]
+    invoice_items = await _scalars(
+        session,
+        select(InvoiceItem).where(InvoiceItem.invoice_id.in_(invoice_ids)),
+    )
+
+    payments = await _scalars(
+        session, select(Payment).where(Payment.customer_id == customer_id)
+    )
+
+    shipments = await _scalars(
+        session, select(Shipment).where(Shipment.customer_id == customer_id)
+    )
+    shipment_ids = [s.id for s in shipments] or [None]
+    shipment_items = await _scalars(
+        session,
+        select(ShipmentItem).where(ShipmentItem.shipment_id.in_(shipment_ids)),
+    )
+
+    product_requirements = await _scalars(
+        session,
+        select(ProductRequirement).where(ProductRequirement.customer_id == customer_id),
+    )
+
+    # Customer-scoped products: anything referenced by this customer's
+    # requirements / invoice items / shipment items.
+    product_ids: set = set()
+    for r in product_requirements:
+        if r.product_id is not None:
+            product_ids.add(r.product_id)
+    for it in invoice_items:
+        if it.product_id is not None:
+            product_ids.add(it.product_id)
+    for it in shipment_items:
+        if it.product_id is not None:
+            product_ids.add(it.product_id)
+    products: list[Product] = []
+    if product_ids:
+        products = await _scalars(
+            session, select(Product).where(Product.id.in_(list(product_ids)))
         )
-    ).scalars().all()
+
+    journal_items = await _scalars(
+        session,
+        select(CustomerJournalItem)
+        .where(CustomerJournalItem.customer_id == customer_id)
+        .order_by(
+            CustomerJournalItem.occurred_at.desc().nullslast(),
+            CustomerJournalItem.created_at.desc(),
+        ),
+    )
+
+    tasks = await _scalars(
+        session,
+        select(CustomerTask)
+        .where(CustomerTask.customer_id == customer_id)
+        .order_by(
+            CustomerTask.due_date.asc().nullslast(),
+            CustomerTask.created_at.desc(),
+        ),
+    )
+
+    # Source documents: direct customer assignments + anything referenced by
+    # journal items / tasks / product requirements.
+    document_ids: set = set()
+    for j in journal_items:
+        if j.document_id is not None:
+            document_ids.add(j.document_id)
+    for t in tasks:
+        if t.document_id is not None:
+            document_ids.add(t.document_id)
+    for r in product_requirements:
+        if r.source_document_id is not None:
+            document_ids.add(r.source_document_id)
+    assigned_docs = await _scalars(
+        session,
+        select(Document).where(Document.assigned_customer_id == customer_id),
+    )
+    for d in assigned_docs:
+        document_ids.add(d.id)
+    source_documents: list[Document] = []
+    if document_ids:
+        source_documents = await _scalars(
+            session, select(Document).where(Document.id.in_(list(document_ids)))
+        )
 
     return {
         **_customer_dict(c),
-        "contacts": [
-            {
-                "id": str(ct.id),
-                "name": ct.name,
-                "title": ct.title,
-                "phone": ct.phone,
-                "mobile": ct.mobile,
-                "email": ct.email,
-                "role": ct.role.value,
-                "needs_review": ct.needs_review,
-            }
-            for ct in contacts
-        ],
-        "orders": [
-            {
-                "id": str(o.id),
-                "amount_total": float(o.amount_total) if o.amount_total else None,
-                "amount_currency": o.amount_currency,
-                "delivery_promised_date": (
-                    o.delivery_promised_date.isoformat() if o.delivery_promised_date else None
-                ),
-                "delivery_address": o.delivery_address,
-                "description": o.description,
-            }
-            for o in orders
-        ],
+        "contacts": [_contact_dict(ct) for ct in contacts],
+        "orders": [_order_dict(o) for o in orders],
         "contracts": [_contract_dict(k) for k in contracts],
+        "contract_payment_milestones": [_milestone_dict(m) for m in milestones],
+        "invoices": [_invoice_dict(i) for i in invoices],
+        "invoice_items": [_invoice_item_dict(it) for it in invoice_items],
+        "payments": [_payment_dict(p) for p in payments],
+        "shipments": [_shipment_dict(s) for s in shipments],
+        "shipment_items": [_shipment_item_dict(it) for it in shipment_items],
+        "products": [_product_dict(p) for p in products],
+        "product_requirements": [
+            _product_requirement_dict(r) for r in product_requirements
+        ],
+        "journal_items": [_journal_item_dict(j) for j in journal_items],
+        "tasks": [_task_dict(t) for t in tasks],
+        "source_documents": [_document_ref_dict(d) for d in source_documents],
     }
 
 
@@ -149,9 +450,13 @@ async def get_contract(
 
     order = (
         await session.execute(select(Order).where(Order.id == k.order_id))
-    ).scalar_one_or_none()
-    customer = None
-    if order is not None:
+    ).scalar_one_or_none() if k.order_id else None
+    customer: Customer | None = None
+    if k.customer_id is not None:
+        customer = (
+            await session.execute(select(Customer).where(Customer.id == k.customer_id))
+        ).scalar_one_or_none()
+    elif order is not None:
         customer = (
             await session.execute(select(Customer).where(Customer.id == order.customer_id))
         ).scalar_one_or_none()
@@ -190,6 +495,8 @@ async def get_contract(
                 "confidence": float(p.confidence) if p.confidence is not None else None,
                 "excerpt_match": p.excerpt_match,
                 "extracted_by": p.extracted_by,
+                "review_action": p.review_action,
+                "source_refs": p.source_refs,
             }
             for p in prov
         ],

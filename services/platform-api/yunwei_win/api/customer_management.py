@@ -53,6 +53,8 @@ def _customer_dict(c: Customer) -> dict:
         "short_name": c.short_name,
         "address": c.address,
         "tax_id": c.tax_id,
+        "industry": c.industry,
+        "notes": c.notes,
         "created_at": c.created_at.isoformat(),
     }
 
@@ -77,6 +79,8 @@ class CustomerPatchRequest(BaseModel):
     short_name: str | None = None
     address: str | None = None
     tax_id: str | None = None
+    industry: str | None = None
+    notes: str | None = None
 
 
 class ContactUpsertItem(BaseModel):
@@ -122,6 +126,10 @@ async def patch_customer(
         customer.address = updates["address"]
     if "tax_id" in updates:
         customer.tax_id = updates["tax_id"]
+    if "industry" in updates:
+        customer.industry = updates["industry"]
+    if "notes" in updates:
+        customer.notes = updates["notes"]
 
     await session.commit()
     await session.refresh(customer)

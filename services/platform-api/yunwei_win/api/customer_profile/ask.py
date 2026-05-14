@@ -34,6 +34,14 @@ from yunwei_win.models import (
     RiskStatus,
     TaskStatus,
 )
+from yunwei_win.models.company_data import (
+    CustomerJournalItem,
+    Invoice,
+    Payment,
+    Product,
+    ProductRequirement,
+    Shipment,
+)
 from yunwei_win.schemas.customer import (
     CustomerAskCitation,
     CustomerAskRequest,
@@ -91,6 +99,10 @@ async def _build_customer_kb(
         lines.append(f"  短名: {customer.short_name}")
     if customer.address:
         lines.append(f"  地址: {customer.address}")
+    if customer.industry:
+        lines.append(f"  行业: {customer.industry}")
+    if customer.notes:
+        lines.append(f"  备注: {customer.notes}")
 
     async def _scalars(stmt):
         return (await session.execute(stmt)).scalars().all()
@@ -128,7 +140,14 @@ async def _build_customer_kb(
             line = f"  [contract:{k.id}] 合同号 {k.contract_no_external or '?'}"
             if k.signing_date:
                 line += f", 签订 {k.signing_date}"
+            if k.amount_total is not None:
+                cur = k.amount_currency or "CNY"
+                line += f", 金额 {cur} {float(k.amount_total):,.2f}"
             lines.append(line)
+            if k.delivery_terms:
+                lines.append(f"    交付条款: {k.delivery_terms}")
+            if k.penalty_terms:
+                lines.append(f"    违约条款: {k.penalty_terms}")
             if k.payment_milestones:
                 ms = " | ".join(
                     f"{m.get('name','?')} {int(round(m.get('ratio',0)*100))}% "
@@ -145,6 +164,122 @@ async def _build_customer_kb(
             )
             lines.append(
                 f"  [order:{o.id}] {amt}, 交期 {o.delivery_promised_date or '?'}"
+            )
+
+    # vNext finance / logistics / products
+    invoices = await _scalars(
+        select(Invoice)
+        .where(Invoice.customer_id == customer.id)
+        .order_by(Invoice.issue_date.desc().nullslast(), Invoice.created_at.desc())
+        .limit(20)
+    )
+    if invoices:
+        lines.append("\n发票:")
+        for inv in invoices:
+            amt = (
+                f"{inv.amount_currency} {float(inv.amount_total):,.2f}"
+                if inv.amount_total is not None
+                else "?"
+            )
+            line = f"  [invoice:{inv.id}] {inv.invoice_no or '?'} {amt}"
+            if inv.issue_date:
+                line += f", 开票 {inv.issue_date}"
+            if inv.status:
+                line += f", 状态 {inv.status}"
+            lines.append(line)
+
+    payments = await _scalars(
+        select(Payment)
+        .where(Payment.customer_id == customer.id)
+        .order_by(Payment.payment_date.desc().nullslast(), Payment.created_at.desc())
+        .limit(20)
+    )
+    if payments:
+        lines.append("\n收付款:")
+        for p in payments:
+            amt = (
+                f"{p.currency} {float(p.amount):,.2f}"
+                if p.amount is not None
+                else "?"
+            )
+            line = f"  [payment:{p.id}] {amt}"
+            if p.payment_date:
+                line += f", 日期 {p.payment_date}"
+            if p.method:
+                line += f", 方式 {p.method}"
+            if p.reference_no:
+                line += f", 凭证 {p.reference_no}"
+            lines.append(line)
+
+    shipments = await _scalars(
+        select(Shipment)
+        .where(Shipment.customer_id == customer.id)
+        .order_by(Shipment.ship_date.desc().nullslast(), Shipment.created_at.desc())
+        .limit(20)
+    )
+    if shipments:
+        lines.append("\n发货:")
+        for s in shipments:
+            line = f"  [shipment:{s.id}] {s.shipment_no or '?'}"
+            if s.tracking_no:
+                line += f", 运单 {s.tracking_no}"
+            if s.carrier:
+                line += f", 承运 {s.carrier}"
+            if s.ship_date:
+                line += f", 发出 {s.ship_date}"
+            lines.append(line)
+
+    product_requirements = await _scalars(
+        select(ProductRequirement)
+        .where(ProductRequirement.customer_id == customer.id)
+        .order_by(ProductRequirement.created_at.desc())
+        .limit(30)
+    )
+    if product_requirements:
+        lines.append("\n产品要求:")
+        for r in product_requirements:
+            line = f"  [product_requirement:{r.id}]"
+            if r.requirement_type:
+                line += f" {r.requirement_type}"
+            if r.requirement_text:
+                line += f": {r.requirement_text}"
+            if r.tolerance:
+                line += f" (容差 {r.tolerance})"
+            lines.append(line)
+
+    referenced_product_ids = {
+        r.product_id for r in product_requirements if r.product_id is not None
+    }
+    if referenced_product_ids:
+        products = await _scalars(
+            select(Product).where(Product.id.in_(list(referenced_product_ids)))
+        )
+        if products:
+            lines.append("\n相关产品:")
+            for p in products:
+                line = f"  [product:{p.id}] {p.name or p.sku or '?'}"
+                if p.specification:
+                    line += f" 规格 {p.specification}"
+                if p.unit:
+                    line += f" 单位 {p.unit}"
+                lines.append(line)
+
+    journal_items = await _scalars(
+        select(CustomerJournalItem)
+        .where(CustomerJournalItem.customer_id == customer.id)
+        .order_by(
+            CustomerJournalItem.occurred_at.desc().nullslast(),
+            CustomerJournalItem.created_at.desc(),
+        )
+        .limit(40)
+    )
+    if journal_items:
+        lines.append("\n客户时间线 (journal):")
+        for j in journal_items:
+            ts = (j.occurred_at or j.created_at).date().isoformat()
+            head = j.title or (j.content or "").strip()[:80] or j.item_type
+            lines.append(
+                f"  [journal_item:{j.id}] {ts} {j.item_type}: {head}"
             )
 
     events = await _scalars(
@@ -188,8 +323,9 @@ async def _build_customer_kb(
         lines.append("\n待办:")
         for t in tasks:
             due = t.due_date.isoformat() if t.due_date else "?"
+            assignee = t.assignee or "未指派"
             lines.append(
-                f"  [task:{t.id}] {t.priority.value} | due {due}: {t.title}"
+                f"  [task:{t.id}] {t.priority.value} | due {due} | 负责人 {assignee}: {t.title}"
             )
 
     risks = await _scalars(

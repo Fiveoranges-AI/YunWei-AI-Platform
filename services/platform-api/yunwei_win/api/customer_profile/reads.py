@@ -22,9 +22,11 @@ from yunwei_win.models import (
     RiskStatus,
     TaskStatus,
 )
+from yunwei_win.models.company_data import CustomerJournalItem
 from yunwei_win.schemas.customer import (
     CustomerCommitmentOut,
     CustomerEventOut,
+    CustomerJournalItemOut,
     CustomerMemoryItemOut,
     CustomerRiskSignalOut,
     CustomerSummaryOut,
@@ -206,6 +208,23 @@ async def list_timeline(
             title=m.content[:80],
             summary=None,
             payload=CustomerMemoryItemOut.model_validate(m).model_dump(mode="json"),
+        ))
+
+    # vNext journal items: the unified replacement for the legacy
+    # event/commitment/risk/memory split. Show on the timeline as ``journal``
+    # so the UI can render the item_type tag itself instead of having to
+    # guess the right legacy kind.
+    for j in await _scalars(
+        select(CustomerJournalItem).where(
+            CustomerJournalItem.customer_id == customer_id
+        )
+    ):
+        entries.append(TimelineEntry(
+            kind="journal",
+            at=j.occurred_at or j.created_at,
+            title=j.title or (j.content or "")[:80] or j.item_type,
+            summary=j.content,
+            payload=CustomerJournalItemOut.model_validate(j).model_dump(mode="json"),
         ))
 
     for d in await _scalars(
