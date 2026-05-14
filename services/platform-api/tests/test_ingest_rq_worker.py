@@ -109,24 +109,24 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
         DocumentExtraction,
         DocumentExtractionStatus,
     )
-    from yunwei_win.services.ingest.pipeline_schemas import PipelineRoutePlan
+    from yunwei_win.models.document_parse import DocumentParse, DocumentParseStatus
     from yunwei_win.services.schema_ingest import (
         AutoIngestResult,
         ReviewDraft,
         ReviewDraftDocument,
-        ReviewDraftRoutePlan,
     )
 
     captured_stages: list[str] = []
     fake_extraction_id = uuid.uuid4()
 
     async def fake_auto_ingest(**kwargs):
-        # Insert a real Document row + ``flush`` (no commit). The
-        # LandingAI branch of real auto_ingest behaves this way — relies
-        # on the caller to commit. Without the worker's commit-after-call
-        # fix this Document would roll back when the session context
-        # exits, and the follow-up UPDATE on IngestJob.document_id would
-        # fail with the ingest_jobs_document_id_fkey FK violation.
+        # Insert a real Document + DocumentParse + DocumentExtraction row,
+        # ``flush`` only (no commit). The vNext auto_ingest behaves this
+        # way — the worker is responsible for the surrounding commit. If
+        # the worker forgets to commit after the call, the Document row
+        # would roll back and the follow-up UPDATE on
+        # IngestJob.document_id would hit the ingest_jobs_document_id_fkey
+        # FK violation.
         sess: AsyncSession = kwargs["session"]
         doc = Document(
             type=DocumentType.text_note,
@@ -138,40 +138,46 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
         )
         sess.add(doc)
         await sess.flush()
+        parse = DocumentParse(
+            document_id=doc.id,
+            provider="text",
+            status=DocumentParseStatus.parsed,
+            artifact={"markdown": "stub"},
+        )
+        sess.add(parse)
+        await sess.flush()
         # Exercise the progress callback to confirm stage transitions land.
         progress = kwargs.get("progress")
         if progress is not None:
-            await progress("ocr", "OCR")
-            await progress("merge", "merge")
-            await progress("auto_done", "done")
+            await progress("parsing", "parsing")
+            await progress("routing", "routing")
+            await progress("review_ready", "done")
             captured_stages.append("called")
         draft = ReviewDraft(
             extraction_id=fake_extraction_id,
             document_id=doc.id,
+            parse_id=parse.id,
             schema_version=1,
             status="pending_review",
             document=ReviewDraftDocument(filename="x.pdf"),
-            route_plan=ReviewDraftRoutePlan(),
             tables=[],
         )
         sess.add(
             DocumentExtraction(
                 id=fake_extraction_id,
                 document_id=doc.id,
-                schema_version=1,
-                provider="fake",
+                parse_id=parse.id,
+                provider="deepseek",
                 review_draft=draft.model_dump(mode="json"),
                 status=DocumentExtractionStatus.pending_review,
             )
         )
         await sess.flush()
-        # NOTE: deliberately NOT committing here. The worker is expected to
-        # commit after the schema ingest call returns; this fake matches the
-        # LandingAI-branch contract that triggered the production FK bug.
         return AutoIngestResult(
             document_id=doc.id,
+            parse_id=parse.id,
             extraction_id=fake_extraction_id,
-            route_plan=PipelineRoutePlan(),
+            selected_tables=[{"table_name": "customers"}],
             review_draft=draft,
         )
 
@@ -206,8 +212,11 @@ async def test_worker_marks_running_then_extracted_on_success(monkeypatch):
             assert j.finished_at is not None
             assert j.extraction_id == fake_extraction_id
             assert j.result_json is not None
+            # vNext: result_json carries pointers + a compact summary, not
+            # the full draft. Full draft lives on DocumentExtraction.
+            assert j.result_json["workflow"] == "vnext"
             assert j.result_json["extraction_id"] == str(fake_extraction_id)
-            assert j.result_json["tables"] == []
+            assert j.result_json["selected_tables"] == ["customers"]
             assert captured_stages == ["called"]
             # Regression for ingest_jobs_document_id_fkey: the Document that
             # auto_ingest insert+flushed (without committing) must survive
@@ -440,13 +449,12 @@ async def test_worker_dispatches_to_schema_ingest_and_persists_review_draft(monk
         DocumentExtraction,
         DocumentExtractionStatus,
     )
+    from yunwei_win.models.document_parse import DocumentParse, DocumentParseStatus
     from yunwei_win.services.schema_ingest import (
         AutoIngestResult,
         ReviewDraft,
         ReviewDraftDocument,
-        ReviewDraftRoutePlan,
     )
-    from yunwei_win.services.ingest.pipeline_schemas import PipelineRoutePlan
 
     engine = await _make_engine()
     _patch_engine_routing(monkeypatch, engine)
@@ -464,23 +472,31 @@ async def test_worker_dispatches_to_schema_ingest_and_persists_review_draft(monk
         )
         sess.add(doc)
         await sess.flush()
+        parse = DocumentParse(
+            document_id=doc.id,
+            provider="text",
+            status=DocumentParseStatus.parsed,
+            artifact={"markdown": "stub"},
+        )
+        sess.add(parse)
+        await sess.flush()
         draft = ReviewDraft(
             extraction_id=fake_extraction_id,
             document_id=doc.id,
+            parse_id=parse.id,
             schema_version=1,
             status="pending_review",
             document=ReviewDraftDocument(filename="x.pdf"),
-            route_plan=ReviewDraftRoutePlan(),
             tables=[],
         )
         # Persist the extraction row so the IngestJob.extraction_id FK
-        # holds — mirror what the real schema ingest does.
+        # holds — mirror what the real vNext auto_ingest does.
         sess.add(
             DocumentExtraction(
                 id=fake_extraction_id,
                 document_id=doc.id,
-                schema_version=1,
-                provider="fake",
+                parse_id=parse.id,
+                provider="deepseek",
                 review_draft=draft.model_dump(mode="json"),
                 status=DocumentExtractionStatus.pending_review,
             )
@@ -488,8 +504,9 @@ async def test_worker_dispatches_to_schema_ingest_and_persists_review_draft(monk
         await sess.flush()
         return AutoIngestResult(
             document_id=doc.id,
+            parse_id=parse.id,
             extraction_id=fake_extraction_id,
-            route_plan=PipelineRoutePlan(),
+            selected_tables=[{"table_name": "customers"}],
             review_draft=draft,
         )
 
@@ -521,7 +538,8 @@ async def test_worker_dispatches_to_schema_ingest_and_persists_review_draft(monk
             assert j.stage == IngestJobStage.done
             assert j.extraction_id == fake_extraction_id
             assert j.result_json is not None
+            assert j.result_json["workflow"] == "vnext"
             assert j.result_json["extraction_id"] == str(fake_extraction_id)
-            assert j.result_json["tables"] == []
+            assert j.result_json["selected_tables"] == ["customers"]
     finally:
         await engine.dispose()

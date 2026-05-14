@@ -54,6 +54,13 @@ _STAGE_BY_NAME: dict[str, IngestJobStage] = {
     "route_done": IngestJobStage.route,
     "extract_done": IngestJobStage.extract,
     "merge_done": IngestJobStage.merge,
+    # vNext stage names from schema_ingest.auto.
+    "parsing": IngestJobStage.ocr,
+    "routing": IngestJobStage.route,
+    "extracting": IngestJobStage.extract,
+    "validating": IngestJobStage.extract,
+    "resolving": IngestJobStage.merge,
+    "review_ready": IngestJobStage.done,
 }
 
 
@@ -256,9 +263,22 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
             return
         j.document_id = result.document_id
         j.extraction_id = result.extraction_id
-        j.result_json = result.review_draft.model_dump(mode="json")
+        # vNext result_json: a compact pointer + summary, not the full
+        # draft. The full draft is the canonical
+        # ``DocumentExtraction.review_draft`` — clients should fetch via
+        # GET /extractions/{id}/review instead of reading job.result_json.
+        j.result_json = {
+            "workflow": "vnext",
+            "document_id": str(result.document_id),
+            "parse_id": str(result.parse_id),
+            "extraction_id": str(result.extraction_id),
+            "selected_tables": [
+                t.get("table_name") for t in (result.selected_tables or [])
+                if isinstance(t, dict)
+            ],
+        }
         j.status = IngestJobStatus.extracted
         j.stage = IngestJobStage.done
-        j.progress_message = "已生成 schema 草稿，待人工确认"
+        j.progress_message = "已生成 vNext 草稿，待人工确认"
         j.finished_at = datetime.now(timezone.utc)
         await session.commit()
