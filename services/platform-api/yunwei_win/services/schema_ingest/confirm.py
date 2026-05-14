@@ -1,15 +1,20 @@
 """Confirm reviewed ReviewDraft cells into company data tables.
 
 Confirm receives:
-  - the server-stored ``DocumentExtraction`` (canonical draft);
-  - the client's echoed draft + cell-level patches.
+  - the server-stored ``DocumentExtraction`` (canonical draft, source of truth);
+  - the client's optional echoed draft + cell-level patches.
 
 Behavior:
-  1. Apply patches onto the server-stored draft.
-  2. Validate every non-rejected cell against the catalog ``data_type``.
-  3. If a non-rejected required cell is empty, return ``invalid_cells``
+  1. Load the canonical draft from ``DocumentExtraction.review_draft``.
+  2. If the client supplied ``request.review_draft`` only cross-check its
+     ``extraction_id`` matches the URL path — its tables/rows are ignored.
+  3. Apply patches onto the server draft (patches targeting missing
+     tables/rows/cells are silently skipped).
+  4. Validate catalog ↔ ORM parity for every table being written.
+  5. Validate every non-rejected cell against the catalog ``data_type``.
+  6. If a non-rejected required cell is empty, return ``invalid_cells``
      without writing.
-  4. Otherwise write tables in dependency phases (parents -> children),
+  7. Otherwise write tables in dependency phases (parents -> children),
      emit ``FieldProvenance`` for each confirmed non-empty cell, and flip
      the extraction / document / job status to ``confirmed``.
 
@@ -146,6 +151,31 @@ async def confirm_review_draft(
             detail=f"extraction is {extraction.status.value}, not pending_review",
         )
 
+    # If the client echoed a draft, cross-check its extraction_id only;
+    # we do not trust its structure.
+    if request.review_draft is not None:
+        if request.review_draft.extraction_id != extraction_id:
+            raise HTTPException(
+                status_code=400,
+                detail="review_draft.extraction_id does not match URL extraction_id",
+            )
+
+    # The linked IngestJob must not already be in a terminal state.
+    job = (
+        await session.execute(
+            select(IngestJob).where(IngestJob.extraction_id == extraction_id)
+        )
+    ).scalar_one_or_none()
+    if job is not None and job.status in (
+        IngestJobStatus.confirmed,
+        IngestJobStatus.failed,
+        IngestJobStatus.canceled,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"linked ingest job is {job.status.value}",
+        )
+
     # Catalog is the source of truth for required/data_type.
     await ensure_default_company_schema(session)
     catalog = await get_company_schema(session)
@@ -155,14 +185,18 @@ async def confirm_review_draft(
             f["field_name"]: f for f in t.get("fields") or []
         }
 
-    # Merge client draft onto a server-anchored ReviewDraft so we always
-    # validate against the catalog-correct cell metadata, then overlay any
-    # patches the client sent.
-    merged_draft = _merge_client_draft(request.review_draft, catalog_by_table)
-    _apply_patches(merged_draft, request.patches)
+    # Source of truth: the DB-stored ReviewDraft. Patches mutate this draft
+    # in place; the client's echoed draft is intentionally not consulted for
+    # structure.
+    server_draft = ReviewDraft.model_validate(extraction.review_draft)
+    _apply_patches(server_draft, request.patches)
 
-    # Validate every non-rejected cell.
-    invalid_cells = _validate_draft(merged_draft, catalog_by_table)
+    # Validate catalog ↔ ORM parity for each table referenced in the draft
+    # *before* writing anything. Either direction failing is a 400.
+    invalid_cells = _check_orm_parity(server_draft, catalog_by_table)
+
+    # Validate every non-rejected cell against the catalog data_type.
+    invalid_cells.extend(_validate_draft(server_draft, catalog_by_table))
     if invalid_cells:
         return ConfirmExtractionResponse(
             extraction_id=extraction_id,
@@ -173,7 +207,7 @@ async def confirm_review_draft(
 
     # Index rows by table_name for ordered writeback.
     rows_by_table: dict[str, list[ReviewRow]] = {}
-    for t in merged_draft.tables:
+    for t in server_draft.tables:
         rows_by_table.setdefault(t.table_name, []).extend(t.rows)
 
     written: dict[str, list[UUID]] = {}
@@ -210,7 +244,7 @@ async def confirm_review_draft(
     extraction.status = DocumentExtractionStatus.confirmed
     extraction.confirmed_by = confirmed_by
     extraction.confirmed_at = now
-    extraction.review_draft = merged_draft.model_dump(mode="json")
+    extraction.review_draft = server_draft.model_dump(mode="json")
 
     doc = (
         await session.execute(
@@ -220,11 +254,6 @@ async def confirm_review_draft(
     if doc is not None:
         doc.review_status = DocumentReviewStatus.confirmed
 
-    job = (
-        await session.execute(
-            select(IngestJob).where(IngestJob.extraction_id == extraction_id)
-        )
-    ).scalar_one_or_none()
     if job is not None:
         job.status = IngestJobStatus.confirmed
         job.finished_at = now
@@ -240,21 +269,6 @@ async def confirm_review_draft(
 
 
 # ---- draft merging / patching ----------------------------------------
-
-
-def _merge_client_draft(
-    client_draft: ReviewDraft,
-    catalog_by_table: dict[str, dict[str, dict[str, Any]]],
-) -> ReviewDraft:
-    """Return a copy of the client draft. Catalog metadata is authoritative,
-    but the client tells us which rows / cells it wants written.
-
-    We don't try to detect which cells the user changed here — that's what
-    explicit patches are for. We just deep-copy via ``model_copy(deep=True)``
-    so subsequent patch application doesn't mutate the request object.
-    """
-
-    return client_draft.model_copy(deep=True)
 
 
 def _apply_patches(draft: ReviewDraft, patches) -> None:
@@ -306,6 +320,95 @@ def _find_cell(row: ReviewRow, field_name: str) -> ReviewCell | None:
 
 
 # ---- validation ------------------------------------------------------
+
+
+def _check_orm_parity(
+    draft: ReviewDraft,
+    catalog_by_table: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Fail loudly when catalog cells and ORM columns are out of sync.
+
+    Two directions:
+
+    1. **catalog_field_has_no_orm_destination**: a non-rejected, non-empty cell
+       names a field the SQLAlchemy model has no column for. Without this
+       guard ``setattr(entity, field_name, value)`` would silently drop the
+       value (the old behavior).
+    2. **orm_requires_field_missing_from_catalog**: a NOT-NULL ORM column with
+       no server-side or Python-side default is neither provided by the
+       catalog nor by ``FK_FIELD_PARENTS``. Without this guard the eventual
+       ``flush`` would raise ``IntegrityError`` mid-write.
+    """
+
+    # A FK column counts as satisfiable from the auto-fill map only when the
+    # parent table is also being written in this confirm — otherwise the
+    # eventual flush hits IntegrityError.
+    tables_being_written = {t.table_name for t in draft.tables}
+
+    invalid: list[dict[str, Any]] = []
+    for table in draft.tables:
+        model_pair = TABLE_MODEL.get(table.table_name)
+        if model_pair is None:
+            continue
+        model, _ = model_pair
+        orm_columns = set(model.__table__.columns.keys())
+        catalog_fields = set(catalog_by_table.get(table.table_name, {}).keys())
+
+        for row in table.rows:
+            if row.operation == "create" and row.entity_id is None and _row_is_empty(row):
+                # Reviewer left an empty placeholder; we'd skip this row at
+                # write time, so don't fire parity errors against it.
+                continue
+
+            # Direction 1: catalog cell -> ORM column.
+            for cell in row.cells:
+                if cell.status == "rejected":
+                    continue
+                if _value_is_empty(cell.value):
+                    continue
+                if cell.field_name not in orm_columns:
+                    invalid.append({
+                        "table_name": table.table_name,
+                        "client_row_id": row.client_row_id,
+                        "field_name": cell.field_name,
+                        "reason": "catalog_field_has_no_orm_destination",
+                    })
+
+            # Direction 2: ORM NOT NULL column -> catalog field / FK / context.
+            for column in model.__table__.columns:
+                if not _column_must_be_supplied(column):
+                    continue
+                name = column.name
+                if name in catalog_fields:
+                    continue
+                parent_table = FK_FIELD_PARENTS.get(name)
+                if parent_table is not None and parent_table in tables_being_written:
+                    continue
+                invalid.append({
+                    "table_name": table.table_name,
+                    "client_row_id": row.client_row_id,
+                    "field_name": name,
+                    "reason": "orm_requires_field_missing_from_catalog",
+                })
+    return invalid
+
+
+def _column_must_be_supplied(column: Any) -> bool:
+    """A NOT NULL column with no default that the caller must supply.
+
+    Primary keys and columns with a server-side or Python-side default are
+    excluded — the DB or SQLAlchemy fills them in.
+    """
+
+    if column.nullable:
+        return False
+    if column.primary_key:
+        return False
+    if column.server_default is not None:
+        return False
+    if column.default is not None:
+        return False
+    return True
 
 
 def _validate_draft(
@@ -423,10 +526,13 @@ def _validate_value(field_spec: dict[str, Any], value: Any) -> bool:
                 return False
             if isinstance(value, int):
                 return True
-            iv = int(str(value))
-            # Allow floats like "10.0" only when they're integral.
-            float(str(value))
-            return True
+            s = str(value)
+            try:
+                int(s)
+                return True
+            except ValueError:
+                # Allow floats like "10.0" only when they're integral.
+                return float(s).is_integer()
         if data_type == "boolean":
             if isinstance(value, bool):
                 return True
@@ -534,7 +640,9 @@ async def _persist_row(
         cell_values[cell.field_name] = coerced
         provenance_cells.append(cell)
 
-    # Upsert the row.
+    # Upsert the row. The ORM parity precondition guarantees every
+    # ``cell_values`` key has a matching column on the model, so we set
+    # attributes directly without a silent ``hasattr`` skip.
     if row.entity_id is not None:
         entity = (
             await session.execute(select(model).where(model.id == row.entity_id))
@@ -544,18 +652,15 @@ async def _persist_row(
             entity = model()
             entity.id = row.entity_id  # respect client-chosen id
             for k, v in cell_values.items():
-                if hasattr(entity, k):
-                    setattr(entity, k, v)
+                setattr(entity, k, v)
             session.add(entity)
         else:
             for k, v in cell_values.items():
-                if hasattr(entity, k):
-                    setattr(entity, k, v)
+                setattr(entity, k, v)
     else:
         entity = model()
         for k, v in cell_values.items():
-            if hasattr(entity, k):
-                setattr(entity, k, v)
+            setattr(entity, k, v)
         session.add(entity)
 
     await session.flush()

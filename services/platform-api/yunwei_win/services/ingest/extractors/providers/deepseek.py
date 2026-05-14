@@ -37,8 +37,7 @@ from .base import ExtractionInput, ExtractorProvider, ProgressCallback
 logger = logging.getLogger(__name__)
 
 
-# How much OCR markdown we hand to the LLM per schema call. Mirrors the cap
-# used by the identity/commercial extractors so behavior is consistent.
+# How much OCR markdown we hand to the LLM per schema call.
 _LLM_CONTEXT_CHARS = 30000
 
 _PROMPT_PATH = find_prompt("schema_extraction.md")
@@ -49,10 +48,11 @@ def _tool_name_for(schema_name: str) -> str:
 
 
 def _build_tool(schema_name: str, schema_json: str) -> dict:
-    """Anthropic-format tool descriptor that wraps the static schema JSON.
+    """Anthropic-format tool descriptor that wraps the catalog-derived schema.
 
-    The schema JSON is parsed and embedded as ``input_schema``. On
-    DeepSeek-compat upstreams ``call_claude`` will convert this into a
+    The schema JSON (built from the tenant company catalog by
+    ``build_pipeline_schema_json``) is parsed and embedded as ``input_schema``.
+    On DeepSeek-compat upstreams ``call_claude`` will convert this into a
     "reply with JSON only" prompt automatically.
     """
     import json

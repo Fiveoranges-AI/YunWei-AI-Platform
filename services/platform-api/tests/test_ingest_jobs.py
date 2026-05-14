@@ -194,6 +194,54 @@ async def test_get_job_returns_result_json_for_extracted(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     _stub_queue(monkeypatch)
     engine = await _make_engine()
+    # A canonical ReviewDraft shape — what the worker actually persists into
+    # result_json once schema-first ingest finishes. The test asserts the GET
+    # endpoint returns it verbatim.
+    import uuid as _uuid
+    extraction_id = str(_uuid.uuid4())
+    document_id = str(_uuid.uuid4())
+    review_draft_json = {
+        "extraction_id": extraction_id,
+        "document_id": document_id,
+        "schema_version": 1,
+        "status": "pending_review",
+        "document": {"filename": "x.pdf"},
+        "route_plan": {"selected_pipelines": []},
+        "tables": [
+            {
+                "table_name": "customers",
+                "label": "客户",
+                "purpose": None,
+                "category": None,
+                "is_array": False,
+                "raw_extraction": None,
+                "rows": [
+                    {
+                        "client_row_id": "customers:0",
+                        "entity_id": None,
+                        "operation": "create",
+                        "cells": [
+                            {
+                                "field_name": "full_name",
+                                "label": "公司全称",
+                                "data_type": "text",
+                                "required": True,
+                                "is_array": False,
+                                "value": "ABC",
+                                "display_value": "ABC",
+                                "status": "extracted",
+                                "confidence": None,
+                                "evidence": None,
+                                "source": "ai",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "schema_warnings": [],
+        "general_warnings": [],
+    }
     async with AsyncSession(engine, expire_on_commit=False) as session:
         b = IngestBatch(enterprise_id="tenant_test", source="seed")
         session.add(b)
@@ -203,7 +251,7 @@ async def test_get_job_returns_result_json_for_extracted(monkeypatch, tmp_path):
             original_filename="x.pdf", source_hint="file",
             status=IngestJobStatus.extracted, stage=IngestJobStage.done,
             attempts=1,
-            result_json={"draft": {"customer": {"full_name": "ABC"}}, "plan": {}},
+            result_json=review_draft_json,
         )
         session.add(j)
         await session.commit()
@@ -215,7 +263,7 @@ async def test_get_job_returns_result_json_for_extracted(monkeypatch, tmp_path):
             assert res.status_code == 200, res.text
             body = res.json()
             assert body["status"] == "extracted"
-            assert body["result_json"]["draft"]["customer"]["full_name"] == "ABC"
+            assert body["result_json"] == review_draft_json
     finally:
         await engine.dispose()
 

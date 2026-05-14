@@ -112,10 +112,16 @@ class ReviewCellPatch(BaseModel):
 
 
 class ConfirmExtractionRequest(BaseModel):
-    """Frontend echoes the server-stored draft (provides table/row identity)
-    plus a list of cell-level patches it wants applied."""
+    """Patches the server-stored draft.
 
-    review_draft: ReviewDraft
+    ``review_draft`` is accepted for backward compatibility but is no longer
+    the source of truth: the server reads the canonical draft from the
+    DB-stored ``DocumentExtraction.review_draft`` and applies patches against
+    it. When ``review_draft`` is supplied, only its ``extraction_id`` is
+    cross-checked against the URL path; the rest is ignored.
+    """
+
+    review_draft: ReviewDraft | None = None
     patches: list[ReviewCellPatch] = Field(default_factory=list)
 
 
