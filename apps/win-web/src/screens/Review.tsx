@@ -34,6 +34,8 @@ export function ReviewScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invalidCells, setInvalidCells] = useState<ConfirmExtractionInvalidCell[]>([]);
+  const [fallbackDeleting, setFallbackDeleting] = useState(false);
+  const [fallbackDeleteError, setFallbackDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +139,26 @@ export function ReviewScreen({
     go("inbox");
   }
 
+  async function handleFallbackDelete(): Promise<void> {
+    if (!jobId || fallbackDeleting) return;
+    if (!window.confirm("确定删除？删除后不可恢复。")) return;
+    setFallbackDeleting(true);
+    setFallbackDeleteError(null);
+    try {
+      await deleteIngestJob(jobId);
+      go("inbox");
+    } catch (e) {
+      const apiErr = e as ApiError;
+      if (apiErr.status === 409) {
+        setFallbackDeleteError("当前状态不支持删除");
+      } else {
+        setFallbackDeleteError(apiErr.message || "删除失败");
+      }
+    } finally {
+      setFallbackDeleting(false);
+    }
+  }
+
   if (loading) {
     return (
       <CenteredScreen>
@@ -211,10 +233,27 @@ export function ReviewScreen({
         <div style={{ color: "var(--ink-500)", fontSize: 13, marginBottom: 16 }}>
           {error ?? "上传资料后，AI 会生成可复核的表格草稿。"}
         </div>
-        <button className="btn btn-primary" onClick={() => go("upload")}>
-          {I.cloud(16, "#fff")}
-          <span>上传资料</span>
-        </button>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-primary" onClick={() => go("upload")}>
+            {I.cloud(16, "#fff")}
+            <span>上传资料</span>
+          </button>
+          {jobId ? (
+            <button
+              className="btn btn-secondary"
+              onClick={handleFallbackDelete}
+              disabled={fallbackDeleting}
+              style={{ color: "var(--risk-700)" }}
+            >
+              <span>{fallbackDeleting ? "删除中…" : "删除此任务"}</span>
+            </button>
+          ) : null}
+        </div>
+        {fallbackDeleteError ? (
+          <div style={{ color: "var(--risk-700)", fontSize: 12, marginTop: 12 }}>
+            {fallbackDeleteError}
+          </div>
+        ) : null}
       </div>
     </CenteredScreen>
   );
