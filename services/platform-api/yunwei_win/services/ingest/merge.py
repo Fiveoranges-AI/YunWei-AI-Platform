@@ -10,7 +10,7 @@ the dimension) and produce:
    against existing rows, so the UI can offer "merge into existing vs create
    new" before any DB write.
 
-Like the legacy contract draft path (``services.ingest.contract``), this module
+Like the contract draft path (``services.ingest.contract``), this module
 never writes the structured tables — only the orchestrator's confirm step
 does that. Match-candidate computation does run a few read-only queries (via
 ``services.match.find_*``) so the UI gets a deterministic ranking.
@@ -29,9 +29,8 @@ from typing import Iterable, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# MatchCandidate already lives in ``services.ingest.contract`` and the existing
-# /contract endpoint marshals it into JSON via ``api/ingest._candidate_dict``.
-# Reuse the same type so /auto and /contract render the same shape on the wire.
+# MatchCandidate already lives in ``services.ingest.contract``. Reuse the same
+# type so draft merging and contract extraction rank candidates consistently.
 from yunwei_win.services.ingest.contract import MatchCandidate
 from yunwei_win.services.ingest.unified_schemas import (
     CommercialDraft,

@@ -1,4 +1,4 @@
-// V2 review cell editor — a controlled input for a single ReviewCell.
+// Review cell editor — a controlled input for a single ReviewCell.
 //
 // The parent (ReviewTableWorkspace) owns the patch buffer. This component
 // is presentational: render the right control for the cell's data_type,

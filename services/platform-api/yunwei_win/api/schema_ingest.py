@@ -1,15 +1,15 @@
-"""V2 schema-first ingest API.
+"""Schema-first ingest API.
 
-Mounted under ``/api/win/ingest/v2``. Mirrors the V1 ``/jobs`` shape so the
-frontend can reuse most of the create/list/poll plumbing — the actual
-extraction back-half + review payload changes (see services/ingest_v2/).
+Mounted under ``/api/win/ingest``. Uploads become schema-first review jobs:
+the worker extracts a table/cell ReviewDraft, and confirm writes reviewed
+cells into company data tables.
 
 Endpoints:
 - ``POST /jobs``                              — stage files / text and enqueue.
-- ``GET /jobs``                               — list V2 jobs (active / history).
-- ``GET /jobs/{job_id}``                      — single V2 job (+ embedded draft).
-- ``POST /jobs/{job_id}/retry``               — re-enqueue a failed/canceled V2 job.
-- ``POST /jobs/{job_id}/cancel``              — cancel a queued/running V2 job.
+- ``GET /jobs``                               — list jobs (active / history).
+- ``GET /jobs/{job_id}``                      — single job (+ embedded draft).
+- ``POST /jobs/{job_id}/retry``               — re-enqueue a failed/canceled job.
+- ``POST /jobs/{job_id}/cancel``              — cancel a queued/running job.
 - ``GET /extractions/{extraction_id}``        — fetch the stored ReviewDraft.
 - ``PATCH /extractions/{extraction_id}``      — overwrite the stored ReviewDraft.
 - ``POST /extractions/{extraction_id}/confirm`` — apply patches + write business rows.
@@ -28,12 +28,12 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import (
     ensure_ingest_job_tables_for,
-    ensure_ingest_v2_tables_for,
+    ensure_schema_ingest_tables_for,
     get_session,
 )
 from yunwei_win.models import (
@@ -48,9 +48,13 @@ from yunwei_win.models.document_extraction import (
     DocumentExtraction,
     DocumentExtractionStatus,
 )
-from yunwei_win.services.ingest.job_queue import enqueue_ingest_job, get_ingest_queue
+from yunwei_win.services.ingest.job_queue import (
+    enqueue_ingest_job,
+    get_ingest_queue,
+    reset_stale_running_jobs,
+)
 from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan  # noqa: F401
-from yunwei_win.services.ingest_v2 import (
+from yunwei_win.services.schema_ingest import (
     ConfirmExtractionRequest,
     ConfirmExtractionResponse,
     ReviewDraft,
@@ -59,7 +63,7 @@ from yunwei_win.services.ingest_v2 import (
 from yunwei_win.services.storage import store_upload
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/ingest/v2")
+router = APIRouter(prefix="/ingest")
 
 
 _ACTIVE_STATUSES = (
@@ -88,8 +92,8 @@ def _job_dict(j: IngestJob) -> dict[str, Any]:
     return {
         "id": str(j.id),
         "batch_id": str(j.batch_id),
+        "enterprise_id": j.enterprise_id,
         "document_id": str(j.document_id) if j.document_id else None,
-        "workflow_version": j.workflow_version,
         "extraction_id": str(j.extraction_id) if j.extraction_id else None,
         "original_filename": j.original_filename,
         "content_type": j.content_type,
@@ -126,7 +130,7 @@ def _extraction_dict(e: DocumentExtraction) -> dict[str, Any]:
     }
 
 
-async def _load_v2_job(
+async def _load_job(
     session: AsyncSession, *, job_id: UUID, enterprise_id: str
 ) -> IngestJob:
     j = (
@@ -134,7 +138,6 @@ async def _load_v2_job(
             select(IngestJob).where(
                 IngestJob.id == job_id,
                 IngestJob.enterprise_id == enterprise_id,
-                IngestJob.workflow_version == "v2",
             )
         )
     ).scalar_one_or_none()
@@ -147,7 +150,7 @@ async def _load_v2_job(
 
 
 @router.post("/jobs")
-async def create_ingest_v2_jobs(
+async def create_ingest_jobs(
     request: Request,
     files: list[UploadFile] = File(default_factory=list),
     text: str | None = Form(default=None),
@@ -155,12 +158,11 @@ async def create_ingest_v2_jobs(
     uploader: str | None = Form(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Stage files / text into an IngestBatch + ``workflow_version="v2"``
-    IngestJob rows, then enqueue. Same response shape as V1."""
+    """Stage files / text into an IngestBatch + IngestJob rows, then enqueue."""
 
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
-    await ensure_ingest_v2_tables_for(enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
 
     staged: list[dict[str, Any]] = []
     for f in files:
@@ -191,7 +193,7 @@ async def create_ingest_v2_jobs(
     batch = IngestBatch(
         enterprise_id=enterprise_id,
         uploader=uploader,
-        source="win-upload-v2",
+        source="win-upload",
         total_jobs=len(staged),
     )
     session.add(batch)
@@ -213,7 +215,6 @@ async def create_ingest_v2_jobs(
             status=IngestJobStatus.queued,
             stage=IngestJobStage.received,
             attempts=0,
-            workflow_version="v2",
         )
         session.add(job)
         jobs.append(job)
@@ -227,7 +228,7 @@ async def create_ingest_v2_jobs(
                 str(j.id), attempt=1, enterprise_id=enterprise_id,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("v2 enqueue failed for job %s", j.id)
+            logger.exception("enqueue failed for job %s", j.id)
             j.status = IngestJobStatus.failed
             j.error_message = f"enqueue failed: {exc!s}"
             j.finished_at = datetime.now(timezone.utc)
@@ -243,7 +244,7 @@ async def create_ingest_v2_jobs(
 
 
 @router.get("/jobs")
-async def list_ingest_v2_jobs(
+async def list_ingest_jobs(
     request: Request,
     status: Literal["active", "history", "all"] = "active",
     limit: int = Query(default=50, le=200),
@@ -251,12 +252,33 @@ async def list_ingest_v2_jobs(
 ) -> list[dict[str, Any]]:
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
-    await ensure_ingest_v2_tables_for(enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
 
-    stmt = select(IngestJob).where(
-        IngestJob.enterprise_id == enterprise_id,
-        IngestJob.workflow_version == "v2",
-    )
+    reset_ids = await reset_stale_running_jobs(session)
+    for jid in reset_ids:
+        j = (
+            await session.execute(
+                select(IngestJob).where(
+                    IngestJob.id == jid,
+                    IngestJob.enterprise_id == enterprise_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if j is None:
+            continue
+        try:
+            j.attempts = (j.attempts or 0) + 1
+            j.rq_job_id = enqueue_ingest_job(
+                str(j.id), attempt=j.attempts, enterprise_id=enterprise_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            j.status = IngestJobStatus.failed
+            j.error_message = f"watchdog re-enqueue failed: {exc!s}"
+            j.finished_at = datetime.now(timezone.utc)
+    if reset_ids:
+        await session.commit()
+
+    stmt = select(IngestJob).where(IngestJob.enterprise_id == enterprise_id)
     if status == "active":
         stmt = stmt.where(IngestJob.status.in_(_ACTIVE_STATUSES))
     elif status == "history":
@@ -266,16 +288,52 @@ async def list_ingest_v2_jobs(
     return [_job_dict(j) for j in rows]
 
 
+@router.delete("/jobs/history")
+async def clear_ingest_history(
+    request: Request,
+    status: Literal["failed", "canceled", "confirmed", "all"] = Query(default="failed"),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    enterprise_id = _enterprise_id_from_request(request)
+    await ensure_ingest_job_tables_for(enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
+
+    if status == "failed":
+        target = (IngestJobStatus.failed,)
+    elif status == "canceled":
+        target = (IngestJobStatus.canceled,)
+    elif status == "confirmed":
+        target = (IngestJobStatus.confirmed,)
+    else:
+        target = _HISTORY_STATUSES
+
+    stmt = select(IngestJob).where(
+        IngestJob.enterprise_id == enterprise_id,
+        IngestJob.status.in_(target),
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    deleted = len(rows)
+    if deleted:
+        await session.execute(
+            delete(IngestJob).where(
+                IngestJob.enterprise_id == enterprise_id,
+                IngestJob.status.in_(target),
+            )
+        )
+        await session.commit()
+    return {"deleted": deleted, "status_filter": status}
+
+
 @router.get("/jobs/{job_id}")
-async def get_ingest_v2_job(
+async def get_ingest_job(
     job_id: UUID,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
-    await ensure_ingest_v2_tables_for(enterprise_id)
-    j = await _load_v2_job(session, job_id=job_id, enterprise_id=enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
+    j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
     payload = _job_dict(j)
     if j.extraction_id is not None:
         extraction = (
@@ -295,15 +353,15 @@ async def get_ingest_v2_job(
 
 
 @router.post("/jobs/{job_id}/retry")
-async def retry_ingest_v2_job(
+async def retry_ingest_job(
     job_id: UUID,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
-    await ensure_ingest_v2_tables_for(enterprise_id)
-    j = await _load_v2_job(session, job_id=job_id, enterprise_id=enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
+    j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
     if j.status not in (IngestJobStatus.failed, IngestJobStatus.canceled):
         raise HTTPException(409, f"cannot retry job in status {j.status.value}")
     j.attempts = (j.attempts or 0) + 1
@@ -317,7 +375,7 @@ async def retry_ingest_v2_job(
             str(j.id), attempt=j.attempts, enterprise_id=enterprise_id,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("v2 retry enqueue failed for job %s", j.id)
+        logger.exception("retry enqueue failed for job %s", j.id)
         j.status = IngestJobStatus.failed
         j.error_message = f"enqueue failed: {exc!s}"
         j.finished_at = datetime.now(timezone.utc)
@@ -326,15 +384,15 @@ async def retry_ingest_v2_job(
 
 
 @router.post("/jobs/{job_id}/cancel")
-async def cancel_ingest_v2_job(
+async def cancel_ingest_job(
     job_id: UUID,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
-    await ensure_ingest_v2_tables_for(enterprise_id)
-    j = await _load_v2_job(session, job_id=job_id, enterprise_id=enterprise_id)
+    await ensure_schema_ingest_tables_for(enterprise_id)
+    j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
     if j.status in (IngestJobStatus.confirmed, IngestJobStatus.canceled):
         return _job_dict(j)
     if j.status == IngestJobStatus.failed:
@@ -354,7 +412,7 @@ async def cancel_ingest_v2_job(
                 else:
                     rq_job.cancel()
             except Exception:
-                logger.exception("v2 rq cancel best-effort failed for %s", j.rq_job_id)
+                logger.exception("rq cancel best-effort failed for %s", j.rq_job_id)
         except Exception:
             pass
     j.status = IngestJobStatus.canceled
@@ -386,7 +444,7 @@ async def get_extraction(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     _ = _enterprise_id_from_request(request)
-    await ensure_ingest_v2_tables_for(request.state.enterprise_id)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
     return _extraction_dict(await _load_extraction(session, extraction_id))
 
 
@@ -398,7 +456,7 @@ async def patch_extraction(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     _ = _enterprise_id_from_request(request)
-    await ensure_ingest_v2_tables_for(request.state.enterprise_id)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
     extraction = await _load_extraction(session, extraction_id)
     if extraction.status != DocumentExtractionStatus.pending_review:
         raise HTTPException(409, f"cannot patch extraction in status {extraction.status.value}")
@@ -422,7 +480,7 @@ async def ignore_extraction(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     _ = _enterprise_id_from_request(request)
-    await ensure_ingest_v2_tables_for(request.state.enterprise_id)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
     extraction = await _load_extraction(session, extraction_id)
     extraction.status = DocumentExtractionStatus.ignored
     # Also flip the linked job (if any).
@@ -457,7 +515,7 @@ async def confirm_extraction(
     session: AsyncSession = Depends(get_session),
 ) -> ConfirmExtractionResponse:
     _ = _enterprise_id_from_request(request)
-    await ensure_ingest_v2_tables_for(request.state.enterprise_id)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
     result = await confirm_review_draft(
         session=session,
         extraction_id=extraction_id,

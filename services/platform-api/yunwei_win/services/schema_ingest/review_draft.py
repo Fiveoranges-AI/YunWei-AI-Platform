@@ -5,7 +5,7 @@ Invariant:
     ``company_schema_fields``. Extraction sparsity changes cell status,
     not cell existence.
 
-Pipeline -> table mapping is the V2 contract that decides which catalog
+Pipeline -> table mapping is the schema-first contract that decides which catalog
 tables get materialized for a document. Mapping unknown pipelines is treated
 as a soft warning (skip), not a fatal error — the extractor may evolve
 faster than this map.
@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from yunwei_win.services.ingest_v2.schemas import (
+from yunwei_win.services.schema_ingest.schemas import (
     ReviewCell,
     ReviewCellEvidence,
     ReviewDraft,

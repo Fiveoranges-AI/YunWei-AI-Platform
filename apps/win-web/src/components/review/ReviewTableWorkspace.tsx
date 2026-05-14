@@ -1,4 +1,4 @@
-// V2 review workspace — renders ReviewDraft.tables as schema-shaped forms.
+// Review workspace — renders ReviewDraft.tables as schema-shaped forms.
 //
 // Owns:
 // - local patch buffer (Map keyed by table/row/field)

@@ -1,7 +1,7 @@
-"""V2 schema-first auto-ingest orchestrator.
+"""Schema-first auto-ingest orchestrator.
 
-Same OCR/route/extract front-half as V1 ``auto_ingest``; the V2 difference
-is the back-half:
+Same OCR/route/extract front-half as the extractor pipeline; the back-half
+materializes a schema-shaped ``ReviewDraft``:
 
 1. ``collect_evidence`` — OCR + Document row.
 2. ``route_schemas`` — pipeline route plan.
@@ -47,14 +47,14 @@ from yunwei_win.services.ingest.extractors.providers.factory import (
 from yunwei_win.services.ingest.llm_schema_router import route_schemas
 from yunwei_win.services.ingest.progress import ProgressCallback, emit_progress
 from yunwei_win.services.ingest.unified_schemas import PipelineRoutePlan
-from yunwei_win.services.ingest_v2.review_draft import materialize_review_draft
-from yunwei_win.services.ingest_v2.schemas import ReviewDraft
+from yunwei_win.services.schema_ingest.review_draft import materialize_review_draft
+from yunwei_win.services.schema_ingest.schemas import ReviewDraft
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class AutoIngestV2Result:
+class AutoIngestResult:
     """Bundle returned to the worker — the worker persists these onto the
     IngestJob row."""
 
@@ -64,7 +64,7 @@ class AutoIngestV2Result:
     review_draft: ReviewDraft
 
 
-async def auto_ingest_v2(
+async def auto_ingest(
     *,
     session: AsyncSession,
     file_bytes: bytes | None = None,
@@ -75,12 +75,10 @@ async def auto_ingest_v2(
     uploader: str | None = None,
     progress: ProgressCallback | None = None,
     pre_stored: PreStoredFile | None = None,
-) -> AutoIngestV2Result:
-    """Run the V2 schema-first pipeline end-to-end.
+) -> AutoIngestResult:
+    """Run the schema-first pipeline end-to-end.
 
-    Same evidence/route/extract steps as V1; the back-half materializes a
-    ``ReviewDraft`` from the tenant catalog instead of folding into a
-    ``UnifiedDraft``.
+    Evidence/route/extract builds a ``ReviewDraft`` from the tenant catalog.
 
     The session is owned by the caller (the worker); we ``flush`` so the
     Document + DocumentExtraction rows are visible inside this session but
@@ -130,7 +128,7 @@ async def auto_ingest_v2(
         )
         pipeline_dump = [pr.model_dump(mode="json") for pr in pipeline_results]
     except Exception as exc:  # noqa: BLE001 — degrade gracefully
-        logger.exception("v2 extract step failed for document %s", evidence.document_id)
+        logger.exception("schema ingest extract step failed for document %s", evidence.document_id)
         extract_warnings.append(f"extraction failed: {type(exc).__name__}: {exc!s}")
         pipeline_dump = []
 
@@ -172,9 +170,9 @@ async def auto_ingest_v2(
     )
     session.add(extraction)
 
-    # Mirror V1: stamp the document so we can rehydrate the workflow.
+    # Stamp the document so we can rehydrate the workflow.
     evidence.document.raw_llm_response = {
-        "workflow_version": "v2",
+        "workflow": "schema_first",
         "extraction_id": str(extraction_id),
         "provider": settings.extractor_provider,
         "route_plan": route_plan_dump,
@@ -183,7 +181,7 @@ async def auto_ingest_v2(
 
     await emit_progress(progress, "auto_done", "schema-first 抽取完成，待人工确认")
 
-    return AutoIngestV2Result(
+    return AutoIngestResult(
         document_id=evidence.document_id,
         extraction_id=extraction_id,
         route_plan=route_plan,

@@ -1,4 +1,4 @@
-"""Auto orchestrator — end-to-end glue for ``/api/ingest/auto``.
+"""Auto orchestrator for the shared OCR/router/extractor/merge pipeline.
 
 Single pipeline:
 

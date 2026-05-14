@@ -30,7 +30,7 @@ class EntityType(str, enum.Enum):
     contact = "contact"
     order = "order"
     contract = "contract"
-    # V2 schema-first 落地表
+    # Schema-first 落地表
     product = "product"
     product_requirement = "product_requirement"
     invoice = "invoice"

@@ -1,4 +1,4 @@
-"""V2 confirm — write reviewed ReviewDraft cells into company data tables.
+"""Confirm reviewed ReviewDraft cells into company data tables.
 
 Confirm receives:
   - the server-stored ``DocumentExtraction`` (canonical draft);
@@ -13,7 +13,7 @@ Behavior:
      emit ``FieldProvenance`` for each confirmed non-empty cell, and flip
      the extraction / document / job status to ``confirmed``.
 
-V2 MVP intentionally skips fuzzy merge: if a row carries ``entity_id`` we
+The current implementation intentionally skips fuzzy merge: if a row carries ``entity_id`` we
 update; otherwise we create. Child rows inherit FK substitutions from
 ``client_row_id -> uuid`` mapping built within this confirm.
 """
@@ -62,7 +62,7 @@ from yunwei_win.services.company_schema import (
     ensure_default_company_schema,
     get_company_schema,
 )
-from yunwei_win.services.ingest_v2.schemas import (
+from yunwei_win.services.schema_ingest.schemas import (
     ConfirmExtractionRequest,
     ConfirmExtractionResponse,
     ReviewCell,
@@ -504,7 +504,7 @@ async def _persist_row(
 
     model_pair = TABLE_MODEL.get(table_name)
     if model_pair is None:
-        logger.warning("v2 confirm: unknown table %r, skipping", table_name)
+        logger.warning("schema confirm: unknown table %r, skipping", table_name)
         return None
     model, entity_type = model_pair
 
@@ -527,7 +527,7 @@ async def _persist_row(
             coerced = _coerce_value(field_spec, value)
         except (ValueError, InvalidOperation, TypeError) as exc:
             logger.warning(
-                "v2 confirm: skipping %s.%s due to coercion error %s",
+                "schema confirm: skipping %s.%s due to coercion error %s",
                 table_name, cell.field_name, exc,
             )
             continue

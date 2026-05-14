@@ -1,4 +1,4 @@
-"""V2 业务数据落地表 —— Confirm 阶段写入的目标表。
+"""业务数据落地表 —— Confirm 阶段写入的目标表。
 
 跟 ``customers / contacts / orders / contracts / documents`` 一起构成完整的
 租户公司数据层。每张表保持精简，只放当前 ReviewDraft 真正会落的字段；后续要
@@ -249,7 +249,7 @@ class ShipmentItem(Base, _StampedColumns):
 
 
 class CustomerJournalItem(Base, _StampedColumns):
-    """V2 的"客户时间线"统一表 —— 把抽取出来的承诺/风险/记忆/备注按
+    """客户时间线统一表 —— 把抽取出来的承诺/风险/记忆/备注按
     journal item 汇总到这里。比 V1 的事件/承诺/风险/记忆分表更适合做
     timeline UI。"""
 

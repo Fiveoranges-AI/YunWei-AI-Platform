@@ -80,7 +80,7 @@ def _admin_url() -> str:
 _engines: dict[str, AsyncEngine] = {}
 _provisioned: set[str] = set()
 _provisioned_ingest_tables: set[str] = set()
-_provisioned_ingest_v2_tables: set[str] = set()
+_provisioned_schema_ingest_tables: set[str] = set()
 _engine_lock = asyncio.Lock()
 
 
@@ -173,19 +173,19 @@ async def ensure_ingest_job_tables_for(enterprise_id: str) -> None:
     _provisioned_ingest_tables.add(enterprise_id)
 
 
-async def ensure_ingest_v2_tables(engine: AsyncEngine) -> None:
-    """Idempotently create the V2 schema-first tables on a tenant engine.
+async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
+    """Idempotently create the schema-first ingest tables on a tenant engine.
 
     Covers:
       - schema catalog (company_schema_*, schema_change_proposals)
       - company data foundation (products, invoices, payments, shipments, ...)
       - document_extractions
-      - new IngestJob columns (workflow_version, extraction_id)
+      - IngestJob.extraction_id
 
     Safe to call repeatedly. Uses ``CREATE TABLE IF NOT EXISTS`` for tables
     and ``ALTER TABLE ... ADD COLUMN IF NOT EXISTS`` (Postgres only) for the
-    new IngestJob columns. SQLite test paths get the new columns via
-    ``create_all`` because the IngestJob mapper already declares them.
+    IngestJob extraction link. SQLite test paths get the column via
+    ``create_all`` because the IngestJob mapper declares it.
     """
     import yunwei_win.models  # noqa: F401 — register mappers
     from yunwei_win.models.company_schema import (
@@ -229,27 +229,22 @@ async def ensure_ingest_v2_tables(engine: AsyncEngine) -> None:
             )
         )
         if conn.dialect.name == "postgresql":
-            # Existing tenant DBs were provisioned before workflow_version /
-            # extraction_id existed on ingest_jobs. ALTER ... IF NOT EXISTS
+            # Existing tenant DBs were provisioned before extraction_id
+            # existed on ingest_jobs. ALTER ... IF NOT EXISTS
             # is idempotent so this is safe on every cold start.
-            await conn.execute(text(
-                "ALTER TABLE ingest_jobs "
-                "ADD COLUMN IF NOT EXISTS workflow_version "
-                "VARCHAR(16) NOT NULL DEFAULT 'v1'"
-            ))
             await conn.execute(text(
                 "ALTER TABLE ingest_jobs "
                 "ADD COLUMN IF NOT EXISTS extraction_id UUID"
             ))
 
 
-async def ensure_ingest_v2_tables_for(enterprise_id: str) -> None:
-    """Per-enterprise cached wrapper around ``ensure_ingest_v2_tables``."""
-    if enterprise_id in _provisioned_ingest_v2_tables:
+async def ensure_schema_ingest_tables_for(enterprise_id: str) -> None:
+    """Per-enterprise cached wrapper around ``ensure_schema_ingest_tables``."""
+    if enterprise_id in _provisioned_schema_ingest_tables:
         return
     engine = await get_engine_for(enterprise_id)
-    await ensure_ingest_v2_tables(engine)
-    _provisioned_ingest_v2_tables.add(enterprise_id)
+    await ensure_schema_ingest_tables(engine)
+    _provisioned_schema_ingest_tables.add(enterprise_id)
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -278,4 +273,4 @@ async def dispose_all() -> None:
     _engines.clear()
     _provisioned.clear()
     _provisioned_ingest_tables.clear()
-    _provisioned_ingest_v2_tables.clear()
+    _provisioned_schema_ingest_tables.clear()

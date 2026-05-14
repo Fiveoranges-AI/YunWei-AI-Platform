@@ -1,8 +1,8 @@
-"""Pydantic schemas for the unified `/api/ingest/auto` pipeline.
+"""Pydantic schemas for the internal unified ingest service pipeline.
 
-The legacy ingest endpoints (`/contract`, `/business_card`, `/wechat`) each
-own a single LLM extractor and a single output shape. The unified pipeline
-swaps that for a planner-driven fan-out: one OCR pass, a planner that
+The older document-type extractors each own a single LLM extractor and a
+single output shape. The unified pipeline swaps that for a planner-driven
+fan-out: one OCR pass, a planner that
 decides which dimensions are present (identity / commercial / ops),
 selective parallel extractors per dimension, and a merge step that
 produces a single `UnifiedDraft` for the review form.
@@ -151,14 +151,14 @@ class UnifiedDraft(BaseModel):
     needs_review_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     # LandingAI schema-routed extracts that fed into this draft (one entry per
-    # pipeline that ran). Empty when the legacy Mistral path produced the draft.
+    # pipeline that ran).
     pipeline_results: list["PipelineExtractResult"] = Field(default_factory=list)
 
 
 # ---------- confirm payload ----------------------------------------------
 
 class AutoConfirmRequest(BaseModel):
-    """Body of POST /api/ingest/auto/{document_id}/confirm.
+    """Payload for confirming an internal unified ingest draft.
 
     Customer and each contact carry a per-entity decision (new vs merge into
     existing) — same convention as the legacy `ContractConfirmRequest`. The

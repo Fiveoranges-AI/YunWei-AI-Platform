@@ -1,4 +1,4 @@
-"""Tests for the V2 schema catalog + company data foundation.
+"""Tests for the schema catalog + company data foundation.
 
 Mirrors the in-memory SQLite + ASGI pattern from ``test_ingest_jobs.py``.
 """

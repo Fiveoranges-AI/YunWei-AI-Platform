@@ -3,7 +3,8 @@
 Enqueued by ``yunwei_win.services.ingest.job_queue.enqueue_ingest_job``.
 The queue carries two strings — ``job_id`` and ``enterprise_id`` — under
 JSONSerializer. The worker reads the IngestJob row from the tenant DB,
-dispatches V1/V2 extraction, and persists result pointers + status transitions.
+dispatches schema-first extraction, and persists result pointers + status
+transitions.
 
 Tenant routing: the enqueue path passes ``enterprise_id`` as a positional
 arg so the worker can resolve the tenant engine directly via
@@ -21,11 +22,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yunwei_win.db import ensure_ingest_job_tables, ensure_ingest_v2_tables, get_engine_for
+from yunwei_win.db import ensure_ingest_job_tables, ensure_schema_ingest_tables, get_engine_for
 from yunwei_win.models import IngestJob, IngestJobStage, IngestJobStatus
-from yunwei_win.services.ingest.auto import auto_ingest
 from yunwei_win.services.ingest.evidence import PreStoredFile
-from yunwei_win.services.ingest_v2 import auto_ingest_v2
+from yunwei_win.services.schema_ingest import auto_ingest as schema_auto_ingest
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ async def process_ingest_job(job_id: str, enterprise_id: str) -> None:
 
     engine = await get_engine_for(enterprise_id)
     await ensure_ingest_job_tables(engine)
-    await ensure_ingest_v2_tables(engine)
+    await ensure_schema_ingest_tables(engine)
 
     # Phase 1: load + mark running. Skip terminal/extracted jobs so a
     # duplicate enqueue (retry races, RQ replay) is idempotent.
@@ -219,44 +219,26 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
                     )
 
         source_hint = job.source_hint or "file"
-        workflow_version = (job.workflow_version or "v1").lower()
-
-        v1_result = None
-        v2_result = None
         try:
-            if workflow_version == "v2":
-                v2_result = await auto_ingest_v2(
-                    session=session,
-                    file_bytes=file_bytes,
-                    original_filename=job.original_filename,
-                    content_type=job.content_type,
-                    text_content=job.text_content,
-                    source_hint=source_hint,  # type: ignore[arg-type]
-                    uploader=job.uploader,
-                    progress=progress,
-                    pre_stored=pre,
-                )
-            else:
-                v1_result = await auto_ingest(
-                    session=session,
-                    file_bytes=file_bytes,
-                    original_filename=job.original_filename,
-                    content_type=job.content_type,
-                    text_content=job.text_content,
-                    source_hint=source_hint,  # type: ignore[arg-type]
-                    uploader=job.uploader,
-                    progress=progress,
-                    pre_stored=pre,
-                )
+            result = await schema_auto_ingest(
+                session=session,
+                file_bytes=file_bytes,
+                original_filename=job.original_filename,
+                content_type=job.content_type,
+                text_content=job.text_content,
+                source_hint=source_hint,  # type: ignore[arg-type]
+                uploader=job.uploader,
+                progress=progress,
+                pre_stored=pre,
+            )
         except _CanceledMidFlight:
             logger.info("worker: job %s canceled mid-flight", job_uuid)
             return
 
-        # ``auto_ingest`` / ``auto_ingest_v2`` only ``flush()`` the Document
-        # row; we own the surrounding commit so the row survives this session
-        # context and the follow-up session can stamp ``IngestJob.document_id``
-        # without violating the documents FK. See SCYN250620 incident for the
-        # original V1 bug.
+        # Schema-first ingest only ``flush()`` the Document row; we own the
+        # surrounding commit so the row survives this session context and the
+        # follow-up session can stamp ``IngestJob.document_id`` without
+        # violating the documents FK.
         await session.commit()
 
     # Persist result on a fresh session. The earlier commit above made the
@@ -272,51 +254,11 @@ async def _run_extraction(engine, job_uuid: UUID) -> None:
             return
         if j.status == IngestJobStatus.canceled:
             return
-        if v2_result is not None:
-            j.document_id = v2_result.document_id
-            j.extraction_id = v2_result.extraction_id
-            j.result_json = v2_result.review_draft.model_dump(mode="json")
-            j.status = IngestJobStatus.extracted
-            j.stage = IngestJobStage.done
-            j.progress_message = "已生成 schema 草稿，待人工确认"
-            j.finished_at = datetime.now(timezone.utc)
-        elif v1_result is not None:
-            j.document_id = v1_result.document_id
-            j.result_json = {
-                "document_id": str(v1_result.document_id),
-                "plan": v1_result.plan.model_dump(mode="json"),
-                "route_plan": (
-                    v1_result.route_plan.model_dump(mode="json")
-                    if v1_result.route_plan
-                    else None
-                ),
-                "draft": v1_result.draft.model_dump(mode="json"),
-                "pipeline_results": [
-                    r.model_dump(mode="json")
-                    for r in getattr(v1_result.draft, "pipeline_results", [])
-                ],
-                "candidates": {
-                    "customer": [
-                        _candidate_dict(c) for c in v1_result.candidates.customer_candidates
-                    ],
-                    "contacts": [
-                        [_candidate_dict(c) for c in slot]
-                        for slot in v1_result.candidates.contact_candidates
-                    ],
-                },
-                "needs_review_fields": list(v1_result.draft.needs_review_fields),
-            }
-            j.status = IngestJobStatus.extracted
-            j.stage = IngestJobStage.done
-            j.progress_message = "已生成草稿，待人工确认"
-            j.finished_at = datetime.now(timezone.utc)
+        j.document_id = result.document_id
+        j.extraction_id = result.extraction_id
+        j.result_json = result.review_draft.model_dump(mode="json")
+        j.status = IngestJobStatus.extracted
+        j.stage = IngestJobStage.done
+        j.progress_message = "已生成 schema 草稿，待人工确认"
+        j.finished_at = datetime.now(timezone.utc)
         await session.commit()
-
-
-def _candidate_dict(c) -> dict:
-    return {
-        "id": str(c.id),
-        "score": c.score,
-        "reason": c.reason,
-        "fields": c.fields,
-    }

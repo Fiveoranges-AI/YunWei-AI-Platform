@@ -5,9 +5,9 @@ Shape contract:
   ContractExtractionResult is the existing structured-contract schema.
   CustomerMemoryExtractionResult is the new "memory in event-log form"
   schema, returned by the universal ingest pipeline. Both can come from
-  the same input — the universal ingest persists the memory shape as
-  inbox extracted_payload, while the legacy /api/ingest/contract path
-  persists the contract shape directly into customers/contracts/orders.
+  the same input — customer-scoped ingest persists the memory shape as
+  inbox extracted_payload, while contract extraction persists the contract
+  shape directly into customers/contracts/orders.
 """
 
 from __future__ import annotations
