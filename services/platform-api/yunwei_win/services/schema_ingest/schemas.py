@@ -15,6 +15,7 @@ Notes:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -243,6 +244,8 @@ class ReviewRowDecisionPatch(BaseModel):
     client_row_id: str
     operation: ReviewRowDecisionOperation | None = None
     selected_entity_id: UUID | None = None
+    match_level: ReviewMatchLevel | None = None
+    match_keys: list[str] | None = None
     reason: str | None = None
 
 
@@ -252,10 +255,10 @@ class AutosaveReviewRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     lock_token: UUID
-    base_review_version: int
+    base_version: int
     current_step: str | None = None
     cell_patches: list[ReviewCellPatch] = Field(default_factory=list)
-    row_decision_patches: list[ReviewRowDecisionPatch] = Field(default_factory=list)
+    row_patches: list[ReviewRowDecisionPatch] = Field(default_factory=list)
 
 
 class AutosaveReviewResponse(BaseModel):
@@ -264,16 +267,19 @@ class AutosaveReviewResponse(BaseModel):
     extraction_id: UUID
     review_version: int
     current_step: str | None = None
-    conflict: bool = False
-    server_draft: ReviewDraft | None = None
+    lock_expires_at: datetime | None = None
+    review_draft: ReviewDraft | None = None
+
+
+ReviewLockMode = Literal["edit", "read_only"]
 
 
 class AcquireReviewLockResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     extraction_id: UUID
+    mode: ReviewLockMode
     lock_token: UUID | None = None
     locked_by: str | None = None
-    lock_expires_at: str | None = None
+    lock_expires_at: datetime | None = None
     review_version: int = 0
-    is_read_only: bool = False

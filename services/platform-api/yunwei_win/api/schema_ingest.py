@@ -61,6 +61,13 @@ from yunwei_win.services.schema_ingest import (
     ReviewDraft,
     confirm_review_draft,
 )
+from yunwei_win.services.schema_ingest.review_autosave import autosave_review
+from yunwei_win.services.schema_ingest.review_lock import acquire_review_lock
+from yunwei_win.services.schema_ingest.schemas import (
+    AcquireReviewLockResponse,
+    AutosaveReviewRequest,
+    AutosaveReviewResponse,
+)
 from yunwei_win.services.storage import open_for_read, store_upload
 
 logger = logging.getLogger(__name__)
@@ -117,13 +124,21 @@ def _extraction_dict(e: DocumentExtraction) -> dict[str, Any]:
     return {
         "id": str(e.id),
         "document_id": str(e.document_id),
-        "schema_version": e.schema_version,
+        "parse_id": str(e.parse_id) if e.parse_id else None,
         "provider": e.provider,
+        "model": e.model,
         "status": e.status.value,
-        "warnings": e.warnings,
+        "selected_tables": e.selected_tables,
+        "extraction": e.extraction,
+        "extraction_metadata": e.extraction_metadata,
+        "validation_warnings": e.validation_warnings,
+        "entity_resolution": e.entity_resolution,
         "review_draft": e.review_draft,
-        "route_plan": e.route_plan,
-        "created_by": e.created_by,
+        "review_version": e.review_version,
+        "locked_by": e.locked_by,
+        "lock_expires_at": e.lock_expires_at.isoformat() if e.lock_expires_at else None,
+        "last_reviewed_by": e.last_reviewed_by,
+        "last_reviewed_at": e.last_reviewed_at.isoformat() if e.last_reviewed_at else None,
         "confirmed_by": e.confirmed_by,
         "confirmed_at": e.confirmed_at.isoformat() if e.confirmed_at else None,
         "created_at": e.created_at.isoformat() if e.created_at else None,
@@ -627,6 +642,101 @@ async def patch_extraction(
     extraction.review_draft = new_draft
     await session.commit()
     return _extraction_dict(extraction)
+
+
+def _reviewer_from_request(request: Request) -> str | None:
+    """Resolve the reviewer identifier for lock / autosave audit fields.
+
+    Production middleware stamps ``request.state.user_id`` (or
+    ``request.state.username``); tests pass ``X-User-Id`` so the lock
+    contract can be exercised without standing up a real session.
+    """
+
+    for attr in ("user_id", "username", "user"):
+        value = getattr(request.state, attr, None)
+        if value:
+            return str(value)
+    header_value = request.headers.get("x-user-id")
+    if header_value:
+        return header_value
+    return None
+
+
+def _review_envelope(
+    extraction: DocumentExtraction, *, document: Document | None
+) -> dict[str, Any]:
+    """vNext review response — extraction shell + draft + lock state."""
+
+    payload = _extraction_dict(extraction)
+    payload["review_draft"] = _ensure_draft_source_text(
+        payload.get("review_draft"), document
+    )
+    payload["lock"] = {
+        "locked_by": extraction.locked_by,
+        "lock_expires_at": (
+            extraction.lock_expires_at.isoformat()
+            if extraction.lock_expires_at
+            else None
+        ),
+        # Token deliberately omitted from generic review GETs — it's only
+        # returned by /review/lock to the user who actually holds the lock.
+    }
+    return payload
+
+
+@router.get("/extractions/{extraction_id}/review")
+async def get_review(
+    extraction_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    _ = _enterprise_id_from_request(request)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
+    extraction = await _load_extraction(session, extraction_id)
+    document = (
+        await session.execute(
+            select(Document).where(Document.id == extraction.document_id)
+        )
+    ).scalar_one_or_none()
+    return _review_envelope(extraction, document=document)
+
+
+@router.post(
+    "/extractions/{extraction_id}/review/lock",
+    response_model=AcquireReviewLockResponse,
+)
+async def acquire_review_lock_endpoint(
+    extraction_id: UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> AcquireReviewLockResponse:
+    _ = _enterprise_id_from_request(request)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
+    return await acquire_review_lock(
+        session,
+        extraction_id=extraction_id,
+        user=_reviewer_from_request(request),
+    )
+
+
+@router.patch(
+    "/extractions/{extraction_id}/review",
+    response_model=AutosaveReviewResponse,
+)
+async def autosave_review_endpoint(
+    extraction_id: UUID,
+    request: Request,
+    payload: AutosaveReviewRequest = Body(...),
+    session: AsyncSession = Depends(get_session),
+) -> AutosaveReviewResponse:
+    _ = _enterprise_id_from_request(request)
+    await ensure_schema_ingest_tables_for(request.state.enterprise_id)
+    return await autosave_review(
+        session,
+        extraction_id=extraction_id,
+        request=payload,
+        reviewed_by=_reviewer_from_request(request),
+    )
 
 
 @router.post("/extractions/{extraction_id}/ignore")
