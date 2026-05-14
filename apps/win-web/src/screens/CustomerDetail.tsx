@@ -13,7 +13,19 @@ import { Mono } from "../components/Mono";
 import { RowCard } from "../components/RowCard";
 import { Section } from "../components/Section";
 import { SmallStat } from "../components/SmallStat";
-import type { Contact, CustomerDetail, TimelineEvent } from "../data/types";
+import type {
+  Contact,
+  CustomerContract,
+  CustomerDetail,
+  CustomerInvoice,
+  CustomerJournalItem,
+  CustomerOrder,
+  CustomerPayment,
+  CustomerShipment,
+  CustomerShipmentItem,
+  SourceDocumentRef,
+  TimelineEvent,
+} from "../data/types";
 import { I } from "../icons";
 import { useIsDesktop } from "../lib/breakpoints";
 import { fmtCNYRaw } from "../lib/format";
@@ -259,11 +271,19 @@ function MobileLayout({ customer, go, editing, setEditing, setCustomer }: Layout
       <KeyMetricsRow customer={customer} />
       <SmallMetricsRow customer={customer} />
       <AskCustomerCTA customer={customer} go={go} />
+      <BasicInfoSection customer={customer} />
       <RisksSection customer={customer} />
       <CommitmentsSection customer={customer} />
       <TasksSection customer={customer} />
+      <ContractsSection customer={customer} />
+      <OrdersSection customer={customer} />
+      <InvoicesSection customer={customer} />
+      <ShipmentsSection customer={customer} />
+      <ProductsSection customer={customer} />
+      <JournalSection customer={customer} />
       <TimelineSection customer={customer} />
       <ContactsSection customer={customer} />
+      <SourceDocumentsSection customer={customer} />
       <DocsSection customer={customer} />
     </>
   );
@@ -287,10 +307,18 @@ function DesktopLayout({ customer, go, editing, setEditing, setCustomer }: Layou
           />
         )}
         <AISummary style={{ marginBottom: 16 }}>{customer.aiSummary}</AISummary>
+        <BasicInfoSection customer={customer} />
         <RisksSection customer={customer} />
         <CommitmentsSection customer={customer} />
         <TasksSection customer={customer} />
+        <ContractsSection customer={customer} />
+        <OrdersSection customer={customer} />
+        <InvoicesSection customer={customer} />
+        <ShipmentsSection customer={customer} />
+        <ProductsSection customer={customer} />
+        <JournalSection customer={customer} />
         <TimelineSection customer={customer} />
+        <SourceDocumentsSection customer={customer} />
         <DocsSection customer={customer} />
       </div>
 
@@ -320,6 +348,8 @@ function EditPanel({
   const [shortName, setShortName] = useState(customer.shortName ?? "");
   const [address, setAddress] = useState(customer.address ?? "");
   const [taxId, setTaxId] = useState(customer.taxId ?? "");
+  const [industry, setIndustry] = useState(customer.industry ?? "");
+  const [notes, setNotes] = useState(customer.notes ?? "");
   const [formContacts, setFormContacts] = useState<EditableContact[]>(() => contactsToEditable(customer.contacts));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -367,6 +397,8 @@ function EditPanel({
         short_name: shortName.trim() || null,
         address: address.trim() || null,
         tax_id: taxId.trim() || null,
+        industry: industry.trim() || null,
+        notes: notes.trim() || null,
       });
       const payload: ContactInput[] = formContacts.map((c) => {
         const base: ContactInput = {
@@ -469,6 +501,26 @@ function EditPanel({
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             placeholder="地址"
+            disabled={busy}
+          />
+        </div>
+        <div>
+          <label style={LABEL_STYLE}>行业</label>
+          <input
+            style={INPUT_STYLE}
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value)}
+            placeholder="行业"
+            disabled={busy}
+          />
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={LABEL_STYLE}>备注</label>
+          <textarea
+            style={{ ...INPUT_STYLE, minHeight: 64, fontFamily: "var(--font)", resize: "vertical" }}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="备注"
             disabled={busy}
           />
         </div>
@@ -854,17 +906,20 @@ function TasksSection({ customer }: { customer: CustomerDetail }) {
   if (!customer.tasks?.length) return null;
   return (
     <Section title="待办事项" count={customer.tasks.length}>
-      {customer.tasks.map((t) => (
-        <RowCard key={t.id} icon={I.task(16)} iconBg="var(--ai-100)" iconColor="var(--ai-500)">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <div style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>{t.text}</div>
-            <span className="pill pill-ai" style={{ fontSize: 11, flexShrink: 0 }}>
-              {t.due}
-            </span>
-          </div>
-          <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>负责人 · {t.owner}</div>
-        </RowCard>
-      ))}
+      {customer.tasks.map((t) => {
+        const assignee = t.assignee ?? t.owner ?? "未分配";
+        return (
+          <RowCard key={t.id} icon={I.task(16)} iconBg="var(--ai-100)" iconColor="var(--ai-500)">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>{t.text}</div>
+              <span className="pill pill-ai" style={{ fontSize: 11, flexShrink: 0 }}>
+                {t.due}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>负责人 · {assignee}</div>
+          </RowCard>
+        );
+      })}
     </Section>
   );
 }
@@ -947,6 +1002,482 @@ function ContactsSection({ customer }: { customer: CustomerDetail }) {
                 </div>
               </div>
               <span style={{ color: "var(--ink-400)" }}>{I.chev(14)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// vNext sections — driven by GET /api/win/customers/{id}.
+// Each section returns null when the array is empty so the layout stays
+// dense; this is an operations workspace, not a marketing page.
+// ---------------------------------------------------------------------------
+
+function fmtAmount(amount: number | null | undefined, currency?: string | null): string {
+  if (amount == null) return "—";
+  if (currency && currency.toUpperCase() === "CNY") return fmtCNYRaw(amount);
+  const formatted = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(amount);
+  return currency ? `${currency} ${formatted}` : formatted;
+}
+
+function fmtDate(s: string | null | undefined): string {
+  if (!s) return "—";
+  return s.length > 10 ? s.slice(0, 10) : s;
+}
+
+function fmtRatio(r: number | null | undefined): string {
+  if (r == null) return "—";
+  return `${Math.round(r * 100)}%`;
+}
+
+function BasicInfoSection({ customer }: { customer: CustomerDetail }) {
+  const rows: Array<{ label: string; value: string | null | undefined }> = [
+    { label: "行业", value: customer.industry },
+    { label: "统一社会信用代码", value: customer.taxId },
+    { label: "地址", value: customer.address },
+    { label: "备注", value: customer.notes },
+  ];
+  const hasAny = rows.some((r) => r.value && r.value.trim().length > 0);
+  if (!hasAny) return null;
+  return (
+    <Section title="基本信息">
+      <div
+        className="card"
+        style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}
+      >
+        {rows.map((r) =>
+          r.value && r.value.trim().length > 0 ? (
+            <div key={r.label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+              <div style={{ fontSize: 12, color: "var(--ink-500)", minWidth: 110 }}>{r.label}</div>
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "var(--ink-900)",
+                  flex: 1,
+                  minWidth: 0,
+                  wordBreak: "break-word",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {r.value}
+              </div>
+            </div>
+          ) : null,
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function ContractsSection({ customer }: { customer: CustomerDetail }) {
+  const contracts = customer.contracts ?? [];
+  const milestones = customer.contractPaymentMilestones ?? [];
+  if (contracts.length === 0) return null;
+  const milestonesByContract = new Map<string, typeof milestones>();
+  for (const m of milestones) {
+    const list = milestonesByContract.get(m.contractId) ?? [];
+    list.push(m);
+    milestonesByContract.set(m.contractId, list);
+  }
+  return (
+    <Section title="合同" count={contracts.length}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {contracts.map((k: CustomerContract) => {
+          const ms = milestonesByContract.get(k.id) ?? [];
+          return (
+            <div key={k.id} className="card" style={{ padding: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>
+                  {k.contractNoExternal || "未编号"}
+                </div>
+                <div className="num" style={{ fontSize: 13, color: "var(--ink-700)" }}>
+                  {fmtAmount(k.amountTotal, k.amountCurrency)}
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                {[
+                  k.signingDate ? `签订 ${fmtDate(k.signingDate)}` : null,
+                  k.effectiveDate ? `生效 ${fmtDate(k.effectiveDate)}` : null,
+                  k.expiryDate ? `失效 ${fmtDate(k.expiryDate)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+              {k.deliveryTerms ? (
+                <div style={{ fontSize: 12, color: "var(--ink-700)", marginTop: 6, lineHeight: 1.5 }}>
+                  <span style={{ color: "var(--ink-500)" }}>交付条款：</span>
+                  {k.deliveryTerms}
+                </div>
+              ) : null}
+              {k.penaltyTerms ? (
+                <div style={{ fontSize: 12, color: "var(--ink-700)", marginTop: 4, lineHeight: 1.5 }}>
+                  <span style={{ color: "var(--ink-500)" }}>违约条款：</span>
+                  {k.penaltyTerms}
+                </div>
+              ) : null}
+              {ms.length > 0 ? (
+                <div style={{ marginTop: 8, borderTop: "1px dashed var(--ink-100)", paddingTop: 8 }}>
+                  <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 6 }}>付款节点</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {ms.map((m) => (
+                      <div
+                        key={m.id}
+                        style={{ display: "flex", gap: 8, fontSize: 12, color: "var(--ink-700)" }}
+                      >
+                        <span style={{ minWidth: 90, color: "var(--ink-900)" }}>{m.name || "未命名"}</span>
+                        <span className="num">{fmtRatio(m.ratio)}</span>
+                        <span className="num" style={{ color: "var(--ink-500)" }}>
+                          {fmtAmount(m.amount, k.amountCurrency)}
+                        </span>
+                        {m.triggerEvent ? (
+                          <span style={{ color: "var(--ink-500)" }}>· {m.triggerEvent}</span>
+                        ) : null}
+                        {m.dueDate ? (
+                          <span style={{ color: "var(--ink-500)" }}>· 应付 {fmtDate(m.dueDate)}</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function OrdersSection({ customer }: { customer: CustomerDetail }) {
+  const orders = customer.orders ?? [];
+  if (orders.length === 0) return null;
+  return (
+    <Section title="订单" count={orders.length}>
+      <div className="card" style={{ padding: "4px 0" }}>
+        {orders.map((o: CustomerOrder, i) => (
+          <div key={o.id}>
+            {i > 0 && <div style={{ height: 1, background: "var(--ink-100)" }} />}
+            <div style={{ padding: "10px 14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
+                  {o.description || "—"}
+                </div>
+                <div className="num" style={{ fontSize: 13, color: "var(--ink-700)" }}>
+                  {fmtAmount(o.amountTotal, o.amountCurrency)}
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                {[
+                  o.deliveryPromisedDate ? `承诺交期 ${fmtDate(o.deliveryPromisedDate)}` : null,
+                  o.deliveryAddress ? `送达 ${o.deliveryAddress}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function InvoicesSection({ customer }: { customer: CustomerDetail }) {
+  const invoices = customer.invoices ?? [];
+  const payments = customer.payments ?? [];
+  if (invoices.length === 0 && payments.length === 0) return null;
+  return (
+    <Section title="发票 / 付款" count={invoices.length + payments.length}>
+      {invoices.length > 0 ? (
+        <div className="card" style={{ padding: "4px 0", marginBottom: payments.length ? 8 : 0 }}>
+          {invoices.map((iv: CustomerInvoice, i) => (
+            <div key={iv.id}>
+              {i > 0 && <div style={{ height: 1, background: "var(--ink-100)" }} />}
+              <div style={{ padding: "10px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
+                    发票 {iv.invoiceNo || "未编号"}
+                  </div>
+                  <div className="num" style={{ fontSize: 13, color: "var(--ink-700)" }}>
+                    {fmtAmount(iv.amountTotal, iv.amountCurrency)}
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                  {[
+                    iv.issueDate ? `开票 ${fmtDate(iv.issueDate)}` : null,
+                    iv.taxAmount != null ? `税额 ${fmtAmount(iv.taxAmount, iv.amountCurrency)}` : null,
+                    iv.status ? `状态 ${iv.status}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {payments.length > 0 ? (
+        <div className="card" style={{ padding: "4px 0" }}>
+          {payments.map((p: CustomerPayment, i) => (
+            <div key={p.id}>
+              {i > 0 && <div style={{ height: 1, background: "var(--ink-100)" }} />}
+              <div style={{ padding: "10px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
+                    收款 {p.referenceNo || "—"}
+                  </div>
+                  <div className="num" style={{ fontSize: 13, color: "var(--ink-700)" }}>
+                    {fmtAmount(p.amount, p.currency)}
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                  {[
+                    p.paymentDate ? `日期 ${fmtDate(p.paymentDate)}` : null,
+                    p.method ? `方式 ${p.method}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Section>
+  );
+}
+
+function ShipmentsSection({ customer }: { customer: CustomerDetail }) {
+  const shipments = customer.shipments ?? [];
+  const items = customer.shipmentItems ?? [];
+  if (shipments.length === 0) return null;
+  const itemsByShipment = new Map<string, CustomerShipmentItem[]>();
+  for (const it of items) {
+    const list = itemsByShipment.get(it.shipmentId) ?? [];
+    list.push(it);
+    itemsByShipment.set(it.shipmentId, list);
+  }
+  return (
+    <Section title="物流" count={shipments.length}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {shipments.map((s: CustomerShipment) => {
+          const its = itemsByShipment.get(s.id) ?? [];
+          return (
+            <div key={s.id} className="card" style={{ padding: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>
+                  {s.shipmentNo || "未编号"}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-500)" }}>{s.status || "—"}</div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                {[
+                  s.carrier ? `承运 ${s.carrier}` : null,
+                  s.trackingNo ? `运单 ${s.trackingNo}` : null,
+                  s.shipDate ? `发货 ${fmtDate(s.shipDate)}` : null,
+                  s.deliveryDate ? `送达 ${fmtDate(s.deliveryDate)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+              </div>
+              {s.deliveryAddress ? (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--ink-700)",
+                    marginTop: 4,
+                    wordBreak: "break-word",
+                  }}
+                >
+                  送达地址 · {s.deliveryAddress}
+                </div>
+              ) : null}
+              {its.length > 0 ? (
+                <div style={{ marginTop: 8, borderTop: "1px dashed var(--ink-100)", paddingTop: 8 }}>
+                  <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 6 }}>装运明细</div>
+                  {its.map((it) => (
+                    <div
+                      key={it.id}
+                      style={{ display: "flex", gap: 8, fontSize: 12, color: "var(--ink-700)" }}
+                    >
+                      <span style={{ flex: 1, minWidth: 0, wordBreak: "break-word" }}>
+                        {it.description || it.productId || "—"}
+                      </span>
+                      <span className="num">
+                        {it.quantity ?? "—"}
+                        {it.unit ? ` ${it.unit}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function ProductsSection({ customer }: { customer: CustomerDetail }) {
+  const products = customer.products ?? [];
+  const requirements = customer.productRequirements ?? [];
+  if (products.length === 0 && requirements.length === 0) return null;
+  const productById = new Map(products.map((p) => [p.id, p]));
+  return (
+    <Section title="产品 / 要求" count={products.length + requirements.length}>
+      {products.length > 0 ? (
+        <div className="card" style={{ padding: "4px 0", marginBottom: requirements.length ? 8 : 0 }}>
+          {products.map((p, i) => (
+            <div key={p.id}>
+              {i > 0 && <div style={{ height: 1, background: "var(--ink-100)" }} />}
+              <div style={{ padding: "10px 14px" }}>
+                <div style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
+                  {p.name}
+                  {p.sku ? (
+                    <span style={{ fontSize: 11, color: "var(--ink-500)", marginLeft: 6 }}>
+                      {p.sku}
+                    </span>
+                  ) : null}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                  {[p.specification, p.unit].filter(Boolean).join(" · ") || "—"}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {requirements.length > 0 ? (
+        <div className="card" style={{ padding: "4px 0" }}>
+          {requirements.map((r, i) => {
+            const product = r.productId ? productById.get(r.productId) : null;
+            return (
+              <div key={r.id}>
+                {i > 0 && <div style={{ height: 1, background: "var(--ink-100)" }} />}
+                <div style={{ padding: "10px 14px" }}>
+                  <div style={{ fontSize: 13, color: "var(--ink-900)", fontWeight: 500 }}>
+                    {[r.requirementType, product?.name].filter(Boolean).join(" · ") || "产品要求"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "var(--ink-700)",
+                      marginTop: 4,
+                      lineHeight: 1.5,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {r.requirementText}
+                  </div>
+                  {r.tolerance ? (
+                    <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                      公差 · {r.tolerance}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </Section>
+  );
+}
+
+function JournalSection({ customer }: { customer: CustomerDetail }) {
+  const journal = customer.journalItems ?? [];
+  if (journal.length === 0) return null;
+  return (
+    <Section title="时间线" count={journal.length}>
+      <div className="card" style={{ padding: "4px 0" }}>
+        {journal.map((j: CustomerJournalItem, i) => (
+          <div key={j.id}>
+            {i > 0 && <div style={{ height: 1, background: "var(--ink-100)" }} />}
+            <div style={{ padding: "10px 14px" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                <span className="pill pill-ai" style={{ fontSize: 11 }}>{j.itemType}</span>
+                <span style={{ fontSize: 14, color: "var(--ink-900)", fontWeight: 500 }}>
+                  {j.title || (j.content ? j.content.slice(0, 40) : "未命名")}
+                </span>
+              </div>
+              {j.content ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "var(--ink-700)",
+                    marginTop: 4,
+                    lineHeight: 1.5,
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {j.content}
+                </div>
+              ) : null}
+              <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 4 }}>
+                {[
+                  j.occurredAt ? fmtDate(j.occurredAt) : null,
+                  j.severity ? `严重度 ${j.severity}` : null,
+                  j.status ? `状态 ${j.status}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function SourceDocumentsSection({ customer }: { customer: CustomerDetail }) {
+  const docs = customer.sourceDocuments ?? [];
+  if (docs.length === 0) return null;
+  return (
+    <Section title="来源资料" count={docs.length}>
+      <div className="card" style={{ padding: "4px 0" }}>
+        {docs.map((d: SourceDocumentRef, i) => (
+          <div key={d.id}>
+            {i > 0 && <div style={{ height: 1, background: "var(--ink-100)", marginLeft: 60 }} />}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: "var(--surface-3)",
+                  color: "var(--ink-600)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {I.doc(16)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: "var(--ink-900)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {d.originalFilename || d.id}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 2 }}>
+                  {[d.type, d.reviewStatus, d.createdAt ? fmtDate(d.createdAt) : null]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </div>
+              </div>
             </div>
           </div>
         ))}

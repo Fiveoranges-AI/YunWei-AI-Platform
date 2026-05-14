@@ -37,7 +37,16 @@ export type CustomerTask = {
   id: string;
   text: string;
   due: string;
-  owner: string;
+  // Person currently responsible for the task. Backend canonical column is
+  // ``assignee`` (vNext). ``owner`` stays as a write-through alias for the
+  // legacy mock customer cards still in MOCK_CUSTOMERS — UI should read
+  // ``assignee`` for confirmed-ingest tasks and fall back to ``owner`` only
+  // for legacy data.
+  assignee?: string | null;
+  owner?: string;
+  priority?: string | null;
+  status?: string | null;
+  documentId?: string | null;
 };
 
 export type RiskSignal = {
@@ -77,6 +86,11 @@ export type CustomerListItem = {
   taxId?: string | null;
   monogram: string;
   color: string;
+  // ``tag`` is purely a UI/UX bucket label ("重点客户" / "潜在" / …). It is
+  // not a vNext ingest fact and isn't part of the backend response —
+  // listCustomers() defaults it to "客户". CustomerList still uses it as a
+  // filter chip for legacy mock data; vNext confirmed facts go through the
+  // dedicated arrays below.
   tag: string;
   updated: string;
   aiSummary: string;
@@ -84,13 +98,161 @@ export type CustomerListItem = {
   risk: CustomerRisk;
 };
 
+// vNext ingest facts surfaced on GET /api/win/customers/{id}. Fields mirror
+// the snake_case backend payload but UUID/date stay as strings on the wire.
+
+export type CustomerProduct = {
+  id: string;
+  sku?: string | null;
+  name: string;
+  description?: string | null;
+  specification?: string | null;
+  unit?: string | null;
+};
+
+export type CustomerProductRequirement = {
+  id: string;
+  productId?: string | null;
+  requirementType?: string | null;
+  requirementText: string;
+  tolerance?: string | null;
+  sourceDocumentId?: string | null;
+};
+
+export type CustomerOrder = {
+  id: string;
+  amountTotal?: number | null;
+  amountCurrency?: string | null;
+  deliveryPromisedDate?: string | null;
+  deliveryAddress?: string | null;
+  description?: string | null;
+};
+
+export type CustomerContract = {
+  id: string;
+  contractNoExternal?: string | null;
+  contractNoInternal?: string | null;
+  amountTotal?: number | null;
+  amountCurrency?: string | null;
+  deliveryTerms?: string | null;
+  penaltyTerms?: string | null;
+  signingDate?: string | null;
+  effectiveDate?: string | null;
+  expiryDate?: string | null;
+};
+
+export type ContractPaymentMilestone = {
+  id: string;
+  contractId: string;
+  name?: string | null;
+  ratio?: number | null;
+  amount?: number | null;
+  triggerEvent?: string | null;
+  triggerOffsetDays?: number | null;
+  dueDate?: string | null;
+  rawText?: string | null;
+};
+
+export type CustomerInvoice = {
+  id: string;
+  orderId?: string | null;
+  invoiceNo?: string | null;
+  issueDate?: string | null;
+  amountTotal?: number | null;
+  amountCurrency?: string | null;
+  taxAmount?: number | null;
+  status?: string | null;
+};
+
+export type CustomerInvoiceItem = {
+  id: string;
+  invoiceId: string;
+  productId?: string | null;
+  description?: string | null;
+  quantity?: number | null;
+  unitPrice?: number | null;
+  amount?: number | null;
+};
+
+export type CustomerPayment = {
+  id: string;
+  invoiceId?: string | null;
+  paymentDate?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  method?: string | null;
+  referenceNo?: string | null;
+};
+
+export type CustomerShipment = {
+  id: string;
+  orderId?: string | null;
+  shipmentNo?: string | null;
+  carrier?: string | null;
+  trackingNo?: string | null;
+  shipDate?: string | null;
+  deliveryDate?: string | null;
+  deliveryAddress?: string | null;
+  status?: string | null;
+};
+
+export type CustomerShipmentItem = {
+  id: string;
+  shipmentId: string;
+  productId?: string | null;
+  description?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+};
+
+export type CustomerJournalItem = {
+  id: string;
+  documentId?: string | null;
+  itemType: string;
+  title?: string | null;
+  content?: string | null;
+  occurredAt?: string | null;
+  dueDate?: string | null;
+  severity?: string | null;
+  status?: string | null;
+  confidence?: number | null;
+  rawExcerpt?: string | null;
+};
+
+export type SourceDocumentRef = {
+  id: string;
+  type?: string | null;
+  originalFilename?: string | null;
+  contentType?: string | null;
+  uploader?: string | null;
+  reviewStatus?: string | null;
+  createdAt?: string | null;
+};
+
 export type CustomerDetail = CustomerListItem & {
+  // Profile fields newly exposed in vNext customer envelope.
+  industry?: string | null;
+  notes?: string | null;
+  // Legacy memory-era streams (still populated for older drafts).
   timeline?: TimelineEvent[];
   commitments?: Commitment[];
   tasks?: CustomerTask[];
   risks?: RiskSignal[];
   contacts?: Contact[];
   docs?: Document[];
+  // vNext confirmed-ingest facts.
+  orders?: CustomerOrder[];
+  contracts?: CustomerContract[];
+  contractPaymentMilestones?: ContractPaymentMilestone[];
+  invoices?: CustomerInvoice[];
+  invoiceItems?: CustomerInvoiceItem[];
+  payments?: CustomerPayment[];
+  shipments?: CustomerShipment[];
+  shipmentItems?: CustomerShipmentItem[];
+  products?: CustomerProduct[];
+  productRequirements?: CustomerProductRequirement[];
+  journalItems?: CustomerJournalItem[];
+  sourceDocuments?: SourceDocumentRef[];
 };
 
 export type AskMessage =
