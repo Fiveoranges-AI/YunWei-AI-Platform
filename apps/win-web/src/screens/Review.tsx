@@ -8,7 +8,6 @@ import {
   deleteIngestJob,
   getIngestJob,
   getReview,
-  ignoreReviewDraft,
   type ApiError,
 } from "../api/ingest";
 import { ReviewWizard } from "../components/review/ReviewWizard";
@@ -71,6 +70,7 @@ export function ReviewScreen({
         setDraft(env.review_draft);
         const nextVersion = env.review_version ?? env.review_draft.review_version ?? 0;
         setReviewVersion(nextVersion);
+        reviewVersionRef.current = nextVersion;
         return nextVersion;
       }
       return null;
@@ -254,6 +254,9 @@ export function ReviewScreen({
           setDraft(res.review_draft);
         }
         setReviewVersion(res.review_version);
+        // Sync the ref now — the next queued autosave runs in a microtask
+        // and would otherwise read the stale value before React re-renders.
+        reviewVersionRef.current = res.review_version;
         setLock((prev) =>
           prev
             ? {
@@ -383,21 +386,6 @@ export function ReviewScreen({
     }
   }
 
-  async function handleIgnore(): Promise<void> {
-    if (!extractionId || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await ignoreReviewDraft(extractionId);
-      go("upload");
-    } catch (e) {
-      const apiErr = e as ApiError;
-      setError(apiErr.message || "忽略失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleDelete(): Promise<void> {
     if (!jobId) throw new Error("no job id");
     await deleteIngestJob(jobId);
@@ -482,7 +470,6 @@ export function ReviewScreen({
         onCellPatch={handleCellPatch}
         onRowPatch={handleRowPatch}
         onConfirm={handleConfirm}
-        onIgnore={handleIgnore}
         onDelete={handleDelete}
         sourceText={draft.document.source_text ?? null}
         originalFileUrl={originalFileUrl}

@@ -28,7 +28,6 @@ type Props = {
   onCellPatch: (patch: ReviewCellPatch) => void;
   onRowPatch: (patch: ReviewRowDecisionPatch) => void;
   onConfirm: () => void | Promise<void>;
-  onIgnore?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
   sourceText: string | null;
   originalFileUrl: string | null;
@@ -79,7 +78,6 @@ export function ReviewWizard({
   onCellPatch,
   onRowPatch,
   onConfirm,
-  onIgnore,
   onDelete,
   sourceText,
   originalFileUrl,
@@ -123,6 +121,9 @@ export function ReviewWizard({
         flexDirection: "column",
         padding: 16,
         gap: 12,
+        minHeight: 0,
+        overflow: "hidden",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -132,6 +133,7 @@ export function ReviewWizard({
           alignItems: "baseline",
           flexWrap: "wrap",
           gap: 8,
+          flexShrink: 0,
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -145,16 +147,6 @@ export function ReviewWizard({
           ) : null}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {onIgnore ? (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void onIgnore()}
-              disabled={busy || readOnly}
-            >
-              忽略此文档
-            </button>
-          ) : null}
           {onDelete ? (
             <button
               type="button"
@@ -178,6 +170,7 @@ export function ReviewWizard({
             padding: "8px 12px",
             borderRadius: 8,
             fontSize: 13,
+            flexShrink: 0,
           }}
         >
           {lockBanner}
@@ -193,6 +186,7 @@ export function ReviewWizard({
             padding: "8px 12px",
             borderRadius: 8,
             fontSize: 13,
+            flexShrink: 0,
           }}
         >
           {error}
@@ -209,6 +203,8 @@ export function ReviewWizard({
           borderRadius: 999,
           padding: 4,
           alignSelf: "flex-start",
+          maxWidth: "100%",
+          flexShrink: 0,
         }}
       >
         {steps.map((step) => {
@@ -241,10 +237,23 @@ export function ReviewWizard({
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)",
           gap: 16,
-          alignItems: "start",
+          alignItems: "stretch",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            minWidth: 0,
+            minHeight: 0,
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
           {isSummary ? (
             <ReviewSummary draft={draft} invalidCells={invalidCells} />
           ) : tablesForStep.length === 0 ? (
@@ -355,12 +364,14 @@ export function ReviewWizard({
             )}
           </div>
         </div>
-        <ReviewSourcePanel
-          sourceText={sourceText}
-          originalFileUrl={originalFileUrl}
-          originalFileContentType={originalFileContentType}
-          activeCell={activeSrc}
-        />
+        <div style={{ minHeight: 0, overflowY: "auto" }}>
+          <ReviewSourcePanel
+            sourceText={sourceText}
+            originalFileUrl={originalFileUrl}
+            originalFileContentType={originalFileContentType}
+            activeCell={activeSrc}
+          />
+        </div>
       </div>
     </div>
   );
