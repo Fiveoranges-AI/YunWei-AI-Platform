@@ -323,6 +323,55 @@ async def test_auto_ingest_degrades_parser_failure_into_review_draft(
 
 
 @pytest.mark.asyncio
+async def test_auto_ingest_falls_back_when_parse_artifact_model_dump_fails(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+
+    class MockValSerArtifact(ParseArtifact):
+        def model_dump(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            raise TypeError(
+                "'MockValSer' object is not an instance of 'SchemaSerializer'"
+            )
+
+    async def fake_parse_factory(*, detected, path, filename, content_type):
+        return MockValSerArtifact(
+            provider=detected.parser_provider,
+            source_type=detected.source_type,
+            markdown="parsed-ok",
+            metadata={"filename": filename, "content_type": content_type},
+        )
+
+    monkeypatch.setattr(auto_module, "parse_file_factory", fake_parse_factory)
+    _patch_router(monkeypatch, selected=["customers"])
+    _patch_extractor(monkeypatch, tables={})
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            result = await auto_ingest(
+                session=session,
+                file_bytes=b"%PDF-1.4 placeholder",
+                original_filename="quote.pdf",
+                content_type="application/pdf",
+                source_hint="file",
+            )
+            await session.commit()
+
+            parse = (
+                await session.execute(
+                    select(DocumentParse).where(DocumentParse.id == result.parse_id)
+                )
+            ).scalar_one()
+            assert parse.status == DocumentParseStatus.parsed
+            assert parse.artifact["markdown"] == "parsed-ok"
+            assert parse.artifact["metadata"]["filename"] == "quote.pdf"
+    finally:
+        await engine.dispose()
+        await dispose_all()
+
+
+@pytest.mark.asyncio
 async def test_auto_ingest_materializes_s3_pre_stored_path_for_parser(
     monkeypatch, tmp_path
 ):
