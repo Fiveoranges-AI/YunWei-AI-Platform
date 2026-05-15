@@ -344,6 +344,101 @@ def _validate_draft(
                         "field_name": cell.field_name,
                         "reason": "invalid_value",
                     })
+
+    invalid.extend(_validate_link_decisions(draft))
+    invalid.extend(_validate_parent_links(draft))
+    return invalid
+
+
+def _link_target(row: ReviewRow) -> UUID | None:
+    """Resolve the entity_id a ``link_existing`` row will attach to."""
+    if row.row_decision is not None and row.row_decision.selected_entity_id is not None:
+        return row.row_decision.selected_entity_id
+    return row.entity_id
+
+
+def _validate_link_decisions(draft: ReviewDraft) -> list[dict[str, Any]]:
+    """Flag rows whose decision is ``link_existing`` with no chosen entity.
+
+    Without ``selected_entity_id`` the confirm writeback can't attach the row
+    or surface a parent UUID for child rows — historically this surfaced as a
+    NotNullViolation crash on the FK column of the next phase.
+    """
+    invalid: list[dict[str, Any]] = []
+    for table in draft.tables:
+        for row in table.rows:
+            if row.row_decision is None:
+                continue
+            if row.row_decision.operation != "link_existing":
+                continue
+            if _link_target(row) is not None:
+                continue
+            invalid.append({
+                "table_name": table.table_name,
+                "client_row_id": row.client_row_id,
+                "field_name": "_row_decision",
+                "reason": "link_existing_missing_target",
+            })
+    return invalid
+
+
+def _validate_parent_links(draft: ReviewDraft) -> list[dict[str, Any]]:
+    """Flag child rows whose required system_link FK has no resolvable parent.
+
+    A child can normally pick up its FK from a parent row written earlier in
+    the same confirm (``row_uuid_map`` lookup in ``_write_row``). If the
+    parent table has no row that will produce a UUID — every parent row is
+    ignored, or sits in a broken ``link_existing`` state — the FK stays NULL
+    and the INSERT trips the NOT NULL constraint. Catch it upfront.
+    """
+
+    resolvable_parents: set[str] = set()
+    for table in draft.tables:
+        for row in table.rows:
+            op = _row_operation(row)
+            if op in {"create", "update"} and row.is_writable:
+                resolvable_parents.add(table.table_name)
+                break
+            if op == "link_existing" and _link_target(row) is not None:
+                resolvable_parents.add(table.table_name)
+                break
+
+    invalid: list[dict[str, Any]] = []
+    for table in draft.tables:
+        model_pair = TABLE_MODEL.get(table.table_name)
+        if model_pair is None:
+            continue
+        model, _ = model_pair
+        columns = model.__table__.columns
+
+        for row in table.rows:
+            op = _row_operation(row)
+            if op not in {"create", "update"} or not row.is_writable:
+                continue
+            for fk_name, parent_table in FK_FIELD_PARENTS.items():
+                if fk_name not in columns:
+                    continue
+                if columns[fk_name].nullable:
+                    continue
+                if parent_table in resolvable_parents:
+                    continue
+                # An extractor cell can also fill the FK directly. Rare for
+                # system_link columns (filtered out of review cells) but check
+                # so we don't false-positive when it does happen.
+                cell_fills = any(
+                    c.field_name == fk_name
+                    and c.status != "rejected"
+                    and not _value_is_empty(c.value)
+                    for c in row.cells
+                )
+                if cell_fills:
+                    continue
+                invalid.append({
+                    "table_name": table.table_name,
+                    "client_row_id": row.client_row_id,
+                    "field_name": fk_name,
+                    "reason": "missing_parent_link",
+                })
     return invalid
 
 
