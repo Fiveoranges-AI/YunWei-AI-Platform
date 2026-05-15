@@ -368,6 +368,27 @@ def _value_is_empty(value: Any) -> bool:
     return False
 
 
+def _to_decimal(value: Any) -> Decimal:
+    """Coerce OCR-style numeric strings to Decimal.
+
+    Handles ``"90%"`` → ``Decimal("0.9")`` (per-hundred convention used by
+    catalog ratio/rate fields) and thousands separators
+    (``"30,000.00"`` → ``Decimal("30000.00")``). Raises
+    ``InvalidOperation`` / ``ValueError`` on garbage so callers can branch
+    on the exception just like a bare ``Decimal(str(value))``.
+    """
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, bool):
+        raise InvalidOperation("bool is not a decimal")
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+    s = str(value).strip()
+    if s.endswith("%"):
+        return Decimal(s[:-1].replace(",", "").strip()) / Decimal(100)
+    return Decimal(s.replace(",", ""))
+
+
 def _value_matches_type(field_spec: dict[str, Any], value: Any) -> bool:
     data_type = (field_spec.get("data_type") or "text").lower()
     try:
@@ -387,9 +408,7 @@ def _value_matches_type(field_spec: dict[str, Any], value: Any) -> bool:
             datetime.fromisoformat(str(value).replace("Z", "+00:00"))
             return True
         if data_type == "decimal":
-            if isinstance(value, (int, float, Decimal)):
-                return True
-            Decimal(str(value))
+            _to_decimal(value)
             return True
         if data_type == "integer":
             if isinstance(value, bool):
@@ -435,9 +454,7 @@ def _coerce_value(field_spec: dict[str, Any], value: Any) -> Any:
             return value
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     if data_type == "decimal":
-        if isinstance(value, Decimal):
-            return value
-        return Decimal(str(value))
+        return _to_decimal(value)
     if data_type == "integer":
         if isinstance(value, bool):
             return int(value)
