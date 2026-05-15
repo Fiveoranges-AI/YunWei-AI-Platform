@@ -70,6 +70,7 @@ export function ReviewScreen({
         setDraft(env.review_draft);
         const nextVersion = env.review_version ?? env.review_draft.review_version ?? 0;
         setReviewVersion(nextVersion);
+        reviewVersionRef.current = nextVersion;
         return nextVersion;
       }
       return null;
@@ -253,6 +254,9 @@ export function ReviewScreen({
           setDraft(res.review_draft);
         }
         setReviewVersion(res.review_version);
+        // Sync the ref now — the next queued autosave runs in a microtask
+        // and would otherwise read the stale value before React re-renders.
+        reviewVersionRef.current = res.review_version;
         setLock((prev) =>
           prev
             ? {

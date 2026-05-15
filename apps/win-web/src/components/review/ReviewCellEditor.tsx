@@ -221,11 +221,15 @@ export function ReviewCellEditor({
       />
     );
   } else if (cell.data_type === "decimal" || cell.data_type === "integer") {
+    // Use type="text" so OCR-style strings like "90%", "30,000.00", "90 天"
+    // display without the browser warning ("value cannot be parsed") that
+    // <input type="number"> emits for non-numeric content. inputMode keeps
+    // mobile keyboards on the numeric layout. The onChange below still
+    // coerces clean numbers; backend normalization happens at confirm.
     control = (
       <input
-        type="number"
-        inputMode="decimal"
-        step={cell.data_type === "integer" ? 1 : "any"}
+        type="text"
+        inputMode={cell.data_type === "integer" ? "numeric" : "decimal"}
         value={toNumberInputValue(cell.value)}
         disabled={disabled || isRejected}
         onChange={(e) => {
