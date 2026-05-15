@@ -8,7 +8,6 @@ import {
   deleteIngestJob,
   getIngestJob,
   getReview,
-  ignoreReviewDraft,
   type ApiError,
 } from "../api/ingest";
 import { ReviewWizard } from "../components/review/ReviewWizard";
@@ -383,21 +382,6 @@ export function ReviewScreen({
     }
   }
 
-  async function handleIgnore(): Promise<void> {
-    if (!extractionId || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await ignoreReviewDraft(extractionId);
-      go("upload");
-    } catch (e) {
-      const apiErr = e as ApiError;
-      setError(apiErr.message || "忽略失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleDelete(): Promise<void> {
     if (!jobId) throw new Error("no job id");
     await deleteIngestJob(jobId);
@@ -482,7 +466,6 @@ export function ReviewScreen({
         onCellPatch={handleCellPatch}
         onRowPatch={handleRowPatch}
         onConfirm={handleConfirm}
-        onIgnore={handleIgnore}
         onDelete={handleDelete}
         sourceText={draft.document.source_text ?? null}
         originalFileUrl={originalFileUrl}

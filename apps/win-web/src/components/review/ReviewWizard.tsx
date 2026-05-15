@@ -28,7 +28,6 @@ type Props = {
   onCellPatch: (patch: ReviewCellPatch) => void;
   onRowPatch: (patch: ReviewRowDecisionPatch) => void;
   onConfirm: () => void | Promise<void>;
-  onIgnore?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
   sourceText: string | null;
   originalFileUrl: string | null;
@@ -79,7 +78,6 @@ export function ReviewWizard({
   onCellPatch,
   onRowPatch,
   onConfirm,
-  onIgnore,
   onDelete,
   sourceText,
   originalFileUrl,
@@ -145,16 +143,6 @@ export function ReviewWizard({
           ) : null}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {onIgnore ? (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void onIgnore()}
-              disabled={busy || readOnly}
-            >
-              忽略此文档
-            </button>
-          ) : null}
           {onDelete ? (
             <button
               type="button"
