@@ -27,9 +27,12 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass, field
+from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.models.customer_memory import (
@@ -174,7 +177,7 @@ async def auto_ingest(
         provider=detected.parser_provider,
         model=parse_artifact.metadata.get("model") if isinstance(parse_artifact.metadata, dict) else None,
         status=parse_status,
-        artifact=parse_artifact.model_dump(mode="json"),
+        artifact=_safe_model_dump(parse_artifact),
         raw_metadata=dict(parse_artifact.metadata or {}),
         warnings=parse_warnings,
         error_message=parse_error_message,
@@ -199,7 +202,7 @@ async def auto_ingest(
         llm=llm,
     )
     selected_table_names = [t.table_name for t in route_result.selected_tables]
-    selected_tables_dump = [t.model_dump(mode="json") for t in route_result.selected_tables]
+    selected_tables_dump = [_safe_model_dump(t) for t in route_result.selected_tables]
 
     # --- 6. Extract ----------------------------------------------------
     await emit_progress(
@@ -276,11 +279,11 @@ async def auto_ingest(
         model=None,
         status=DocumentExtractionStatus.pending_review,
         selected_tables=selected_tables_dump,
-        extraction=normalized.model_dump(mode="json"),
+        extraction=_safe_model_dump(normalized),
         extraction_metadata=dict(normalized.metadata or {}),
         validation_warnings=extraction_warnings or None,
-        entity_resolution=proposal.model_dump(mode="json"),
-        review_draft=review_draft.model_dump(mode="json"),
+        entity_resolution=_safe_model_dump(proposal),
+        review_draft=_safe_model_dump(review_draft),
         review_version=0,
     )
     session.add(extraction)
@@ -445,3 +448,61 @@ def _failed_parse_artifact(
 
 def _public_error_message(message: str) -> str:
     return _CREDENTIAL_NAME_RE.sub("credential", message)
+
+
+def _safe_model_dump(value: BaseModel) -> dict[str, Any]:
+    """Dump a Pydantic model to JSON-compatible dicts.
+
+    Production Python 3.13 has surfaced a Pydantic serializer bug where
+    ``model_dump(mode="json")`` can leave ``__pydantic_serializer__`` as a
+    MockValSer. Rebuilding usually fixes it; the attr-walk fallback keeps the
+    worker from failing after a successful parse if Pydantic still refuses.
+    """
+
+    try:
+        return value.model_dump(mode="json")
+    except TypeError as exc:
+        if not _is_mock_val_ser_error(exc):
+            raise
+
+    try:
+        value.__class__.model_rebuild(force=True)
+        return value.model_dump(mode="json")
+    except TypeError as exc:
+        if not _is_mock_val_ser_error(exc):
+            raise
+
+    dumped = _jsonable_from_attrs(value)
+    if not isinstance(dumped, dict):
+        raise TypeError(f"expected object dump for {type(value).__name__}")
+    return dumped
+
+
+def _is_mock_val_ser_error(exc: TypeError) -> bool:
+    message = str(exc)
+    return "MockValSer" in message and "SchemaSerializer" in message
+
+
+def _jsonable_from_attrs(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        data = {
+            field_name: getattr(value, field_name)
+            for field_name in value.__class__.model_fields
+        }
+        extra = getattr(value, "__pydantic_extra__", None)
+        if isinstance(extra, dict):
+            data.update(extra)
+        return {str(k): _jsonable_from_attrs(v) for k, v in data.items()}
+    if isinstance(value, dict):
+        return {str(k): _jsonable_from_attrs(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable_from_attrs(v) for v in value]
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    return value

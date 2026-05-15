@@ -512,7 +512,7 @@ export type ConfirmExtractionResponse = {
 
 // Returned by GET on /extractions/{id} and /extractions/{id}/review.
 // Mirrors `_extraction_dict` in
-// services/platform-api/yunwei_win/api/schema_ingest.py — an envelope
+// services/platform-api/yunwei_win/api/ingest.py — an envelope
 // around the ReviewDraft, NOT the bare draft. Legacy fields (warnings,
 // created_by, schema_version) are optional so old persisted rows don't break
 // the type narrow.
