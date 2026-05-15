@@ -23,6 +23,12 @@ type Props = {
   // authoritative gate for input editability — `readOnly` is purely for
   // hiding write-intent UI controls on historical / non-editable views.
   readOnly?: boolean;
+  // Render the field's Chinese label inside the editor's header so the
+  // label, the dev-hint field_name, and the status pill all live in the
+  // same visual box. Card view (ReviewCard) opts in; table view
+  // (ReviewDetailTable) leaves it off because the column header already
+  // shows the label.
+  showLabel?: boolean;
 };
 
 // Parent-table display labels for FK cells the system auto-links at
@@ -93,6 +99,7 @@ export function ReviewCellEditor({
   invalidReason,
   disabled,
   readOnly,
+  showLabel = false,
 }: Props) {
   const isRejected = cell.status === "rejected";
   const isMissing = cell.status === "missing";
@@ -107,6 +114,31 @@ export function ReviewCellEditor({
     const parentLabel = FK_PARENT_LABEL[cell.field_name] ?? "关联记录";
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {showLabel && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 18 }}>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--ink-700)",
+              }}
+            >
+              {cell.label}
+              {cell.required && (
+                <span style={{ color: "var(--risk-500)", marginLeft: 3 }}>*</span>
+              )}
+            </span>
+            <span
+              style={{
+                fontSize: 10,
+                color: "var(--ink-300)",
+                fontFamily: "ui-monospace, SFMono-Regular, monospace",
+              }}
+            >
+              {cell.field_name}
+            </span>
+          </div>
+        )}
         <div
           style={{
             display: "inline-flex",
@@ -237,7 +269,21 @@ export function ReviewCellEditor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 18, flexWrap: "wrap" }}>
+        {showLabel && (
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--ink-700)",
+            }}
+          >
+            {cell.label}
+            {cell.required && (
+              <span style={{ color: "var(--risk-500)", marginLeft: 3 }}>*</span>
+            )}
+          </span>
+        )}
         <span
           style={{
             fontSize: 10,

@@ -298,16 +298,6 @@ export function ReviewCard({
                   cursor: "default",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--ink-500)",
-                    fontWeight: 500,
-                  }}
-                >
-                  {cell.label}
-                  {cell.required ? <span style={{ color: "var(--risk-700)" }}> *</span> : null}
-                </div>
                 <ReviewCellEditor
                   cell={cell}
                   rowId={row.client_row_id}
@@ -317,6 +307,7 @@ export function ReviewCard({
                   invalidReason={invalidReason}
                   disabled={readOnly || ignored || linked}
                   readOnly={readOnly}
+                  showLabel
                 />
               </div>
             );
