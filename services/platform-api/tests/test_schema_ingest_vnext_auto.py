@@ -9,6 +9,7 @@ def _clean_state():  # override Postgres+Redis fixture
 
 
 import yunwei_win.models  # noqa: E402, F401 — register mappers
+from pathlib import Path  # noqa: E402
 from sqlalchemy import event, select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 
@@ -16,6 +17,7 @@ from yunwei_win.db import Base, dispose_all  # noqa: E402
 from yunwei_win.models.document import Document  # noqa: E402
 from yunwei_win.models.document_extraction import DocumentExtraction  # noqa: E402
 from yunwei_win.models.document_parse import DocumentParse, DocumentParseStatus  # noqa: E402
+from yunwei_win.services import storage as storage_module  # noqa: E402
 from yunwei_win.services.schema_ingest import auto as auto_module  # noqa: E402
 from yunwei_win.services.schema_ingest.auto import auto_ingest  # noqa: E402
 from yunwei_win.services.schema_ingest.extraction_normalize import (  # noqa: E402
@@ -23,10 +25,12 @@ from yunwei_win.services.schema_ingest.extraction_normalize import (  # noqa: E4
     NormalizedFieldValue,
     NormalizedRow,
 )
+from yunwei_win.services.schema_ingest.parse_artifact import ParseArtifact  # noqa: E402
 from yunwei_win.services.schema_ingest.table_router import (  # noqa: E402
     SelectedTable,
     TableRouteResult,
 )
+from yunwei_win.services.schema_ingest.upload import PreStoredFile  # noqa: E402
 
 
 async def _make_engine():
@@ -313,6 +317,80 @@ async def test_auto_ingest_degrades_parser_failure_into_review_draft(
                 "API_KEY" in warning
                 for warning in (extraction.validation_warnings or [])
             )
+    finally:
+        await engine.dispose()
+        await dispose_all()
+
+
+@pytest.mark.asyncio
+async def test_auto_ingest_materializes_s3_pre_stored_path_for_parser(
+    monkeypatch, tmp_path
+):
+    """Regression: when pre_stored.path is an s3:// URL, the parser must
+    receive a real local file path. Naively wrapping the URL in Path()
+    collapses ``s3://`` to ``s3:/`` and the parser then errors with
+    ``[Errno 2] No such file or directory: 's3:/...'``."""
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    pdf_bytes = b"%PDF-1.4 fake-bytes-for-test"
+    s3_url = "s3://yunwei-ingest/files/abc123.pdf"
+
+    def fake_open_for_read(stored_path: str) -> bytes:
+        assert stored_path == s3_url, f"unexpected read of {stored_path!r}"
+        return pdf_bytes
+
+    monkeypatch.setattr(storage_module, "open_for_read", fake_open_for_read)
+
+    captured: dict = {}
+
+    async def fake_parse_factory(*, detected, path, filename, content_type):
+        captured["path"] = path
+        captured["bytes"] = Path(path).read_bytes()
+        return ParseArtifact(
+            provider=detected.parser_provider,
+            source_type=detected.source_type,
+            markdown="parsed-ok",
+            metadata={"filename": filename},
+        )
+
+    monkeypatch.setattr(auto_module, "parse_file_factory", fake_parse_factory)
+    _patch_router(monkeypatch, selected=["customers"])
+    _patch_extractor(
+        monkeypatch,
+        tables={
+            "customers": [
+                NormalizedRow(
+                    client_row_id="customers:0",
+                    fields={"full_name": NormalizedFieldValue(value="测试")},
+                )
+            ]
+        },
+    )
+
+    engine = await _make_engine()
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            await auto_ingest(
+                session=session,
+                pre_stored=PreStoredFile(
+                    path=s3_url,
+                    sha256="d" * 64,
+                    size=len(pdf_bytes),
+                    original_filename="invoice.pdf",
+                    content_type="application/pdf",
+                ),
+                original_filename="invoice.pdf",
+                content_type="application/pdf",
+                source_hint="file",
+            )
+            await session.commit()
+
+        path = captured["path"]
+        assert "s3:/" not in str(path), (
+            f"parser received mangled S3 URL as Path: {path!r}"
+        )
+        assert Path(path).exists(), f"parser path does not exist: {path!r}"
+        assert captured["bytes"] == pdf_bytes
     finally:
         await engine.dispose()
         await dispose_all()

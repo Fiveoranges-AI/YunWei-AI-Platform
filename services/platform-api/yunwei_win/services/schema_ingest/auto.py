@@ -65,7 +65,7 @@ from yunwei_win.services.schema_ingest.parsers.factory import (
 )
 from yunwei_win.services.schema_ingest.review_draft import materialize_review_draft_vnext
 from yunwei_win.services.schema_ingest.schemas import ReviewDraft
-from yunwei_win.services.storage import open_for_read, store_upload
+from yunwei_win.services.storage import materialize_to_local, store_upload
 
 logger = logging.getLogger(__name__)
 
@@ -400,21 +400,20 @@ async def _run_parse(
             text=text, filename=original_filename or "pasted.txt"
         )
 
-    # File-based parsers need a real path on disk. Prefer pre_stored, otherwise
-    # write a tmp file from file_bytes.
+    # File-based parsers need a real path on disk. ``materialize_to_local``
+    # transparently handles file://, s3://, and bare-path URLs — for s3 it
+    # downloads to a tmp file. Naive ``Path(s3_url)`` would collapse ``//``
+    # to ``/`` and the parser would then fail with "No such file".
     if pre_stored is not None:
-        path = Path(pre_stored.path.replace("file://", ""))
-    elif document.file_url and not document.file_url.startswith("s3://"):
-        path = Path(document.file_url.replace("file://", ""))
+        path = materialize_to_local(pre_stored.path)
+    elif document.file_url:
+        path = materialize_to_local(document.file_url)
     else:
-        # Last-resort: write bytes to a tmp path so the parser can read.
         import tempfile
 
         suffix = "." + detected.source_type
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as fh:
-            if file_bytes is None:
-                file_bytes = open_for_read(document.file_url)
-            fh.write(file_bytes)
+            fh.write(file_bytes or b"")
             path = Path(fh.name)
 
     return await parse_file_factory(
