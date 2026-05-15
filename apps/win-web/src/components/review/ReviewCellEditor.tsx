@@ -107,27 +107,6 @@ export function ReviewCellEditor({
     const parentLabel = FK_PARENT_LABEL[cell.field_name] ?? "关联记录";
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 18 }}>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--ink-500)",
-              letterSpacing: "0.01em",
-            }}
-          >
-            {cell.label}
-          </span>
-          <span
-            style={{
-              fontSize: 10,
-              color: "var(--ink-300)",
-              fontFamily: "ui-monospace, SFMono-Regular, monospace",
-            }}
-          >
-            {cell.field_name}
-          </span>
-        </div>
         <div
           style={{
             display: "inline-flex",
@@ -259,19 +238,6 @@ export function ReviewCellEditor({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 18 }}>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "var(--ink-500)",
-            letterSpacing: "0.01em",
-          }}
-        >
-          {cell.label}
-          {cell.required && (
-            <span style={{ color: "var(--risk-500)", marginLeft: 3 }}>*</span>
-          )}
-        </span>
         <span
           style={{
             fontSize: 10,
