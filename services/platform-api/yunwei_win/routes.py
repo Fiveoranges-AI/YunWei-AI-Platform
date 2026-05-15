@@ -6,7 +6,7 @@ from yunwei_win.api.ask import router as _ask_router
 from yunwei_win.api.company_schema import router as _company_schema_router
 from yunwei_win.api.customer_management import router as _customer_management_router
 from yunwei_win.api.customer_profile import router as _customer_profile_router
-from yunwei_win.api.schema_ingest import router as _ingest_router
+from yunwei_win.api.ingest import router as _ingest_router
 from yunwei_win.api.read import router as _read_router
 from yunwei_win.assistant.router import router as _assistant_router
 

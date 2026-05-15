@@ -58,7 +58,7 @@ def _stub_queue(monkeypatch):
 
     monkeypatch.setattr(job_queue_module, "enqueue_ingest_job", fake_enqueue)
     # The API module imported the helper by name — patch the bound reference too.
-    from yunwei_win.api import schema_ingest as ingest_api
+    from yunwei_win.api import ingest as ingest_api
 
     monkeypatch.setattr(ingest_api, "enqueue_ingest_job", fake_enqueue)
     return calls

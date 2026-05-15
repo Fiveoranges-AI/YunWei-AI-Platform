@@ -1,4 +1,4 @@
-"""Schema-first ingest API.
+"""Ingest API.
 
 Mounted under ``/api/win/ingest``. Uploads become schema-first review jobs:
 the worker extracts a table/cell ReviewDraft, and confirm writes reviewed

@@ -2,8 +2,8 @@
 
 Persists the original payload as a Document, runs the customer-memory LLM
 extraction, and stores the result as a pending CustomerInboxItem awaiting
-human confirm/ignore. Company-wide schema ingest is handled separately by
-``yunwei_win.api.schema_ingest``.
+human confirm/ignore. Company-wide ingest is handled separately by
+``yunwei_win.api.ingest``.
 """
 
 from __future__ import annotations
