@@ -21,6 +21,26 @@ function decisionOp(row: ReviewRow): ReviewRowOperation {
   return row.row_decision?.operation ?? row.operation ?? "create";
 }
 
+const REASON_LABEL: Record<string, string> = {
+  missing_required: "缺少必填值",
+  invalid_value: "格式不符合字段类型",
+  catalog_field_has_no_orm_destination: "字段无对应数据列",
+  link_existing_missing_target: "未选择关联记录,请改为 “新建” 或在候选项中选一条",
+  missing_parent_link: "缺少父级记录,请先在父表中新建或关联一条",
+};
+
+function describeInvalid(reason: string): string {
+  return REASON_LABEL[reason] ?? reason;
+}
+
+function describeFieldName(fieldName: string): string {
+  // Backend uses the pseudo-field "_row_decision" for row-level errors
+  // (e.g. link_existing without a target). Surface this as 行决策 so
+  // reviewers don't see an internal sentinel.
+  if (fieldName === "_row_decision") return "行决策";
+  return fieldName;
+}
+
 type Counts = Record<ReviewRowOperation, number>;
 
 function countDecisions(draft: ReviewDraft): {
@@ -172,15 +192,25 @@ export function ReviewSummary({ draft, invalidCells }: Props) {
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
+                  gap: 12,
                   fontSize: 13,
-                  padding: "4px 0",
+                  padding: "6px 0",
+                  borderBottom: "1px dashed var(--ink-100)",
                   color: "var(--risk-700)",
                 }}
               >
-                <span>
-                  {c.table_name} · {c.client_row_id} · {c.field_name}
+                <span style={{ minWidth: 0, flexShrink: 0 }}>
+                  {c.table_name} · {c.client_row_id} · {describeFieldName(c.field_name)}
                 </span>
-                <span style={{ color: "var(--risk-500)" }}>{c.reason}</span>
+                <span
+                  style={{
+                    color: "var(--risk-500)",
+                    textAlign: "right",
+                    minWidth: 0,
+                  }}
+                >
+                  {describeInvalid(c.reason)}
+                </span>
               </li>
             ))}
           </ul>

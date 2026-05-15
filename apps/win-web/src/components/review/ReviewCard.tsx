@@ -125,6 +125,7 @@ export function ReviewCard({
   const ignored = op === "ignore";
   const linked = op === "link_existing";
   const decision = row.row_decision ?? null;
+  const hasCandidates = (decision?.candidate_entities ?? []).length > 0;
 
   function handleCellChange(
     cell: ReviewCell,
@@ -200,6 +201,12 @@ export function ReviewCard({
         >
           {DECISION_OPTIONS.map((o) => {
             const active = o === op;
+            // "关联现有" requires at least one candidate to attach to.
+            // Without candidates the only valid path forward is to keep
+            // the existing op (so users can switch off it) or to pick
+            // another option. Disable so the radio can't enter the
+            // link_existing+no-target state that confirm rejects.
+            const blocked = o === "link_existing" && !hasCandidates && !active;
             return (
               <button
                 key={o}
@@ -207,17 +214,22 @@ export function ReviewCard({
                 role="radio"
                 aria-checked={active}
                 onClick={() => handleOperation(o)}
-                disabled={readOnly}
+                disabled={readOnly || blocked}
+                title={blocked ? "未找到可关联的候选记录" : undefined}
                 style={{
                   fontSize: 12,
                   padding: "4px 10px",
                   borderRadius: 6,
                   border: "none",
                   background: active ? "var(--surface)" : "transparent",
-                  color: active ? "var(--ink-900)" : "var(--ink-500)",
+                  color: active
+                    ? "var(--ink-900)"
+                    : blocked
+                      ? "var(--ink-300)"
+                      : "var(--ink-500)",
                   boxShadow: active ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
                   fontWeight: active ? 600 : 500,
-                  cursor: readOnly ? "default" : "pointer",
+                  cursor: readOnly || blocked ? "not-allowed" : "pointer",
                 }}
               >
                 {OPERATION_LABEL[o]}
