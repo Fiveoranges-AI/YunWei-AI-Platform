@@ -26,7 +26,7 @@ import hashlib
 import logging
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
@@ -178,7 +178,7 @@ async def auto_ingest(
         model=parse_artifact.metadata.get("model") if isinstance(parse_artifact.metadata, dict) else None,
         status=parse_status,
         artifact=_safe_model_dump(parse_artifact),
-        raw_metadata=dict(parse_artifact.metadata or {}),
+        raw_metadata=_safe_json_dict(parse_artifact.metadata or {}),
         warnings=parse_warnings,
         error_message=parse_error_message,
     )
@@ -280,7 +280,7 @@ async def auto_ingest(
         status=DocumentExtractionStatus.pending_review,
         selected_tables=selected_tables_dump,
         extraction=_safe_model_dump(normalized),
-        extraction_metadata=dict(normalized.metadata or {}),
+        extraction_metadata=_safe_json_dict(normalized.metadata or {}),
         validation_warnings=extraction_warnings or None,
         entity_resolution=_safe_model_dump(proposal),
         review_draft=_safe_model_dump(review_draft),
@@ -460,14 +460,20 @@ def _safe_model_dump(value: BaseModel) -> dict[str, Any]:
     """
 
     try:
-        return value.model_dump(mode="json")
+        dumped = _jsonable_from_attrs(value.model_dump(mode="json"))
+        if not isinstance(dumped, dict):
+            raise TypeError(f"expected object dump for {type(value).__name__}")
+        return dumped
     except TypeError as exc:
         if not _is_mock_val_ser_error(exc):
             raise
 
     try:
         value.__class__.model_rebuild(force=True)
-        return value.model_dump(mode="json")
+        dumped = _jsonable_from_attrs(value.model_dump(mode="json"))
+        if not isinstance(dumped, dict):
+            raise TypeError(f"expected object dump for {type(value).__name__}")
+        return dumped
     except TypeError as exc:
         if not _is_mock_val_ser_error(exc):
             raise
@@ -483,7 +489,16 @@ def _is_mock_val_ser_error(exc: TypeError) -> bool:
     return "MockValSer" in message and "SchemaSerializer" in message
 
 
+def _safe_json_dict(value: dict[str, Any]) -> dict[str, Any]:
+    dumped = _jsonable_from_attrs(value)
+    if not isinstance(dumped, dict):
+        raise TypeError("expected JSON object")
+    return dumped
+
+
 def _jsonable_from_attrs(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
     if isinstance(value, BaseModel):
         data = {
             field_name: getattr(value, field_name)
@@ -493,6 +508,8 @@ def _jsonable_from_attrs(value: Any) -> Any:
         if isinstance(extra, dict):
             data.update(extra)
         return {str(k): _jsonable_from_attrs(v) for k, v in data.items()}
+    if is_dataclass(value) and not isinstance(value, type):
+        return _jsonable_from_attrs(asdict(value))
     if isinstance(value, dict):
         return {str(k): _jsonable_from_attrs(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -505,4 +522,20 @@ def _jsonable_from_attrs(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, Enum):
         return value.value
-    return value
+    if hasattr(value, "model_dump"):
+        try:
+            return _jsonable_from_attrs(value.model_dump(mode="json"))
+        except Exception:  # noqa: BLE001
+            pass
+    if hasattr(value, "to_dict"):
+        try:
+            return _jsonable_from_attrs(value.to_dict())
+        except Exception:  # noqa: BLE001
+            pass
+    if hasattr(value, "__dict__"):
+        public_attrs = {
+            k: v for k, v in vars(value).items() if not k.startswith("_")
+        }
+        if public_attrs:
+            return _jsonable_from_attrs(public_attrs)
+    return str(value)
