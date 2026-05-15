@@ -23,7 +23,7 @@ from collections.abc import AsyncIterator
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import HTTPException, Request
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -110,6 +110,7 @@ async def _ensure_database(enterprise_id: str) -> None:
         engine = _get_engine_unlocked(enterprise_id)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await _run_lightweight_tenant_migrations(conn)
         _provisioned.add(enterprise_id)
 
 
@@ -230,6 +231,7 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
                 sync_conn, tables=new_tables, checkfirst=True,
             )
         )
+        await _run_lightweight_tenant_migrations(conn)
         if conn.dialect.name == "postgresql":
             # Existing tenant DBs were provisioned before extraction_id
             # existed on ingest_jobs. ALTER ... IF NOT EXISTS
@@ -242,21 +244,113 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
             # amount_total / amount_currency captured at contract level,
             # order_id relaxed to nullable so contracts can be ingested
             # without a same-confirm order parent.
-            for stmt in (
-                "ALTER TABLE contracts "
-                "ADD COLUMN IF NOT EXISTS customer_id UUID "
-                "REFERENCES customers(id) ON DELETE RESTRICT",
-                "ALTER TABLE contracts "
-                "ADD COLUMN IF NOT EXISTS amount_total NUMERIC(18, 4)",
-                "ALTER TABLE contracts "
-                "ADD COLUMN IF NOT EXISTS amount_currency VARCHAR(8)",
-                "ALTER TABLE contracts ALTER COLUMN order_id DROP NOT NULL",
-                "ALTER TABLE customers "
-                "ADD COLUMN IF NOT EXISTS industry VARCHAR",
-                "ALTER TABLE customers "
-                "ADD COLUMN IF NOT EXISTS notes TEXT",
-            ):
-                await conn.execute(text(stmt))
+            if await _column_exists(conn, "contracts", "order_id"):
+                await conn.execute(
+                    text("ALTER TABLE contracts ALTER COLUMN order_id DROP NOT NULL")
+                )
+
+
+async def _run_lightweight_tenant_migrations(conn) -> None:
+    """Patch existing tenant DBs after SQLAlchemy ``create_all``.
+
+    ``create_all(checkfirst=True)`` creates missing tables but never adds
+    columns to tables that already exist. vNext added several nullable/defaulted
+    columns to long-lived tenant tables, so every cold start needs a small
+    idempotent column migration before ORM queries touch those mappers.
+    """
+
+    migrations: dict[str, dict[str, str]] = {
+        "company_schema_fields": {
+            "field_role": "VARCHAR(32) NOT NULL DEFAULT 'extractable'",
+            "review_visible": "BOOLEAN NOT NULL DEFAULT TRUE",
+        },
+        "customers": {
+            "industry": "VARCHAR",
+            "notes": "TEXT",
+        },
+        "contacts": {
+            "title": "VARCHAR",
+            "phone": "VARCHAR",
+            "address": "VARCHAR",
+            "wechat_id": "VARCHAR",
+            "needs_review": "BOOLEAN NOT NULL DEFAULT FALSE",
+        },
+        "contracts": {
+            "customer_id": "UUID",
+            "amount_total": "NUMERIC(18, 4)",
+            "amount_currency": "VARCHAR(8)",
+            "delivery_terms": "TEXT",
+            "penalty_terms": "TEXT",
+        },
+        "customer_tasks": {
+            "document_id": "UUID",
+            "assignee": "VARCHAR(128)",
+            "priority": "VARCHAR(16) NOT NULL DEFAULT 'normal'",
+            "status": "VARCHAR(16) NOT NULL DEFAULT 'open'",
+        },
+        "document_extractions": {
+            "parse_id": "UUID",
+            "provider": "VARCHAR(64)",
+            "model": "VARCHAR(128)",
+            "selected_tables": "JSON",
+            "extraction": "JSON",
+            "extraction_metadata": "JSON",
+            "validation_warnings": "JSON",
+            "entity_resolution": "JSON",
+            "review_version": "INTEGER NOT NULL DEFAULT 0",
+            "locked_by": "VARCHAR(128)",
+            "lock_token": "UUID",
+            "lock_expires_at": "TIMESTAMP WITH TIME ZONE",
+            "last_reviewed_by": "VARCHAR(128)",
+            "last_reviewed_at": "TIMESTAMP WITH TIME ZONE",
+            "confirmed_by": "VARCHAR(64)",
+            "confirmed_at": "TIMESTAMP WITH TIME ZONE",
+        },
+        "field_provenance": {
+            "parse_id": "UUID",
+            "extraction_id": "UUID",
+            "source_refs": "JSON",
+            "review_action": "VARCHAR(32)",
+        },
+        "ingest_jobs": {
+            "extraction_id": "UUID",
+        },
+    }
+
+    for table_name, columns in migrations.items():
+        if not await _table_exists(conn, table_name):
+            continue
+        for column_name, ddl in columns.items():
+            await _add_column_if_missing(conn, table_name, column_name, ddl)
+
+
+async def _table_exists(conn, table_name: str) -> bool:
+    return await conn.run_sync(
+        lambda sync_conn: inspect(sync_conn).has_table(table_name)
+    )
+
+
+async def _add_column_if_missing(
+    conn,
+    table_name: str,
+    column_name: str,
+    column_ddl: str,
+) -> None:
+    exists = await _column_exists(conn, table_name, column_name)
+    if not exists:
+        await conn.execute(
+            text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}")
+        )
+
+
+async def _column_exists(conn, table_name: str, column_name: str) -> bool:
+    return await conn.run_sync(
+        lambda sync_conn: column_name
+        in {
+            col["name"]
+            for col in inspect(sync_conn).get_columns(table_name)
+        }
+    )
 
 
 async def ensure_schema_ingest_tables_for(enterprise_id: str) -> None:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 import yunwei_win.models  # noqa: F401
-from yunwei_win.db import Base
+from yunwei_win.db import Base, ensure_schema_ingest_tables
 from yunwei_win.models.company_schema import CompanySchemaField
 from yunwei_win.models.document_extraction import DocumentExtraction
 from yunwei_win.models.document_parse import DocumentParse
@@ -78,6 +79,89 @@ def test_company_schema_fields_have_roles_and_visibility():
     cols = CompanySchemaField.__table__.columns
     assert "field_role" in cols.keys()
     assert "review_visible" in cols.keys()
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_ingest_tables_migrates_legacy_company_schema_fields():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE company_schema_tables (
+                        id CHAR(32) PRIMARY KEY,
+                        table_name VARCHAR(128) NOT NULL,
+                        label VARCHAR(255) NOT NULL,
+                        purpose TEXT,
+                        category VARCHAR(32) NOT NULL,
+                        version INTEGER NOT NULL DEFAULT 1,
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_company_schema_table_version
+                            UNIQUE (table_name, version)
+                    )
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE company_schema_fields (
+                        id CHAR(32) PRIMARY KEY,
+                        table_id CHAR(32) NOT NULL,
+                        field_name VARCHAR(128) NOT NULL,
+                        label VARCHAR(255) NOT NULL,
+                        data_type VARCHAR(32) NOT NULL,
+                        required BOOLEAN NOT NULL DEFAULT 0,
+                        is_array BOOLEAN NOT NULL DEFAULT 0,
+                        enum_values JSON,
+                        default_value JSON,
+                        description TEXT,
+                        extraction_hint TEXT,
+                        validation JSON,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_company_schema_field_name
+                            UNIQUE (table_id, field_name),
+                        FOREIGN KEY(table_id)
+                            REFERENCES company_schema_tables(id)
+                            ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+            await conn.run_sync(Base.metadata.create_all)
+
+        await ensure_schema_ingest_tables(engine)
+
+        async with engine.begin() as conn:
+            columns = await conn.run_sync(
+                lambda sync_conn: {
+                    col["name"]: col
+                    for col in inspect(sync_conn).get_columns(
+                        "company_schema_fields"
+                    )
+                }
+            )
+        assert "field_role" in columns
+        assert "review_visible" in columns
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            await ensure_default_company_schema(session)
+            catalog = await get_company_schema(session)
+        fields = {
+            (table["table_name"], field["field_name"]): field
+            for table in catalog["tables"]
+            for field in table["fields"]
+        }
+        assert fields[("customers", "full_name")]["field_role"] == "identity_key"
+        assert fields[("orders", "customer_id")]["review_visible"] is False
+    finally:
+        await engine.dispose()
 
 
 def test_field_provenance_records_parse_extraction_and_review_action():
