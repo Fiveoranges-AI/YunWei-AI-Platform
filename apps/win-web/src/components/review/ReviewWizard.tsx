@@ -7,6 +7,7 @@
 // alongside a source panel for the currently focused cell.
 
 import { useMemo, useState } from "react";
+import { fmtRelative } from "../../lib/format";
 import { ReviewCard } from "./ReviewCard";
 import { ReviewDetailTable } from "./ReviewDetailTable";
 import { ReviewSourcePanel } from "./ReviewSourcePanel";
@@ -22,6 +23,14 @@ import type {
 type Props = {
   draft: ReviewDraft;
   readOnly: boolean;
+  // True when the underlying job/draft is in a terminal state
+  // (confirmed / failed / canceled) — distinct from readOnly, which
+  // also covers the "someone else is editing" case where confirm is
+  // merely disabled rather than meaningless.
+  finalized: boolean;
+  finalizedKind?: "confirmed" | "failed" | "canceled" | null;
+  finalizedAt?: string | null;
+  finalizedBy?: string | null;
   busy: boolean;
   error: string | null;
   invalidCells: ConfirmExtractionInvalidCell[];
@@ -72,6 +81,10 @@ function activeCellRefs(
 export function ReviewWizard({
   draft,
   readOnly,
+  finalized,
+  finalizedKind,
+  finalizedAt,
+  finalizedBy,
   busy,
   error,
   invalidCells,
@@ -147,7 +160,7 @@ export function ReviewWizard({
           ) : null}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {onDelete ? (
+          {onDelete && !finalized ? (
             <button
               type="button"
               className="btn btn-secondary"
@@ -155,7 +168,7 @@ export function ReviewWizard({
               disabled={busy}
               style={{ color: "var(--risk-700)" }}
             >
-              删除任务
+              丢弃此草稿
             </button>
           ) : null}
         </div>
@@ -336,11 +349,18 @@ export function ReviewWizard({
             style={{
               display: "flex",
               justifyContent: "flex-end",
+              alignItems: "center",
               gap: 8,
               marginTop: 4,
             }}
           >
-            {isSummary ? (
+            {isSummary && finalized ? (
+              <FinalizedStatusBadge
+                kind={finalizedKind ?? "confirmed"}
+                at={finalizedAt ?? null}
+                by={finalizedBy ?? null}
+              />
+            ) : isSummary ? (
               <button
                 type="button"
                 className="btn btn-primary"
@@ -373,6 +393,45 @@ export function ReviewWizard({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function FinalizedStatusBadge({
+  kind,
+  at,
+  by,
+}: {
+  kind: "confirmed" | "failed" | "canceled";
+  at: string | null;
+  by: string | null;
+}) {
+  const palette =
+    kind === "confirmed"
+      ? { bg: "var(--ok-100)", fg: "var(--ok-700)", label: "已归档" }
+      : kind === "failed"
+        ? { bg: "var(--risk-100, var(--surface-2))", fg: "var(--risk-700)", label: "处理失败" }
+        : { bg: "var(--surface-2)", fg: "var(--ink-500)", label: "已取消" };
+  const when = at ? fmtRelative(at) : null;
+  const detail = [when, by ? `由 ${by} 确认` : null].filter(Boolean).join(" · ");
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 14px",
+        borderRadius: 999,
+        background: palette.bg,
+        color: palette.fg,
+        fontSize: 13,
+        fontWeight: 600,
+      }}
+    >
+      <span>{palette.label}</span>
+      {detail ? (
+        <span style={{ fontWeight: 500, opacity: 0.85 }}>{detail}</span>
+      ) : null}
     </div>
   );
 }

@@ -496,6 +496,10 @@ function HistoryRow({
     job.status === "confirmed" ? "已归档" :
     job.status === "failed" ? "失败" :
     job.status === "canceled" ? "已取消" : "未知";
+  // For confirmed jobs the actor that matters is the confirmer;
+  // the uploader is only worth showing when distinct (or when no
+  // confirmer exists, e.g. failed/canceled rows).
+  const actorLine = formatActorLine(job);
   return (
     <button
       onClick={onClick}
@@ -528,12 +532,25 @@ function HistoryRow({
           {job.original_filename}
         </div>
         <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 3 }}>
-          {statusLabel} · {when ? fmtRelative(when) : "—"}
+          {statusLabel}
+          {actorLine ? ` · ${actorLine}` : ""}
+          {when ? ` · ${fmtRelative(when)}` : ""}
         </div>
       </div>
       <span style={{ color: "var(--ink-400)" }}>{I.chev(13)}</span>
     </button>
   );
+}
+
+function formatActorLine(job: InboxJob): string {
+  const confirmer = job.confirmed_by ?? null;
+  const uploader = job.uploader ?? null;
+  if (confirmer && uploader && confirmer !== uploader) {
+    return `由 ${confirmer} 确认 · 上传 ${uploader}`;
+  }
+  if (confirmer) return `由 ${confirmer} 确认`;
+  if (uploader) return `上传 ${uploader}`;
+  return "";
 }
 
 // ──────────────── right pane ────────────────
@@ -638,6 +655,7 @@ function PreviewPane({
           <SummaryRow label="来源" value={describeSource(job)} />
           <SummaryRow label="阶段" value={STAGE_LABEL[job.stage] ?? job.stage} />
           <SummaryRow label="尝试次数" value={String(job.attempts)} />
+          <SummaryRow label="上传人" value={job.uploader || "—"} />
         </div>
 
         {job.progress_message && (
