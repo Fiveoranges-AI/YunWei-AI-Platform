@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  confirmJintaiExtraction,
+  createJintaiIngestPlaceholder,
+  listJintaiExtractions,
+} from "../../api/jintai";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { initialExtractionCards } from "./data";
 import type { ExtractionCard } from "./data";
-import { JintaiSection } from "./components";
 import { JintaiHero } from "./JintaiHero";
 import { JintaiKpiCards } from "./JintaiKpiCards";
 import { JintaiUploadInbox } from "./JintaiUploadInbox";
@@ -140,23 +144,125 @@ const KIND_SIZE: Record<ExtractionCard["kind"], string> = {
   "Excel 订单": "76 KB · 1 sheet · 12 行",
 };
 
+type TabKey = "overview" | "inbox" | "production" | "ask" | "trust";
+
+const TABS: { key: TabKey; label: string; hint: string }[] = [
+  { key: "overview", label: "概览", hint: "今天总体什么情况" },
+  { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统" },
+  { key: "production", label: "生产流转", hint: "这单生产到哪了" },
+  { key: "ask", label: "问问 AI", hint: "中文问，答案带来源" },
+  { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯" },
+];
+
+const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
+  overview: {
+    title: "试点总览",
+    sub: "锦泰承烧板 / 推板 / 匣钵 试点 · Hero 价值主张 + 今日 KPI + 经营风险简报，3 秒看清今天要紧的事。",
+  },
+  inbox: {
+    title: "AI 资料收件箱",
+    sub: "合同 / 纸质流转单 / 出货单 / Excel / 微信截图 上传 → AI 抽字段 → 销售或生产 1 步确认 → 自动生成订单 / 流转单 / 出货草稿。AI 不直接入库。",
+  },
+  production: {
+    title: "生产流转",
+    sub: "CRM → 订单 → 计划 → 流转 → 入库 → 出货 全程闭环 + 生产三张表（流转单 / 工艺单 / 出货单），客户随时回放任意单的当前节点。",
+  },
+  ask: {
+    title: "老板 AI 助手",
+    sub: "用中文问「容百那批 SK-02 烧到哪了 / 本月哪些单要延期」，AI 拿已确认的订单 / 流转单 / 出货单作答，每条结论都带原始来源引用。",
+  },
+  trust: {
+    title: "可信 AI · 来源追溯 & 数据安全",
+    sub: "6 项数据安全承诺 + 来源追溯示例：每条 AI 抽取都附「OCR 时间 + 置信度」与「人工确认人 + 时间」双重锚点，客户老板可一眼判断是否可信。",
+  },
+};
+
+const HASH_TO_TAB: Record<string, TabKey> = {
+  "#overview": "overview",
+  "#inbox": "inbox",
+  "#production": "production",
+  "#ask": "ask",
+  "#trust": "trust",
+};
+
+function hashForTab(t: TabKey): string {
+  return `#${t}`;
+}
+
+function tabFromHash(hash: string): TabKey | null {
+  return HASH_TO_TAB[hash] ?? null;
+}
+
+// Map legacy section IDs (used by Hero CTA buttons + simulate-upload auto scroll)
+// to a target tab so existing call-sites keep working.
+const SECTION_TO_TAB: Record<string, TabKey> = {
+  "ai-inbox": "inbox",
+  "ai-query": "ask",
+  workflow: "production",
+  production: "production",
+  briefing: "overview",
+  trust: "trust",
+};
+
 export function JintaiDemoPage() {
   const isDesktop = useIsDesktop();
   const [cards, setCards] = useState<ExtractionCard[]>(initialExtractionCards);
   const [processing, setProcessing] = useState<ProcessingCard[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    if (typeof window === "undefined") return "overview";
+    return tabFromHash(window.location.hash) ?? "overview";
+  });
   const timers = useRef<Set<number>>(new Set());
   const simCounterRef = useRef(0);
 
+  // Backend pending cards on first mount.
   useEffect(() => {
+    let cancelled = false;
+    listJintaiExtractions("pending")
+      .then((backendCards) => {
+        if (cancelled || backendCards.length === 0) return;
+        setCards((cur) => {
+          const seen = new Set(cur.map((c) => c.id));
+          return [...backendCards.filter((c) => !seen.has(c.id)), ...cur];
+        });
+      })
+      .catch(() => undefined);
     return () => {
+      cancelled = true;
       timers.current.forEach((id) => window.clearInterval(id));
       timers.current.clear();
     };
   }, []);
 
+  // Hash <-> tab sync. Tab change writes hash without scroll jump;
+  // back/forward + manual hash edits restore the tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHash = () => {
+      const next = tabFromHash(window.location.hash);
+      if (next) setActiveTab(next);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const switchTab = (t: TabKey) => {
+    setActiveTab(t);
+    if (typeof window !== "undefined") {
+      const next = hashForTab(t);
+      if (window.location.hash !== next) {
+        history.pushState(null, "", next);
+      }
+      // Scroll page top so each tab opens at its header, not mid-scroll.
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+  };
+
+  // Hero CTA / simulate-upload scrollTo handler — now switches tabs
+  // instead of vertically scrolling (single-page sections no longer exist).
   const handleScrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    const next = SECTION_TO_TAB[id];
+    if (next) switchTab(next);
   };
 
   const handleSimulateUpload = (kind: ExtractionCard["kind"]) => {
@@ -170,7 +276,7 @@ export function JintaiDemoPage() {
       { id: pid, kind, filename: KIND_FILENAME[kind], size: KIND_SIZE[kind], progress: 0, stage: PROCESSING_STAGES[0].label, startedAt },
       ...prev,
     ]);
-    handleScrollTo("ai-inbox");
+    switchTab("inbox");
     const interval = window.setInterval(() => {
       setProcessing((prev) => {
         const next = prev.map((p) => {
@@ -187,7 +293,20 @@ export function JintaiDemoPage() {
             setProcessing((cur) => cur.filter((p) => p.id !== pid));
             simCounterRef.current += 1;
             const newCard = makeSimulatedCard(kind, simCounterRef.current);
-            setCards((cur) => (cur.some((c) => c.id === newCard.id) ? cur : [newCard, ...cur]));
+            createJintaiIngestPlaceholder(
+              kind,
+              KIND_FILENAME[kind],
+              Object.fromEntries(newCard.fields.map((f) => [f.key, f.value])),
+            )
+              .then((backendCard) => {
+                setCards((cur) => {
+                  if (cur.some((c) => c.id === backendCard.id)) return cur;
+                  return [backendCard, ...cur];
+                });
+              })
+              .catch(() => {
+                setCards((cur) => (cur.some((c) => c.id === newCard.id) ? cur : [newCard, ...cur]));
+              });
           }, 450);
         }
         return next;
@@ -197,15 +316,20 @@ export function JintaiDemoPage() {
   };
 
   const handleConfirm = (id: string) => {
+    if (id.startsWith("AIQ-JT-")) {
+      confirmJintaiExtraction(id).catch(() => undefined);
+    }
     setCards((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
-        const newStatus: ExtractionCard["status"] =
-          c.kind === "合同" || c.kind === "Excel 订单"
-            ? "订单已生成"
-            : c.kind === "生产流转单"
-              ? "流转单已生成"
-              : "出货已记录";
+        let newStatus: ExtractionCard["status"] = "出货已记录";
+        if (id.startsWith("AIQ-JT-")) {
+          newStatus = "已确认";
+        } else if (c.kind === "合同" || c.kind === "Excel 订单") {
+          newStatus = "订单已生成";
+        } else if (c.kind === "生产流转单") {
+          newStatus = "流转单已生成";
+        }
         return { ...c, status: newStatus };
       }),
     );
@@ -219,33 +343,147 @@ export function JintaiDemoPage() {
     [cards],
   );
 
+  const head = TAB_HEAD[activeTab];
+
   return (
     <div className="scroll" style={{ flex: 1, background: "var(--bg)" }}>
       <div
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          padding: isDesktop ? "24px 32px 64px" : "16px 16px 80px",
+          padding: isDesktop ? "20px 32px 64px" : "12px 16px 80px",
         }}
       >
-        {/* Module 1 — 试点总览 (Hero + KPI) */}
-        <JintaiHero
-          onScrollTo={handleScrollTo}
-          onSimulateUploadContract={() => handleSimulateUpload("合同")}
-          onSimulateUploadFlowCard={() => handleSimulateUpload("生产流转单")}
-        />
-        <JintaiKpiCards />
-
-        {/* Module 2 — AI 资料收件箱 */}
-        <JintaiSection
-          id="ai-inbox"
-          title={`模块 2 · AI 资料收件箱 — 待确认 ${stats.pending} · 已生成 ${stats.done}`}
-          trailing={
-            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>
-              AI 抽取后人工确认入库
-            </span>
-          }
+        {/* Tab navigation — sticky-ish top bar, horizontally scrollable on small screens */}
+        <nav
+          aria-label="锦泰试点 演示分页"
+          style={{
+            display: "flex",
+            gap: 6,
+            padding: 4,
+            borderRadius: 12,
+            background: "var(--surface-2)",
+            border: "1px solid var(--ink-100)",
+            marginBottom: 18,
+            overflowX: "auto",
+          }}
         >
+          {TABS.map((t) => {
+            const active = t.key === activeTab;
+            return (
+              <button
+                key={t.key}
+                onClick={() => switchTab(t.key)}
+                aria-current={active ? "page" : undefined}
+                style={{
+                  padding: isDesktop ? "10px 16px" : "9px 12px",
+                  borderRadius: 9,
+                  border: "none",
+                  background: active ? "var(--brand-500)" : "transparent",
+                  color: active ? "#fff" : "var(--ink-700)",
+                  fontSize: isDesktop ? 13 : 12.5,
+                  fontWeight: active ? 700 : 600,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  lineHeight: 1.2,
+                  gap: 3,
+                  minWidth: 0,
+                  fontFamily: "var(--font)",
+                  boxShadow: active ? "var(--shadow-card-soft)" : "none",
+                  transition: "background 0.15s ease",
+                }}
+              >
+                <span>{t.label}</span>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 500,
+                    color: active ? "rgba(255,255,255,0.85)" : "var(--ink-500)",
+                  }}
+                >
+                  {t.hint}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Per-tab header: breadcrumb + title + 1-sentence narration */}
+        <header style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "var(--ink-500)",
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+              marginBottom: 6,
+            }}
+          >
+            锦泰试点 <span style={{ color: "var(--ink-300)" }}>/</span>{" "}
+            <span style={{ color: "var(--brand-700)" }}>{head.title}</span>
+          </div>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: isDesktop ? 20 : 18,
+              fontWeight: 700,
+              color: "var(--ink-900)",
+              lineHeight: 1.3,
+            }}
+          >
+            {head.title}
+          </h2>
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: 12.5,
+              lineHeight: 1.6,
+              color: "var(--ink-600)",
+              maxWidth: 820,
+            }}
+          >
+            {head.sub}
+          </p>
+        </header>
+
+        {/* Tab panels — kept mounted (display toggle) so each panel's internal
+            state (selected preset Q, A/B/C tab, flow card variant, etc.) survives
+            tab switches. */}
+
+        {/* Tab 1: 概览 — Hero + KPI + 每日简报 */}
+        <div role="tabpanel" hidden={activeTab !== "overview"}>
+          <JintaiHero
+            onScrollTo={handleScrollTo}
+            onSimulateUploadContract={() => handleSimulateUpload("合同")}
+            onSimulateUploadFlowCard={() => handleSimulateUpload("生产流转单")}
+          />
+          <JintaiKpiCards />
+          <div style={{ height: 20 }} />
+          <JintaiDailyBriefing />
+        </div>
+
+        {/* Tab 2: AI 收件箱 */}
+        <div role="tabpanel" hidden={activeTab !== "inbox"}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 12,
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ fontSize: 12.5, color: "var(--ink-600)", fontWeight: 600 }}>
+              待确认 {stats.pending} · 已确认 {stats.done}
+            </span>
+            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>
+              AI 抽取后人工确认入库 · AI 不直接写入业务表
+            </span>
+          </div>
           <JintaiUploadInbox
             cards={cards}
             processing={processing}
@@ -254,44 +492,24 @@ export function JintaiDemoPage() {
             onSimulateUploadShipping={() => handleSimulateUpload("出货单")}
             onConfirm={handleConfirm}
           />
-        </JintaiSection>
+        </div>
 
-        {/* Module 3 — 主业务流程闭环 */}
-        <JintaiSection
-          id="workflow"
-          title="模块 3 · 主业务流程闭环 — CRM → 订单 → 工单 → 计划单 → 生产流转 → 入库 → 出货"
-        >
+        {/* Tab 3: 生产流转 — Workflow timeline + 生产三张表 */}
+        <div role="tabpanel" hidden={activeTab !== "production"}>
           <JintaiWorkflowTimeline />
-        </JintaiSection>
-
-        {/* Module 4 — 生产三张表 A/B/C */}
-        <JintaiSection
-          id="production"
-          title="模块 4 · 生产三张表（A 流转单 · B 工艺单 · C 出货入库）"
-        >
+          <div style={{ height: 22 }} />
           <JintaiProductionTabs />
-        </JintaiSection>
+        </div>
 
-        {/* Module 5 — 老板 AI 查询 */}
-        <JintaiSection id="ai-query" title="模块 5 · 老板 AI 助手 — 用中文问，答案带来源">
+        {/* Tab 4: 问问 AI */}
+        <div role="tabpanel" hidden={activeTab !== "ask"}>
           <JintaiAIQueryPanel />
-        </JintaiSection>
+        </div>
 
-        {/* Module 6 — 每日经营风险简报 */}
-        <JintaiSection
-          id="briefing"
-          title="模块 6 · 每日生产经营简报 — 今天哪里要紧"
-        >
-          <JintaiDailyBriefing />
-        </JintaiSection>
-
-        {/* Module 7 — 来源追溯与数据安全 */}
-        <JintaiSection
-          id="trust"
-          title="模块 7 · 来源追溯 & 数据安全 — AI 不瞎编"
-        >
+        {/* Tab 5: 可信 AI */}
+        <div role="tabpanel" hidden={activeTab !== "trust"}>
           <JintaiTrustPanel />
-        </JintaiSection>
+        </div>
 
         <div
           style={{
