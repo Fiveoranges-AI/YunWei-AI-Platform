@@ -22,7 +22,7 @@ const VIEW_META: Record<TabName, ViewMeta> = {
   upload: { title: "添加资料", sub: "AI 自动归类匹配" },
   ask: { title: "AI 助手", sub: "基于客户档案问答 · 来源可追溯" },
   profile: { title: "我的", sub: "账号 · 团队 · 设置" },
-  jintai: { title: "锦泰耐火材料 · AI 生产流转试点", sub: "客户演示版 · 纯前端 · mock 数据" },
+  jintai: { title: "宜兴市锦泰耐火材料 · AI 生产流转试点", sub: "承烧板 / 推板 / 匣钵 · 锂电 / 磁材 / MLCC 下游 · 来源 100% 可追溯" },
 };
 
 export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, children }: Props) {

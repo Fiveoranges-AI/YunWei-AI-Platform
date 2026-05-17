@@ -110,7 +110,7 @@ export function JintaiHero({
       <div
         style={{
           marginTop: 22,
-          padding: "12px 14px",
+          padding: "14px 16px",
           borderRadius: 10,
           background: "rgba(255,255,255,0.7)",
           border: "1px solid rgba(45,155,216,0.18)",
@@ -119,17 +119,66 @@ export function JintaiHero({
           lineHeight: 1.55,
         }}
       >
-        <strong style={{ color: "var(--ai-700)" }}>第一阶段范围 · 不替换现有 ERP</strong>
-        <ul style={{ margin: "6px 0 0 0", paddingLeft: 18 }}>
-          <li>合同 / 订单 / Excel 自动结构化 + 人工确认</li>
-          <li>纸质生产流转单照片转电子流转单</li>
-          <li>三道工序（成型 / 烧结 / 检包）记录</li>
-          <li>工艺单与工艺参数沉淀</li>
-          <li>简易入库 / 出货登记</li>
-          <li>老板自然语言查询生产进度与不良率</li>
-          <li>每日生产风险简报</li>
-          <li>每条 AI 回答都附原始来源引用</li>
-        </ul>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            marginBottom: 10,
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <strong style={{ color: "var(--ai-700)", fontSize: 13 }}>
+            第一阶段范围 · 不替换现有 ERP
+          </strong>
+          <span style={{ fontSize: 11, color: "var(--ink-500)" }}>
+            建议试点时长 2–3 周 · 单点接入 · 不动账套
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: "6px 16px",
+          }}
+        >
+          {[
+            "合同 / 订单 / Excel 自动结构化 + 人工确认",
+            "纸质生产流转单照片转电子流转单",
+            "三道工序（成型 / 烧结 / 检包）全程记录",
+            "工艺单与烧成曲线参数沉淀",
+            "成品入库 / 客户出货登记",
+            "老板中文查询生产进度 + 不良率 + 应收",
+            "每日生产风险简报（高 / 中 / 低 自动分级）",
+            "每条 AI 字段附原始来源引用 · 一键回溯",
+          ].map((line) => (
+            <div
+              key={line}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 6,
+                fontSize: 12.5,
+                color: "var(--ink-700)",
+                lineHeight: 1.5,
+              }}
+            >
+              <span
+                style={{
+                  color: "var(--ai-700)",
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  fontSize: 12,
+                  marginTop: 1,
+                }}
+              >
+                ✓
+              </span>
+              <span>{line}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
