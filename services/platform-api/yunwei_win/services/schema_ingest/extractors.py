@@ -30,7 +30,7 @@ from yunwei_win.services.schema_ingest.extraction_normalize import (
 from yunwei_win.services.schema_ingest.extraction_schema import (
     build_selected_tables_schema_json,
 )
-from yunwei_win.services.schema_ingest.parse_artifact import ParseArtifact
+from yunwei_win.services.schema_ingest.parse_artifact import ParseArtifact, ParseSourceRef
 
 
 Provider = Literal["landingai", "deepseek"]
@@ -94,24 +94,24 @@ async def _extract_landingai(
         },
     )
 
-    _enrich_with_landingai_metadata(normalized)
+    _enrich_with_landingai_metadata(normalized, parse_artifact=parse_artifact)
     return normalized
 
 
-def _enrich_with_landingai_metadata(normalized: NormalizedExtraction) -> None:
-    """Copy LandingAI's chunk_references into each field's source_refs.
+def _enrich_with_landingai_metadata(
+    normalized: NormalizedExtraction,
+    *,
+    parse_artifact: ParseArtifact,
+) -> None:
+    """Copy LandingAI's extraction refs into each field's source_refs.
 
     LandingAI's extract response carries grounding under
-    ``extraction_metadata`` keyed by JSON pointer-like strings such as
-    ``"orders.amount_total"`` or ``"contacts[0].name"``. The values look
-    like ``{"chunk_references": ["c1", ...]}``. We map them onto the
-    matching NormalizedFieldValue so downstream review can render
-    evidence regardless of which extractor produced it.
+    ``extraction_metadata`` keyed by strings such as ``"orders.amount_total"``
+    or ``"contacts[0].name"``. Current ADE docs call the ref list
+    ``references``; older examples used ``chunk_references``. We support both
+    and map them onto the matching NormalizedFieldValue so downstream review
+    can render evidence regardless of which extractor produced it.
     """
-
-    from yunwei_win.services.schema_ingest.extraction_normalize import (
-        _coerce_source_refs,
-    )
 
     extraction_metadata = normalized.metadata.get("extraction_metadata") or {}
     if not isinstance(extraction_metadata, dict):
@@ -120,8 +120,8 @@ def _enrich_with_landingai_metadata(normalized: NormalizedExtraction) -> None:
     for key, meta in extraction_metadata.items():
         if not isinstance(meta, dict):
             continue
-        chunk_refs = meta.get("chunk_references")
-        if not isinstance(chunk_refs, list) or not chunk_refs:
+        references = _landingai_references(meta)
+        if not references:
             continue
         table_name, row_idx, field_name = _parse_extraction_metadata_key(key)
         if table_name is None or field_name is None:
@@ -137,7 +137,81 @@ def _enrich_with_landingai_metadata(normalized: NormalizedExtraction) -> None:
         if field is None:
             continue
         if not field.source_refs:
-            field.source_refs = _coerce_source_refs(chunk_refs)
+            field.source_refs = [
+                _landingai_source_ref(ref_id, parse_artifact=parse_artifact)
+                for ref_id in references
+            ]
+
+
+def _landingai_references(meta: dict[str, Any]) -> list[str]:
+    raw_refs = meta.get("references")
+    if raw_refs is None:
+        raw_refs = meta.get("chunk_references")
+    if not isinstance(raw_refs, list):
+        return []
+    return [ref for ref in raw_refs if isinstance(ref, str) and ref]
+
+
+def _landingai_source_ref(
+    ref_id: str,
+    *,
+    parse_artifact: ParseArtifact,
+) -> ParseSourceRef:
+    grounding = (parse_artifact.grounding or {}).get(ref_id)
+    grounding_data = _object_to_dict(grounding)
+    chunk = next((c for c in parse_artifact.chunks or [] if c.id == ref_id), None)
+
+    ref_type = "chunk"
+    grounding_type = grounding_data.get("type")
+    if grounding_type in {"table", "tableCell"}:
+        ref_type = "table_cell"
+
+    position = _object_to_dict(grounding_data.get("position"))
+    return ParseSourceRef(
+        ref_type=ref_type,
+        ref_id=ref_id,
+        page=_coerce_int(
+            grounding_data.get("page") if grounding_data else getattr(chunk, "page", None)
+        ),
+        bbox=_coerce_box(grounding_data.get("box")) or getattr(chunk, "bbox", None),
+        excerpt=getattr(chunk, "text", None) or None,
+        table_id=position.get("chunk_id") if position else None,
+        row=_coerce_int(position.get("row")) if position else None,
+        col=_coerce_int(position.get("col")) if position else None,
+    )
+
+
+def _object_to_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        data = value.model_dump()
+        return data if isinstance(data, dict) else {}
+    return {}
+
+
+def _coerce_box(value: Any) -> list[float] | None:
+    box = _object_to_dict(value)
+    if not box:
+        return None
+    try:
+        return [
+            float(box["left"]),
+            float(box["top"]),
+            float(box["right"]),
+            float(box["bottom"]),
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_extraction_metadata_key(
