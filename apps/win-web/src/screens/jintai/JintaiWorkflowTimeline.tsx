@@ -22,10 +22,10 @@ export function JintaiWorkflowTimeline() {
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", marginBottom: 4 }}>
-          示例订单 SO-2026-001（华东客户 · 高铝耐火砖 12,000 块）
+          示例订单 SO-2026-001 · 容百锂电 · 刚玉莫来石承烧板 18,000 块 · ¥327.6 万
         </div>
         <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 18 }}>
-          CRM → 订单 → 工单 → 计划单 → 生产流转 → 成型 → 烧结 → 检包 → 成品入库 → 出货
+          CRM → 订单 → 工单 → 计划单 → 生产流转 → 成型 → 烧结 → 检包 → 成品入库 → 出货容百宁波
         </div>
         <div
           style={{
@@ -127,20 +127,20 @@ export function JintaiWorkflowTimeline() {
           {I.spark(12)} AI 摘要
         </div>
         <div style={{ fontSize: 13.5, color: "var(--ink-900)", lineHeight: 1.55, fontWeight: 600 }}>
-          订单已完成成型、正在烧结，预计 06-18 进入检包；最终交付 06-20，与合同交期持平。
+          订单已完成等静压成型，正在 SK-02 梭式窑烧结，预计 06-18 进入检包；最终交付 06-20 上午到容百宁波，与合同交期持平。
         </div>
         <div style={{ fontSize: 12, color: "var(--ink-700)", lineHeight: 1.55 }}>
-          烧结环节有 24 小时缓冲已用尽，建议密切观察 Y-02 窑温升曲线。客户华东已签合同 ¥114 万、首付已收。
+          烧结段 24 小时缓冲已用尽，建议密切观察 SK-02 在 1450–1580 ℃ 段温升。客户容百锂电已签 ¥327.6 万、首付 ¥98.28 万已收。
         </div>
         <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontSize: 10, color: "var(--ink-500)", fontWeight: 600, letterSpacing: "0.05em" }}>
             来源
           </div>
           <JintaiSourceCitation
-            source={{ kind: "合同", label: "华东客户_设备采购合同_2026Q2.pdf" }}
+            source={{ kind: "合同", label: "容百锂电_承烧板采购合同_2026Q2.pdf" }}
           />
           <JintaiSourceCitation source={{ kind: "生产流转单", label: "ZC-2026-015" }} />
-          <JintaiSourceCitation source={{ kind: "工艺单", label: "QX-08 烧结曲线 v2.3" }} />
+          <JintaiSourceCitation source={{ kind: "工艺单", label: "LB-1580 烧结曲线 v2.3" }} />
         </div>
       </div>
     </div>

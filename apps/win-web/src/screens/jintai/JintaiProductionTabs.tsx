@@ -118,9 +118,9 @@ function FlowCardPanel() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600 }}>来源</span>
         <JintaiSourceCitation
-          source={{ kind: "生产流转单", label: "ZC-2026-015 · 纸质单照片" }}
+          source={{ kind: "生产流转单", label: "ZC-2026-015 · 纸质单照片 · 张师傅 06-12 拍" }}
         />
-        <JintaiSourceCitation source={{ kind: "合同", label: "华东客户_设备采购合同_2026Q2.pdf" }} />
+        <JintaiSourceCitation source={{ kind: "合同", label: "容百锂电_承烧板采购合同_2026Q2.pdf" }} />
       </div>
     </div>
   );
@@ -342,11 +342,11 @@ function ProcessParameterPanel() {
           {I.spark(12)} AI 工艺洞察
         </div>
         <div style={{ fontSize: 13.5, color: "var(--ink-900)", lineHeight: 1.55, fontWeight: 600 }}>
-          近 30 天高铝耐火砖不良率 2.06%，较上月下降 0.39 个百分点。
+          近 30 天刚玉莫来石承烧板不良率 2.06%，较上月下降 0.39 个百分点。
         </div>
         <div style={{ fontSize: 12, color: "var(--ink-700)", lineHeight: 1.55 }}>
-          主要不良项：<strong>黑斑 38%</strong> · 轻微坍块 27% · 小裂纹 18%。
-          黑斑占比偏高，可能与粘结剂含碳量有关，建议核查近 30 天粘结剂供应商批次。
+          主要不良项：<strong>翘曲超差 36%</strong> · 边角小掉块 27% · 黑斑 18% · 显气孔率偏高 11%。
+          翘曲集中在窑车上层，可能与装窑数量偏多有关；显气孔率偏高疑似坯体密度不稳，建议复核近 30 天电熔白刚玉粒度分布。
         </div>
         <div
           style={{
@@ -359,10 +359,10 @@ function ProcessParameterPanel() {
             color: "var(--ink-700)",
           }}
         >
-          AI 建议：本月排产保留 QX-08 曲线，但下次进料时复核粘结剂成分。
+          AI 建议：本月排产保留 LB-1580 曲线，但建议下批次装窑量限制 ≤ 380 块/车；下次原料进货复核 0521 批电熔白刚玉粒度。
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
-          <JintaiSourceCitation source={{ kind: "工艺单", label: "高铝耐火砖 v2.3" }} />
+          <JintaiSourceCitation source={{ kind: "工艺单", label: "刚玉莫来石承烧板 v2.3" }} />
           <JintaiSourceCitation source={{ kind: "生产流转单", label: "ZC-2026-010 ~ 014 检包段" }} />
         </div>
       </div>
@@ -390,10 +390,10 @@ function ShippingPanel() {
           IK-2026-022
         </div>
         <RowKV k="对应流转单" v="ZC-2026-012" mono />
-        <RowKV k="产品" v="莫来石砖（定制规格）" />
-        <RowKV k="入库数量" v="1,500 块" />
-        <RowKV k="不良 / 抽检" v="不良 30 · 抽检 75" />
-        <RowKV k="仓库位置" v="A 区 03-12" mono />
+        <RowKV k="产品" v="氧化铝匣钵（厦钨规格）" />
+        <RowKV k="入库数量" v="1,500 个" />
+        <RowKV k="不良 / 抽检" v="不良 30 · 抽检 75（5%）" />
+        <RowKV k="仓库位置" v="B 区 02-08" mono />
         <RowKV k="操作人" v="王仓管" />
         <div style={{ marginTop: 10, display: "flex", gap: 6 }}>
           <JintaiSourceCitation
@@ -411,15 +411,15 @@ function ShippingPanel() {
           CK-2026-018
         </div>
         <RowKV k="对应订单" v="SO-2026-010" mono />
-        <RowKV k="客户" v="浙江外贸客户" />
-        <RowKV k="产品 / 规格" v="莫来石砖 · 定制" />
-        <RowKV k="出货数量" v="1,500 块" />
-        <RowKV k="承运" v="顺丰物流 · 自提" />
+        <RowKV k="客户" v="厦钨新能（宁德工厂）" />
+        <RowKV k="产品 / 规格" v="氧化铝匣钵 · 300×220×100 mm" />
+        <RowKV k="出货数量" v="1,500 个" />
+        <RowKV k="承运" v="德邦物流 · 整车直送" />
         <RowKV k="单据状态" v="待客户签收" />
         <div style={{ marginTop: 10, display: "flex", gap: 6 }}>
           <JintaiSourceCitation source={{ kind: "出货单", label: "CK-2026-018 PDF" }} />
           <JintaiSourceCitation
-            source={{ kind: "合同", label: "浙江外贸_订单_2026Q2.pdf" }}
+            source={{ kind: "合同", label: "厦钨新能_订单_2026Q1.pdf" }}
           />
         </div>
       </div>

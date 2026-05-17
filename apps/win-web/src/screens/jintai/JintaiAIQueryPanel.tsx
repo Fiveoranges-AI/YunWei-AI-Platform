@@ -31,7 +31,7 @@ export function JintaiAIQueryPanel() {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="用中文问 AI · 比如：「这周哪些订单要紧」"
+            placeholder="比如：「容百那批 SK-02 烧到哪了」「本月哪些单要延期」"
             style={{
               flex: 1,
               border: "none",

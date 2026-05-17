@@ -58,13 +58,14 @@ export function JintaiHero({
           fontSize: 14,
           color: "var(--ink-600)",
           lineHeight: 1.6,
-          maxWidth: 760,
+          maxWidth: 820,
         }}
       >
-        基于智通客户已有的「资料抽取 + AI 问答 + 来源可追溯」能力，
-        把<strong>合同、订单 Excel、微信记录、纸质生产流转单</strong>
-        转化为可<strong>确认、可追踪、可查询</strong>的生产经营数据。
-        AI 不直接写入正式业务数据 —— 先生成待确认草稿，经人工确认后入库。
+        面向锦泰<strong>承烧板 / 推板 / 匣钵 / 支柱</strong>的实际生产流程，
+        把<strong>客户合同、订单 Excel、微信记录、纸质生产流转单</strong>
+        转化为可<strong>确认、可追踪、可查询</strong>的经营数据。
+        客户线覆盖锂电正极烧结、磁性材料、MLCC、粉末冶金等下游。
+        AI 不直接写入正式业务数据 —— 先生成待确认草稿，由销售 / 生产 / 检验确认后入库。
       </p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
