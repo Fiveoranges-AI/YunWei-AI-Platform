@@ -56,22 +56,48 @@ export function JintaiTrustPanel() {
             <div
               key={i}
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 12px",
+                padding: "12px 14px",
                 borderRadius: 10,
                 background: "var(--surface-2)",
                 border: "1px solid var(--ink-100)",
-                flexWrap: "wrap",
               }}
             >
-              <div style={{ fontSize: 12, color: "var(--ink-800)", flex: 1, minWidth: 200 }}>
-                <span style={{ color: "var(--ai-700)", fontWeight: 600 }}>AI 给出：</span>{" "}
-                {t.aiFact}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: 12.5, color: "var(--ink-900)", flex: 1, minWidth: 200, fontWeight: 500 }}>
+                  <span style={{ color: "var(--ai-700)", fontWeight: 700 }}>AI 给出：</span>{" "}
+                  {t.aiFact}
+                </div>
+                <span style={{ color: "var(--ink-400)" }}>{I.chev(11)}</span>
+                <JintaiSourceCitation source={t.source} />
               </div>
-              <span style={{ color: "var(--ink-400)" }}>{I.chev(11)}</span>
-              <JintaiSourceCitation source={t.source} />
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                  fontSize: 11,
+                  color: "var(--ink-600)",
+                  paddingTop: 8,
+                  borderTop: "1px dashed var(--ink-100)",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontWeight: 700, color: "var(--ink-500)", letterSpacing: "0.04em" }}>抽取过程</span>
+                  <span style={{ color: "var(--ink-800)" }}>{t.extractedBy}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontWeight: 700, color: "var(--ink-500)", letterSpacing: "0.04em" }}>人工确认</span>
+                  <span style={{ color: "var(--ink-800)" }}>{t.confirmedBy}</span>
+                </div>
+              </div>
             </div>
           ))}
         </div>

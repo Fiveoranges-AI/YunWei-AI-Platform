@@ -159,6 +159,67 @@ export const orders: Order[] = [
 
 export const flowCards: FlowCard[] = [
   {
+    flowCardNo: "ZC-2026-014",
+    planNo: "SC-2026-014",
+    orderNo: "SO-2026-014",
+    customer: "容百锂电",
+    product: "刚玉莫来石承烧板",
+    specification: "330×330×16 mm",
+    plannedQty: 12000,
+    deliveryDate: "2026-05-10",
+    currentStep: "完成",
+    status: "完成",
+    risk: "low",
+    steps: [
+      {
+        name: "成型",
+        status: "已完成",
+        plannedDate: "2026-04-25",
+        machineNo: "等静压 IP-03",
+        moldNo: "MJ-330-NCM",
+        flowCardNo: "LC-2026-014-A",
+        materialNo: "GM78-2026-051",
+        materialQty: 12500,
+        remainingMaterialQty: 280,
+        completedQty: 12100,
+        wasteBlankQty: 120,
+        operator: "成型组 · 张师傅",
+      },
+      {
+        name: "烧结",
+        status: "已完成",
+        plannedDate: "2026-04-30",
+        receivedQty: 12100,
+        kilnNo: "梭式窑 SK-02",
+        curveNo: "LB-1580",
+        loadingDate: "2026-04-28",
+        burningStartTime: "07:50",
+        kilnLoadingQty: 12080,
+        kilnOutputQty: 11950,
+        defectQty: 130,
+        operator: "烧成组 · 李师傅",
+      },
+      {
+        name: "检包",
+        status: "已完成",
+        plannedDate: "2026-05-04",
+        receivedQty: 11950,
+        qualifiedQty: 11722,
+        repairableQty: 86,
+        minorDamageQty: 42,
+        smallChipQty: 35,
+        largeChipQty: 4,
+        blackSpotQty: 28,
+        crackQty: 12,
+        severeDamageQty: 6,
+        blackMaterialQty: 8,
+        scrapQty: 7,
+        operator: "检包组 · 周师傅",
+        remark: "整体不良率 1.91% · 合格品全部 5% 抽检通过 · 已交容百宁波",
+      },
+    ],
+  },
+  {
     flowCardNo: "ZC-2026-015",
     planNo: "SC-2026-015",
     orderNo: "SO-2026-001",
@@ -553,26 +614,37 @@ export const trustItems = [
   },
 ];
 
-export const traceExamples = [
+export const traceExamples: Array<{
+  aiFact: string;
+  source: SourceRef;
+  extractedBy: string;
+  confirmedBy: string;
+}> = [
   {
     aiFact: "SO-2026-001 计划交期 2026-06-20，金额 ¥327.6 万",
     source: {
-      kind: "合同" as const,
+      kind: "合同",
       label: "容百锂电_承烧板采购合同_2026Q2.pdf · 第 3 页 §4 交付条款",
     },
+    extractedBy: "AI OCR · 2026-05-12 09:14（置信度 98%）",
+    confirmedBy: "销售 · 王经理 · 05-12 10:30 确认",
   },
   {
     aiFact: "成型环节已完成 18,420 块 · 废坯 60 块",
     source: {
-      kind: "生产流转单" as const,
+      kind: "生产流转单",
       label: "ZC-2026-015 · 一、成型段 · 张师傅 · 06-12 17:42 拍照上传",
     },
+    extractedBy: "AI 手写体识别 · 06-12 17:45（成品数置信度 94% · 操作人 74%）",
+    confirmedBy: "成型组长 · 张师傅 · 06-12 17:50 当场确认",
   },
   {
     aiFact: "近 30 天承烧板平均不良率 2.06%",
     source: {
-      kind: "生产流转单" as const,
+      kind: "生产流转单",
       label: "ZC-2026-010 ~ 014 · 检包段 5 批次汇总",
     },
+    extractedBy: "AI 聚合计算 · 数据基于 5 张已确认入库的检包单",
+    confirmedBy: "原始 5 张检包单分别由 周师傅 / 检包组长 确认",
   },
 ];

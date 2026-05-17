@@ -70,9 +70,48 @@ export function JintaiProductionTabs() {
 /* ---------- Tab A: 生产流转单 ---------- */
 
 function FlowCardPanel() {
-  const fc = flowCards[0];
+  const [idx, setIdx] = useState(1);
+  const fc = flowCards[idx] ?? flowCards[0];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11.5, color: "var(--ink-500)", fontWeight: 600 }}>
+          示例流转单：
+        </span>
+        {flowCards.map((c, i) => {
+          const active = i === idx;
+          const done = c.status === "完成";
+          return (
+            <button
+              key={c.flowCardNo}
+              onClick={() => setIdx(i)}
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                borderRadius: 8,
+                border: `1px solid ${active ? "var(--brand-500)" : "var(--ink-200)"}`,
+                background: active ? "var(--brand-100)" : "var(--surface)",
+                color: active ? "var(--brand-700)" : "var(--ink-700)",
+                cursor: "pointer",
+                fontWeight: active ? 600 : 500,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  background: done ? "var(--ok-500)" : "var(--brand-500)",
+                }}
+              />
+              {c.flowCardNo} · {c.customer} {done ? "（已完成）" : "（进行中）"}
+            </button>
+          );
+        })}
+      </div>
       <div className="card" style={{ padding: 16 }}>
         <div
           style={{
@@ -118,9 +157,17 @@ function FlowCardPanel() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600 }}>来源</span>
         <JintaiSourceCitation
-          source={{ kind: "生产流转单", label: "ZC-2026-015 · 纸质单照片 · 张师傅 06-12 拍" }}
+          source={{
+            kind: "生产流转单",
+            label: `${fc.flowCardNo} · 纸质单照片 · ${fc.steps[0].operator?.replace("成型组 · ", "") ?? "—"} 拍`,
+          }}
         />
-        <JintaiSourceCitation source={{ kind: "合同", label: "容百锂电_承烧板采购合同_2026Q2.pdf" }} />
+        <JintaiSourceCitation
+          source={{
+            kind: "合同",
+            label: `${fc.customer}_${fc.product}_采购合同.pdf`,
+          }}
+        />
       </div>
     </div>
   );

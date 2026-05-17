@@ -22,15 +22,18 @@ export function JintaiHero({
         border: "1px solid #bddff3",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <span
           className="pill pill-ai"
           style={{ fontSize: 11, padding: "3px 9px", letterSpacing: 0.02 }}
         >
-          {I.spark(10)} 客户试点 · 演示版（无后端，纯前端）
+          {I.spark(10)} 客户试点演示 · 2026-05
         </span>
         <span className="pill pill-outline" style={{ fontSize: 11, padding: "3px 9px" }}>
-          基于 / 智通客户 延展
+          试点周期 2–3 周 · 不替换现有 ERP
+        </span>
+        <span className="pill pill-outline" style={{ fontSize: 11, padding: "3px 9px" }}>
+          按 ISO9001 留档 · 来源 100% 可追溯
         </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -39,18 +42,30 @@ export function JintaiHero({
           alt="锦泰耐火材料"
           style={{ height: 56, width: "auto", flexShrink: 0 }}
         />
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 26,
-            fontWeight: 700,
-            color: "var(--ink-900)",
-            letterSpacing: "-0.01em",
-            lineHeight: 1.2,
-          }}
-        >
-          宜兴市锦泰耐火材料 · AI 生产流转试点
-        </h1>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 26,
+              fontWeight: 700,
+              color: "var(--ink-900)",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.2,
+            }}
+          >
+            宜兴市锦泰耐火材料 · AI 生产流转试点
+          </h1>
+          <div
+            style={{
+              fontSize: 13,
+              color: "var(--ai-700)",
+              fontWeight: 600,
+              letterSpacing: "0.01em",
+            }}
+          >
+            让承烧板从「合同 / 纸质流转单」一路追到「客户验收 + 应收账期」，全过程 AI 辅助 · 人工确认
+          </div>
+        </div>
       </div>
       <p
         style={{
