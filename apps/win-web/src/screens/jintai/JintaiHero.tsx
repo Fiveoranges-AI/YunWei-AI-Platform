@@ -33,18 +33,25 @@ export function JintaiHero({
           基于 / 智通客户 延展
         </span>
       </div>
-      <h1
-        style={{
-          margin: 0,
-          fontSize: 26,
-          fontWeight: 700,
-          color: "var(--ink-900)",
-          letterSpacing: "-0.01em",
-          lineHeight: 1.2,
-        }}
-      >
-        宜兴市锦泰耐火材料 · AI 生产流转试点
-      </h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <img
+          src={`${import.meta.env.BASE_URL}jintai-logo.png`}
+          alt="锦泰耐火材料"
+          style={{ height: 56, width: "auto", flexShrink: 0 }}
+        />
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 26,
+            fontWeight: 700,
+            color: "var(--ink-900)",
+            letterSpacing: "-0.01em",
+            lineHeight: 1.2,
+          }}
+        >
+          宜兴市锦泰耐火材料 · AI 生产流转试点
+        </h1>
+      </div>
       <p
         style={{
           margin: "10px 0 18px",
