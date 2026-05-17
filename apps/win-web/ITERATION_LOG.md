@@ -66,3 +66,31 @@ Iter 2：完善客户演示动线 — 给所有还有 mock 痕迹的细节再打
 Iter 3：上传 demo 加载动画（点"模拟上传合同"后 0% → 100% 进度条 3-5s）；mock 上传后增加 OCR 高亮缩略图占位；AI 答案补充"由谁确认 / 何时确认"footer
 
 ---
+
+## Iteration 3 — 2026-05-17 (深夜) · OCR 上传动画
+
+### 自我观察
+- 点 "模拟上传合同" 当前是**瞬时**出现一张新卡 — 客户看不到"AI 在干活"的过程，会怀疑这是不是 prefilled mock
+- 需要看得见的处理阶段：上传中 → PDF 解析 → AI 抽取字段 → 置信度评估 → 生成待确认草稿
+- 同时多次点击应该排队展示（不会塞死）
+
+### 本轮改动
+- `JintaiUploadInbox.tsx`：新增 `ProcessingCard` type + `<ProcessingCardItem>` 子组件，显示文件名/大小、当前阶段 pill、动态进度条（渐变色）、"下一步：人工确认 → 入库"
+- `JintaiDemoPage.tsx`：
+  - 新增 5 阶段（每阶段一个 progress 上限）的进度条状态机
+  - `handleSimulateUpload` 现在先 push 一张 processing card，setInterval 每 280ms +6~14% 推进进度，到 100% 后切换为实际 extraction card
+  - 收件箱头部加 "正在处理 N" pill 提醒
+  - 修复 React StrictMode 重复 +counter 问题（simCounterRef + dedupe）
+- 文件名预设：合同 → "当升科技_承烧板采购合同_2026Q3.pdf 1.4 MB · 3 页"；流转单 → "ZC-2026-016 纸质流转单_车间手机拍照.jpg 2.1 MB"；Excel → "横店东磁_订单明细_2026Q3.xlsx 76 KB · 12 行"
+- 阶段：上传中（< 18%）→ PDF / 图片解析（< 38%）→ AI 抽取字段（< 72%）→ 置信度评估（< 92%）→ 生成待确认草稿（< 100%）
+
+### 截图验证
+- 点击瞬间：processing card 在 36%，stage "PDF / 图片解析"，filename + size 显示
+- ~2.5s 后：进度 70%，stage "AI 抽取字段"
+- ~3.5s 后：processing card 消失，实际 extraction card 出现（容百二供_补充订单_2026Q3.pdf）
+- 收件箱头部 "正在处理 1" pill 准确显示
+
+### 下一轮目标
+Iter 4：视觉打磨 — Hero logo 大小再校准；锦泰 logo 与 H1 的视觉重量；KPI 卡片在 1280+ 宽屏的栅格优化；现有 brand-100 / ai-100 色对比
+
+---

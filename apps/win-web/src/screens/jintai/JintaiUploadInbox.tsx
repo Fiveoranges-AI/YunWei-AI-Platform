@@ -2,6 +2,16 @@ import { I } from "../../icons";
 import type { ExtractionCard } from "./data";
 import { JintaiStatusBadge } from "./components";
 
+export type ProcessingCard = {
+  id: string;
+  kind: ExtractionCard["kind"];
+  filename: string;
+  size: string;
+  progress: number;
+  stage: string;
+  startedAt: string;
+};
+
 const KIND_HINT: Record<string, string> = {
   合同: "合同 PDF",
   生产流转单: "纸质流转单（拍照）",
@@ -20,6 +30,7 @@ const UPLOAD_TYPES = [
 
 type Props = {
   cards: ExtractionCard[];
+  processing?: ProcessingCard[];
   onSimulateUploadContract: () => void;
   onSimulateUploadFlowCard: () => void;
   onSimulateUploadShipping: () => void;
@@ -28,6 +39,7 @@ type Props = {
 
 export function JintaiUploadInbox({
   cards,
+  processing = [],
   onSimulateUploadContract,
   onSimulateUploadFlowCard,
   onSimulateUploadShipping,
@@ -105,16 +117,34 @@ export function JintaiUploadInbox({
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-700)" }}>
             <span style={{ color: "var(--ai-500)", marginRight: 6 }}>{I.spark(13)}</span>
             AI 待确认收件箱 · {cards.length}
+            {processing.length > 0 && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--ai-700)",
+                  background: "var(--ai-100)",
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                }}
+              >
+                正在处理 {processing.length}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: "var(--ink-400)" }}>
             AI 不直接入库，需人工确认
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {processing.map((p) => (
+            <ProcessingCardItem key={p.id} card={p} />
+          ))}
           {cards.map((c) => (
             <ExtractionCardItem key={c.id} card={c} onConfirm={onConfirm} />
           ))}
-          {cards.length === 0 && (
+          {cards.length === 0 && processing.length === 0 && (
             <div
               style={{
                 padding: 24,
@@ -131,6 +161,105 @@ export function JintaiUploadInbox({
         </div>
       </div>
     </div>
+  );
+}
+
+function ProcessingCardItem({ card }: { card: ProcessingCard }) {
+  const pct = Math.min(100, Math.max(0, card.progress));
+  return (
+    <article
+      className="card"
+      style={{
+        padding: 14,
+        borderLeft: "3px solid var(--ai-500)",
+        background:
+          "linear-gradient(120deg, rgba(45,155,216,0.04) 0%, rgba(45,155,216,0.10) 50%, rgba(45,155,216,0.04) 100%)",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 6,
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <span className="pill pill-ai" style={{ fontSize: 11 }}>
+            {I.spark(10)} AI 处理中 · {card.kind}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--ink-400)" }}>{card.startedAt}</span>
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: "var(--ai-700)",
+            background: "rgba(255,255,255,0.7)",
+            padding: "3px 8px",
+            borderRadius: 999,
+            border: "1px solid #d8e8f4",
+          }}
+        >
+          {card.stage}
+        </span>
+      </header>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--ink-900)",
+          marginBottom: 4,
+          display: "flex",
+          alignItems: "baseline",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span>{card.filename}</span>
+        <span style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 500 }}>
+          {card.size}
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 10 }}>
+        正在从文件抽取结构化字段 · 暂未入库
+      </div>
+      <div
+        style={{
+          height: 6,
+          background: "rgba(45,155,216,0.12)",
+          borderRadius: 999,
+          overflow: "hidden",
+          marginBottom: 8,
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background:
+              "linear-gradient(90deg, var(--ai-500) 0%, var(--brand-500) 100%)",
+            transition: "width 0.28s ease-out",
+            borderRadius: 999,
+          }}
+        />
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 11,
+          color: "var(--ink-500)",
+        }}
+      >
+        <span>{pct}%</span>
+        <span>下一步：人工确认 → 入库</span>
+      </div>
+    </article>
   );
 }
 

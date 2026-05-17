@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { initialExtractionCards } from "./data";
 import type { ExtractionCard } from "./data";
@@ -6,16 +6,17 @@ import { JintaiSection } from "./components";
 import { JintaiHero } from "./JintaiHero";
 import { JintaiKpiCards } from "./JintaiKpiCards";
 import { JintaiUploadInbox } from "./JintaiUploadInbox";
+import type { ProcessingCard } from "./JintaiUploadInbox";
 import { JintaiWorkflowTimeline } from "./JintaiWorkflowTimeline";
 import { JintaiProductionTabs } from "./JintaiProductionTabs";
 import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
 import { JintaiDailyBriefing } from "./JintaiDailyBriefing";
 import { JintaiTrustPanel } from "./JintaiTrustPanel";
 
-let simCounter = 0;
-
-function makeSimulatedCard(kind: ExtractionCard["kind"]): ExtractionCard {
-  simCounter += 1;
+function makeSimulatedCard(
+  kind: ExtractionCard["kind"],
+  simCounter: number,
+): ExtractionCard {
   const stamp = `刚刚 · ${new Date().toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -112,9 +113,46 @@ function makeSimulatedCard(kind: ExtractionCard["kind"]): ExtractionCard {
   };
 }
 
+const PROCESSING_STAGES = [
+  { label: "上传中", upTo: 18 },
+  { label: "PDF / 图片解析", upTo: 38 },
+  { label: "AI 抽取字段", upTo: 72 },
+  { label: "置信度评估", upTo: 92 },
+  { label: "生成待确认草稿", upTo: 100 },
+];
+
+function stageForProgress(p: number) {
+  for (const s of PROCESSING_STAGES) if (p < s.upTo) return s.label;
+  return PROCESSING_STAGES[PROCESSING_STAGES.length - 1].label;
+}
+
+const KIND_FILENAME: Record<ExtractionCard["kind"], string> = {
+  合同: "当升科技_承烧板采购合同_2026Q3.pdf",
+  生产流转单: "ZC-2026-016 纸质流转单_车间手机拍照.jpg",
+  出货单: "出货单_容百宁波_扫描件.pdf",
+  "Excel 订单": "横店东磁_订单明细_2026Q3.xlsx",
+};
+
+const KIND_SIZE: Record<ExtractionCard["kind"], string> = {
+  合同: "1.4 MB · 3 页",
+  生产流转单: "2.1 MB · 1 张",
+  出货单: "0.9 MB · 2 页",
+  "Excel 订单": "76 KB · 1 sheet · 12 行",
+};
+
 export function JintaiDemoPage() {
   const isDesktop = useIsDesktop();
   const [cards, setCards] = useState<ExtractionCard[]>(initialExtractionCards);
+  const [processing, setProcessing] = useState<ProcessingCard[]>([]);
+  const timers = useRef<Set<number>>(new Set());
+  const simCounterRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      timers.current.forEach((id) => window.clearInterval(id));
+      timers.current.clear();
+    };
+  }, []);
 
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
@@ -122,8 +160,40 @@ export function JintaiDemoPage() {
   };
 
   const handleSimulateUpload = (kind: ExtractionCard["kind"]) => {
-    setCards((prev) => [makeSimulatedCard(kind), ...prev]);
+    const pid = `proc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const startedAt = new Date().toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    setProcessing((prev) => [
+      { id: pid, kind, filename: KIND_FILENAME[kind], size: KIND_SIZE[kind], progress: 0, stage: PROCESSING_STAGES[0].label, startedAt },
+      ...prev,
+    ]);
     handleScrollTo("ai-inbox");
+    const interval = window.setInterval(() => {
+      setProcessing((prev) => {
+        const next = prev.map((p) => {
+          if (p.id !== pid) return p;
+          const bump = 6 + Math.floor(Math.random() * 8);
+          const np = Math.min(100, p.progress + bump);
+          return { ...p, progress: np, stage: stageForProgress(np) };
+        });
+        const target = next.find((p) => p.id === pid);
+        if (target && target.progress >= 100) {
+          window.clearInterval(interval);
+          timers.current.delete(interval);
+          window.setTimeout(() => {
+            setProcessing((cur) => cur.filter((p) => p.id !== pid));
+            simCounterRef.current += 1;
+            const newCard = makeSimulatedCard(kind, simCounterRef.current);
+            setCards((cur) => (cur.some((c) => c.id === newCard.id) ? cur : [newCard, ...cur]));
+          }, 450);
+        }
+        return next;
+      });
+    }, 280);
+    timers.current.add(interval);
   };
 
   const handleConfirm = (id: string) => {
@@ -178,6 +248,7 @@ export function JintaiDemoPage() {
         >
           <JintaiUploadInbox
             cards={cards}
+            processing={processing}
             onSimulateUploadContract={() => handleSimulateUpload("合同")}
             onSimulateUploadFlowCard={() => handleSimulateUpload("生产流转单")}
             onSimulateUploadShipping={() => handleSimulateUpload("出货单")}
