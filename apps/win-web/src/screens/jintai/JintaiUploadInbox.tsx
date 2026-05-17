@@ -1,4 +1,5 @@
 import { I } from "../../icons";
+import { useIsDesktop } from "../../lib/breakpoints";
 import type { ExtractionCard } from "./data";
 import { JintaiStatusBadge } from "./components";
 
@@ -45,8 +46,9 @@ export function JintaiUploadInbox({
   onSimulateUploadShipping,
   onConfirm,
 }: Props) {
+  const isDesktop = useIsDesktop();
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 320px) 1fr", gap: 18 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "minmax(260px, 320px) 1fr" : "1fr", gap: 18 }}>
       {/* Left: upload area */}
       <div>
         <div

@@ -1,4 +1,5 @@
 import { I } from "../../icons";
+import { useIsDesktop } from "../../lib/breakpoints";
 import { dailyBriefingMetrics, dailyRisks } from "./data";
 import type { Risk } from "./data";
 import { JintaiSourceCitation } from "./components";
@@ -10,8 +11,9 @@ const SEV: Record<Risk, { label: string; bg: string; fg: string; border: string 
 };
 
 export function JintaiDailyBriefing() {
+  const isDesktop = useIsDesktop();
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 16 }}>
       <div className="card" style={{ padding: 18 }}>
         <div
           style={{
@@ -32,7 +34,7 @@ export function JintaiDailyBriefing() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
             gap: 8,
           }}
         >

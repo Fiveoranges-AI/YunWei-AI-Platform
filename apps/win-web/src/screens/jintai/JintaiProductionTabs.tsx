@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { I } from "../../icons";
+import { useIsDesktop } from "../../lib/breakpoints";
 import { flowCards, processParameter } from "./data";
 import type { FlowStep } from "./data";
 import { JintaiRiskBadge, JintaiStatusBadge, JintaiSourceCitation } from "./components";
@@ -317,8 +318,9 @@ function Field({
 
 function ProcessParameterPanel() {
   const p = processParameter;
+  const isDesktop = useIsDesktop();
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 320px" : "1fr", gap: 14 }}>
       <div className="card" style={{ padding: 16 }}>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{p.product}</div>

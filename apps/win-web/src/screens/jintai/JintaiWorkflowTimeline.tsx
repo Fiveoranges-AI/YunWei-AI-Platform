@@ -1,4 +1,5 @@
 import { I } from "../../icons";
+import { useIsDesktop } from "../../lib/breakpoints";
 import { workflowNodes } from "./data";
 import { JintaiSourceCitation } from "./components";
 
@@ -12,8 +13,9 @@ const STATUS_STYLE: Record<
 };
 
 export function JintaiWorkflowTimeline() {
+  const isDesktop = useIsDesktop();
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 320px" : "1fr", gap: 16 }}>
       <div
         className="card"
         style={{

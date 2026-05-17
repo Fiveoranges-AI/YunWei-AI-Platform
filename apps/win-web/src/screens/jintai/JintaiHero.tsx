@@ -1,4 +1,5 @@
 import { I } from "../../icons";
+import { useIsDesktop } from "../../lib/breakpoints";
 
 type Props = {
   onScrollTo: (id: string) => void;
@@ -11,11 +12,12 @@ export function JintaiHero({
   onSimulateUploadContract,
   onSimulateUploadFlowCard,
 }: Props) {
+  const isDesktop = useIsDesktop();
   return (
     <div
       className="card"
       style={{
-        padding: "26px 28px",
+        padding: isDesktop ? "26px 28px" : "20px 18px",
         marginBottom: 20,
         background:
           "linear-gradient(135deg, #f4faff 0%, #eff7fc 60%, #dcedf8 100%)",
@@ -36,17 +38,17 @@ export function JintaiHero({
           按 ISO9001 留档 · 来源 100% 可追溯
         </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isDesktop ? 14 : 10, flexWrap: "wrap" }}>
         <img
           src={`${import.meta.env.BASE_URL}jintai-logo.png`}
           alt="锦泰耐火材料"
-          style={{ height: 56, width: "auto", flexShrink: 0 }}
+          style={{ height: isDesktop ? 56 : 44, width: "auto", flexShrink: 0 }}
         />
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
           <h1
             style={{
               margin: 0,
-              fontSize: 26,
+              fontSize: isDesktop ? 26 : 19,
               fontWeight: 700,
               color: "var(--ink-900)",
               letterSpacing: "-0.01em",
@@ -139,7 +141,7 @@ export function JintaiHero({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
+            gridTemplateColumns: isDesktop ? "repeat(2, 1fr)" : "1fr",
             gap: "6px 16px",
           }}
         >

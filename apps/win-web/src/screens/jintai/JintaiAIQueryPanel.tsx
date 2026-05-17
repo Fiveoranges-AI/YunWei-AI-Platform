@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { I } from "../../icons";
+import { useIsDesktop } from "../../lib/breakpoints";
 import { presetQuestions } from "./data";
 import type { AIBlock } from "./data";
 import { JintaiSourceCitation } from "./components";
 
 export function JintaiAIQueryPanel() {
+  const isDesktop = useIsDesktop();
   const [active, setActive] = useState<AIBlock | null>(presetQuestions[0]);
   const [draft, setDraft] = useState("");
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "280px 1fr" : "1fr", gap: 16 }}>
       <div
         className="card"
         style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}

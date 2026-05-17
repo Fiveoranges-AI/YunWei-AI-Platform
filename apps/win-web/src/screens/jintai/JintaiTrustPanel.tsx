@@ -1,8 +1,10 @@
 import { I } from "../../icons";
+import { useIsMobile } from "../../lib/breakpoints";
 import { trustItems, traceExamples } from "./data";
 import { JintaiSourceCitation } from "./components";
 
 export function JintaiTrustPanel() {
+  const isMobile = useIsMobile();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div
@@ -81,7 +83,7 @@ export function JintaiTrustPanel() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
                   gap: 8,
                   fontSize: 11,
                   color: "var(--ink-600)",
