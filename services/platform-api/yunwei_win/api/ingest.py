@@ -96,7 +96,11 @@ def _enterprise_id_from_request(request: Request) -> str:
     return eid
 
 
-def _job_dict(j: IngestJob) -> dict[str, Any]:
+def _job_dict(
+    j: IngestJob,
+    *,
+    extraction: "DocumentExtraction | None" = None,
+) -> dict[str, Any]:
     return {
         "id": str(j.id),
         "batch_id": str(j.batch_id),
@@ -117,6 +121,14 @@ def _job_dict(j: IngestJob) -> dict[str, Any]:
         "finished_at": j.finished_at.isoformat() if j.finished_at else None,
         "created_at": j.created_at.isoformat() if j.created_at else None,
         "updated_at": j.updated_at.isoformat() if j.updated_at else None,
+        # Audit attribution — denormalized from the linked extraction so
+        # list views can show "由 X 确认" without an extra round trip.
+        "confirmed_by": extraction.confirmed_by if extraction else None,
+        "confirmed_at": (
+            extraction.confirmed_at.isoformat()
+            if (extraction and extraction.confirmed_at)
+            else None
+        ),
     }
 
 
@@ -203,6 +215,12 @@ async def create_ingest_jobs(
     enterprise_id = _enterprise_id_from_request(request)
     await ensure_ingest_job_tables_for(enterprise_id)
     await ensure_schema_ingest_tables_for(enterprise_id)
+
+    # Fall back to the request's authenticated user when the form omitted
+    # an explicit uploader — keeps audit trails populated without making
+    # every client send the field by hand.
+    if not uploader:
+        uploader = _reviewer_from_request(request)
 
     staged: list[dict[str, Any]] = []
     for f in files:
@@ -318,14 +336,20 @@ async def list_ingest_jobs(
     if reset_ids:
         await session.commit()
 
-    stmt = select(IngestJob).where(IngestJob.enterprise_id == enterprise_id)
+    stmt = (
+        select(IngestJob, DocumentExtraction)
+        .outerjoin(
+            DocumentExtraction, IngestJob.extraction_id == DocumentExtraction.id
+        )
+        .where(IngestJob.enterprise_id == enterprise_id)
+    )
     if status == "active":
         stmt = stmt.where(IngestJob.status.in_(_ACTIVE_STATUSES))
     elif status == "history":
         stmt = stmt.where(IngestJob.status.in_(_HISTORY_STATUSES))
     stmt = stmt.order_by(desc(IngestJob.created_at)).limit(limit)
-    rows = (await session.execute(stmt)).scalars().all()
-    return [_job_dict(j) for j in rows]
+    rows = (await session.execute(stmt)).all()
+    return [_job_dict(job, extraction=ext) for (job, ext) in rows]
 
 
 @router.delete("/jobs/history")
@@ -374,13 +398,15 @@ async def get_ingest_job(
     await ensure_ingest_job_tables_for(enterprise_id)
     await ensure_schema_ingest_tables_for(enterprise_id)
     j = await _load_job(session, job_id=job_id, enterprise_id=enterprise_id)
-    payload = _job_dict(j)
+    extraction: DocumentExtraction | None = None
     if j.extraction_id is not None:
         extraction = (
             await session.execute(
                 select(DocumentExtraction).where(DocumentExtraction.id == j.extraction_id)
             )
         ).scalar_one_or_none()
+    payload = _job_dict(j, extraction=extraction)
+    if j.extraction_id is not None:
         document: Document | None = None
         if j.document_id is not None:
             document = (
