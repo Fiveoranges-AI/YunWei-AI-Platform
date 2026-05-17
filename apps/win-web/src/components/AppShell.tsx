@@ -22,6 +22,7 @@ const VIEW_META: Record<TabName, ViewMeta> = {
   upload: { title: "添加资料", sub: "AI 自动归类匹配" },
   ask: { title: "AI 助手", sub: "基于客户档案问答 · 来源可追溯" },
   profile: { title: "我的", sub: "账号 · 团队 · 设置" },
+  jintai: { title: "锦泰耐火材料 · AI 生产流转试点", sub: "客户演示版 · 纯前端 · mock 数据" },
 };
 
 export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, children }: Props) {
@@ -123,5 +124,6 @@ function detailLikeBackground(screen: ScreenName): string {
   // Upload + profile + ask use a softer surface; list/detail/inbox are white.
   if (screen === "upload" || screen === "profile") return "var(--surface-2)";
   if (screen === "ask") return "var(--surface-2)";
+  if (screen === "jintai") return "var(--bg)";
   return "#fff";
 }
