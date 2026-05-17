@@ -5,16 +5,19 @@ import { JintaiSourceCitation } from "./components";
 
 export function JintaiTrustPanel() {
   const isMobile = useIsMobile();
+  // 视觉减负：6 → 4 张安全卡（其余在其他 tab 已自然展示）；trace 示例 2 → 1
+  const visibleTrust = trustItems.slice(0, 4);
+  const visibleTrace = traceExamples.slice(0, 1);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 12,
+          gap: 14,
         }}
       >
-        {trustItems.map((t) => (
+        {visibleTrust.map((t) => (
           <div
             key={t.title}
             className="card-flat"
@@ -46,15 +49,15 @@ export function JintaiTrustPanel() {
         ))}
       </div>
 
-      <div className="card" style={{ padding: 18 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", marginBottom: 4 }}>
+      <div className="card" style={{ padding: 22 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)", marginBottom: 4 }}>
           来源追溯示例
         </div>
-        <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
           点击任意 AI 给出的事实，可以一键跳回原始资料
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {traceExamples.map((t, i) => (
+          {visibleTrace.map((t, i) => (
             <div
               key={i}
               style={{

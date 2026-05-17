@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getJintaiProcessParameter, listJintaiFlowCards } from "../../api/jintai";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { flowCards, processParameter } from "./data";
-import type { FlowStep } from "./data";
+import type { FlowCard, FlowStep, ProcessParameter } from "./data";
 import { JintaiRiskBadge, JintaiStatusBadge, JintaiSourceCitation } from "./components";
 
 type Tab = "A" | "B" | "C";
@@ -15,6 +16,26 @@ const TABS: { id: Tab; label: string; sub: string }[] = [
 
 export function JintaiProductionTabs() {
   const [tab, setTab] = useState<Tab>("A");
+  const [cards, setCards] = useState<FlowCard[]>(flowCards);
+  const [parameter, setParameter] = useState<ProcessParameter>(processParameter);
+
+  useEffect(() => {
+    let cancelled = false;
+    listJintaiFlowCards()
+      .then((backendCards) => {
+        if (!cancelled && backendCards.length > 0) setCards(backendCards);
+      })
+      .catch(() => undefined);
+    getJintaiProcessParameter()
+      .then((backendParameter) => {
+        if (!cancelled) setParameter(backendParameter);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div>
       <div
@@ -61,8 +82,8 @@ export function JintaiProductionTabs() {
         })}
       </div>
 
-      {tab === "A" && <FlowCardPanel />}
-      {tab === "B" && <ProcessParameterPanel />}
+      {tab === "A" && <FlowCardPanel flowCards={cards} />}
+      {tab === "B" && <ProcessParameterPanel processParameter={parameter} />}
       {tab === "C" && <ShippingPanel />}
     </div>
   );
@@ -70,7 +91,7 @@ export function JintaiProductionTabs() {
 
 /* ---------- Tab A: 生产流转单 ---------- */
 
-function FlowCardPanel() {
+function FlowCardPanel({ flowCards }: { flowCards: FlowCard[] }) {
   const [idx, setIdx] = useState(1);
   const fc = flowCards[idx] ?? flowCards[0];
   return (
@@ -175,13 +196,16 @@ function FlowCardPanel() {
 }
 
 function StepCard({ step }: { step: FlowStep }) {
-  const rows = stepRows(step);
+  const allRows = stepRows(step);
+  // 视觉减负：每张工序卡只显示前 7 个高优字段，其余 chip 折叠
+  const rows = allRows.slice(0, 7);
+  const hidden = allRows.length - rows.length;
   const isOngoing = step.status === "进行中";
   return (
     <div
       className="card"
       style={{
-        padding: 14,
+        padding: 16,
         borderTop: `3px solid ${
           step.status === "已完成"
             ? "var(--ok-500)"
@@ -204,10 +228,10 @@ function StepCard({ step }: { step: FlowStep }) {
         </div>
         <JintaiStatusBadge status={step.status} />
       </div>
-      <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 10 }}>
+      <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 12 }}>
         计划完成 {step.plannedDate}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {rows.map((r) => (
           <div
             key={r.key}
@@ -215,8 +239,7 @@ function StepCard({ step }: { step: FlowStep }) {
               display: "flex",
               justifyContent: "space-between",
               fontSize: 12,
-              padding: "4px 0",
-              borderBottom: "1px dashed var(--ink-100)",
+              padding: "5px 0",
             }}
           >
             <span style={{ color: "var(--ink-500)" }}>{r.key}</span>
@@ -232,6 +255,11 @@ function StepCard({ step }: { step: FlowStep }) {
             </span>
           </div>
         ))}
+        {hidden > 0 && (
+          <div style={{ fontSize: 11, color: "var(--ink-400)", padding: "6px 0 0", textAlign: "right" }}>
+            +{hidden} 项已记录
+          </div>
+        )}
       </div>
     </div>
   );
@@ -316,7 +344,7 @@ function Field({
 
 /* ---------- Tab B: 工艺单 / 参数 ---------- */
 
-function ProcessParameterPanel() {
+function ProcessParameterPanel({ processParameter }: { processParameter: ProcessParameter }) {
   const p = processParameter;
   const isDesktop = useIsDesktop();
   return (
@@ -339,36 +367,47 @@ function ProcessParameterPanel() {
             marginTop: 12,
           }}
         >
-          {p.groups.map((g) => (
-            <div
-              key={g.title}
-              style={{
-                padding: 12,
-                borderRadius: 10,
-                background: "var(--surface-2)",
-                border: "1px solid var(--ink-100)",
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-700)", marginBottom: 6 }}>
-                {g.title}
-              </div>
-              {g.rows.map((r) => (
-                <div
-                  key={r.key}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 12,
-                    padding: "3px 0",
-                    color: "var(--ink-800)",
-                  }}
-                >
-                  <span style={{ color: "var(--ink-500)" }}>{r.key}</span>
-                  <span style={{ fontWeight: 600 }}>{r.value}</span>
+          {p.groups.map((g) => {
+            // 视觉减负：每组工艺参数只显示前 3 行，剩余 chip 折叠
+            const visible = g.rows.slice(0, 3);
+            const hidden = g.rows.length - visible.length;
+            return (
+              <div
+                key={g.title}
+                style={{
+                  padding: 14,
+                  borderRadius: 10,
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--ink-100)",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-700)", marginBottom: 8 }}>
+                  {g.title}
                 </div>
-              ))}
-            </div>
-          ))}
+                {visible.map((r) => (
+                  <div
+                    key={r.key}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 12,
+                      padding: "4px 0",
+                      color: "var(--ink-800)",
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ color: "var(--ink-500)" }}>{r.key}</span>
+                    <span style={{ fontWeight: 600, textAlign: "right" }}>{r.value}</span>
+                  </div>
+                ))}
+                {hidden > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 6 }}>
+                    +{hidden} 项参数
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

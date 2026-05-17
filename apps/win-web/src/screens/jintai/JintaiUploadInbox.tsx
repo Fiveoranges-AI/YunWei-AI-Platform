@@ -20,13 +20,11 @@ const KIND_HINT: Record<string, string> = {
   出货单: "出货 / 入库单",
 };
 
+// 视觉减负：保留最核心 3 种上传类型（合同 / 订单 Excel / 纸质流转单）
 const UPLOAD_TYPES = [
   { label: "合同 PDF", desc: "客户签约文件", icon: "📄" },
   { label: "订单 Excel", desc: "BOM / 数量明细", icon: "🟢" },
-  { label: "微信聊天记录", desc: "客户沟通截图", icon: "💬" },
   { label: "纸质生产流转单", desc: "车间拍照上传", icon: "📷" },
-  { label: "工艺参数表", desc: "Excel / 拍照", icon: "⚙️" },
-  { label: "出货 / 入库单", desc: "纸质 / 扫描件", icon: "📦" },
 ];
 
 type Props = {
@@ -53,30 +51,35 @@ export function JintaiUploadInbox({
       <div>
         <div
           className="card"
-          style={{ padding: 18, marginBottom: 12, background: "var(--surface-2)" }}
+          style={{ padding: 22, marginBottom: 12 }}
         >
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-900)", marginBottom: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-900)", marginBottom: 6 }}>
             上传客户与生产资料
           </div>
-          <div style={{ fontSize: 12, color: "var(--ink-600)", lineHeight: 1.55, marginBottom: 14 }}>
-            支持合同、订单、纸质流转单、出货单、工艺参数表、微信截图等格式，AI 自动结构化字段。
+          <div style={{ fontSize: 12, color: "var(--ink-500)", lineHeight: 1.55, marginBottom: 16 }}>
+            AI 自动结构化字段，人工 1 步确认后入库
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginBottom: 16 }}>
             {UPLOAD_TYPES.map((t) => (
               <div
                 key={t.label}
                 style={{
                   padding: "10px 12px",
                   borderRadius: 10,
-                  background: "var(--surface)",
+                  background: "var(--surface-2)",
                   border: "1px solid var(--ink-100)",
-                  fontSize: 11.5,
+                  fontSize: 12,
                   color: "var(--ink-700)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
                 }}
               >
-                <div style={{ fontSize: 16 }}>{t.icon}</div>
-                <div style={{ fontWeight: 600, marginTop: 4 }}>{t.label}</div>
-                <div style={{ color: "var(--ink-400)", marginTop: 2 }}>{t.desc}</div>
+                <span style={{ fontSize: 18 }}>{t.icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{t.label}</div>
+                  <div style={{ color: "var(--ink-400)", fontSize: 11, marginTop: 1 }}>{t.desc}</div>
+                </div>
               </div>
             ))}
           </div>
@@ -259,7 +262,7 @@ function ProcessingCardItem({ card }: { card: ProcessingCard }) {
         }}
       >
         <span>{pct}%</span>
-        <span>下一步：人工确认 → 入库</span>
+        <span>下一步：人工确认 → 待生成草稿</span>
       </div>
     </article>
   );
@@ -302,8 +305,8 @@ function ExtractionCardItem({
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)", marginBottom: 4 }}>
         {card.source}
       </div>
-      <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 10 }}>
-        识别字段 {card.fields.length} 项 · 整体置信度{" "}
+      <div style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 12 }}>
+        识别 {card.fields.length} 项 · 整体置信度{" "}
         <span style={{ color: card.confidence >= 0.9 ? "var(--ok-700)" : "var(--warn-700)" }}>
           {(card.confidence * 100).toFixed(0)}%
         </span>{" "}
@@ -314,17 +317,18 @@ function ExtractionCardItem({
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-          gap: 6,
+          gap: 8,
           marginBottom: 12,
         }}
       >
-        {card.fields.map((f) => {
+        {/* 视觉减负：每张卡只展示前 6 个高优字段，其余以 "+N 字段" chip 折叠 */}
+        {card.fields.slice(0, 6).map((f) => {
           const low = (f.confidence ?? 1) < 0.85;
           return (
             <div
               key={f.key}
               style={{
-                padding: "7px 9px",
+                padding: "8px 10px",
                 borderRadius: 8,
                 background: low ? "var(--warn-50)" : "var(--surface-2)",
                 border: `1px solid ${low ? "#fbe6c5" : "var(--ink-100)"}`,
@@ -342,7 +346,8 @@ function ExtractionCardItem({
                 }}
               >
                 <span>{f.key}</span>
-                {f.confidence !== undefined && (
+                {/* 只对低置信度 (< 90%) 显示百分比，减少视觉噪声 */}
+                {f.confidence !== undefined && f.confidence < 0.9 && (
                   <span style={{ color: low ? "var(--warn-700)" : "var(--ink-400)" }}>
                     {(f.confidence * 100).toFixed(0)}%
                   </span>
@@ -352,6 +357,23 @@ function ExtractionCardItem({
             </div>
           );
         })}
+        {card.fields.length > 6 && (
+          <div
+            style={{
+              padding: "8px 10px",
+              borderRadius: 8,
+              background: "var(--surface)",
+              border: "1px dashed var(--ink-200)",
+              fontSize: 11.5,
+              color: "var(--ink-500)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            +{card.fields.length - 6} 项字段
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -364,10 +386,10 @@ function ExtractionCardItem({
             >
               {I.check(14, "#fff")}
               {card.kind === "合同" || card.kind === "Excel 订单"
-                ? "确认生成订单"
+                ? "确认订单草稿"
                 : card.kind === "生产流转单"
-                  ? "确认生成流转单"
-                  : "确认入库"}
+                  ? "确认流转单草稿"
+                  : "确认出货草稿"}
             </button>
             <button
               className="btn btn-secondary"
@@ -398,13 +420,13 @@ function ExtractionCardItem({
               className="pill pill-ok"
               style={{ padding: "5px 10px", fontSize: 11.5, fontWeight: 600 }}
             >
-              {I.check(11)} 已确认入库
+              {I.check(11)} 已人工确认
             </span>
             <button
               className="btn btn-ghost"
               style={{ padding: "6px 10px", fontSize: 12 }}
             >
-              查看生成结果
+              查看队列记录
             </button>
           </>
         )}

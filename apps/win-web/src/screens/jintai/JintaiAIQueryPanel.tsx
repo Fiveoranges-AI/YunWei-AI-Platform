@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { askJintai } from "../../api/jintai";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { presetQuestions } from "./data";
@@ -7,8 +8,28 @@ import { JintaiSourceCitation } from "./components";
 
 export function JintaiAIQueryPanel() {
   const isDesktop = useIsDesktop();
+  // 视觉减负：6 → 4 个最有故事性的预设问题
+  const visibleQuestions = presetQuestions.slice(0, 4);
   const [active, setActive] = useState<AIBlock | null>(presetQuestions[0]);
   const [draft, setDraft] = useState("");
+  const [isAsking, setIsAsking] = useState(false);
+
+  const ask = async (question: string) => {
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    const fallback =
+      presetQuestions.find((q) => q.question.includes(trimmed.slice(0, 2))) ??
+      presetQuestions[0];
+    setIsAsking(true);
+    try {
+      setActive(await askJintai(trimmed));
+    } catch {
+      setActive(fallback);
+    } finally {
+      setIsAsking(false);
+      setDraft("");
+    }
+  };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "280px 1fr" : "1fr", gap: 16 }}>
@@ -33,7 +54,7 @@ export function JintaiAIQueryPanel() {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="比如：「容百那批 SK-02 烧到哪了」「本月哪些单要延期」"
+            placeholder="试着问问看：这单到哪了？还有多少没收钱？哪个客户该跟进？"
             style={{
               flex: 1,
               border: "none",
@@ -46,31 +67,22 @@ export function JintaiAIQueryPanel() {
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && draft.trim()) {
-                const guess =
-                  presetQuestions.find((q) => q.question.includes(draft.slice(0, 2))) ??
-                  presetQuestions[0];
-                setActive(guess);
-                setDraft("");
+                void ask(draft);
               }
             }}
           />
           <button
             onClick={() => {
-              if (!draft.trim()) return;
-              const guess =
-                presetQuestions.find((q) => q.question.includes(draft.slice(0, 2))) ??
-                presetQuestions[0];
-              setActive(guess);
-              setDraft("");
+              void ask(draft);
             }}
             style={{
               width: 32,
               height: 32,
               borderRadius: 16,
               border: "none",
-              background: draft.trim() ? "var(--brand-500)" : "var(--ink-200)",
+              background: draft.trim() && !isAsking ? "var(--brand-500)" : "var(--ink-200)",
               color: "#fff",
-              cursor: draft.trim() ? "pointer" : "not-allowed",
+              cursor: draft.trim() && !isAsking ? "pointer" : "not-allowed",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -93,12 +105,12 @@ export function JintaiAIQueryPanel() {
           预设问题
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {presetQuestions.map((q) => {
+          {visibleQuestions.map((q) => {
             const isActive = active?.question === q.question;
             return (
               <button
                 key={q.question}
-                onClick={() => setActive(q)}
+                onClick={() => void ask(q.question)}
                 className="pill"
                 style={{
                   display: "block",
@@ -128,21 +140,6 @@ export function JintaiAIQueryPanel() {
             从左侧选一个问题，或自己用中文问 AI 一句。
           </div>
         )}
-
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 10,
-            background: "var(--surface-2)",
-            border: "1px dashed var(--ink-200)",
-            fontSize: 11.5,
-            color: "var(--ink-500)",
-            lineHeight: 1.55,
-          }}
-        >
-          AI 不直接修改任何业务数据。所有回答均基于已确认入库的订单 / 流转单 / 工艺单 /
-          出货单，并附原始来源引用，便于追溯。
-        </div>
       </div>
     </div>
   );
@@ -203,11 +200,12 @@ function AIAnswerCard({ block }: { block: AIBlock }) {
           gap: 8,
         }}
       >
-        {block.details.map((d) => (
+        {/* 视觉减负：明细只展示前 4 项 */}
+        {block.details.slice(0, 4).map((d) => (
           <div
             key={d.key}
             style={{
-              padding: "8px 10px",
+              padding: "10px 12px",
               borderRadius: 8,
               background: "var(--surface-2)",
               border: "1px solid var(--ink-100)",
@@ -221,7 +219,7 @@ function AIAnswerCard({ block }: { block: AIBlock }) {
         ))}
       </div>
 
-      <div className="sep" style={{ margin: "14px 0 10px" }} />
+      <div className="sep" style={{ margin: "16px 0 12px" }} />
 
       <div
         style={{
@@ -243,32 +241,6 @@ function AIAnswerCard({ block }: { block: AIBlock }) {
           <JintaiSourceCitation key={i} source={e} />
         ))}
       </div>
-
-      {block.next.length > 0 && (
-        <>
-          <div className="sep" style={{ margin: "14px 0 10px" }} />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--ai-700)",
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            {I.bulb(12)} 下一步建议
-          </div>
-          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.6, color: "var(--ink-800)" }}>
-            {block.next.map((n, i) => (
-              <li key={i} style={{ marginBottom: 4 }}>{n}</li>
-            ))}
-          </ol>
-        </>
-      )}
     </div>
   );
 }

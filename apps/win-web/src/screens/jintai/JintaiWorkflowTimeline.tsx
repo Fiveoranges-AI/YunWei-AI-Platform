@@ -12,6 +12,20 @@ const STATUS_STYLE: Record<
   pending: { fg: "var(--ink-500)", bg: "var(--ink-100)", line: "var(--ink-200)", label: "未开始" },
 };
 
+// 视觉减负：长 title 缩到 ≤ 4 字（已用色环 + icon 表达状态，desc 已说明细节）
+const SHORT_TITLE: Record<string, string> = {
+  "CRM / 客户": "客户",
+  订单: "订单",
+  工单: "工单",
+  计划单: "计划",
+  生产流转: "流转",
+  成型: "成型",
+  烧结: "烧结",
+  检包: "检包",
+  成品入库: "入库",
+  出货: "出货",
+};
+
 export function JintaiWorkflowTimeline() {
   const isDesktop = useIsDesktop();
   return (
@@ -79,25 +93,15 @@ export function JintaiWorkflowTimeline() {
                     }}
                   />
                 </div>
-                <div style={{ textAlign: "center", marginTop: 8, padding: "0 4px" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-900)" }}>
-                    {n.title}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: s.fg,
-                      fontWeight: 600,
-                      marginTop: 2,
-                    }}
-                  >
-                    {s.label}
+                <div style={{ textAlign: "center", marginTop: 10, padding: "0 4px" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink-900)" }}>
+                    {SHORT_TITLE[n.title] ?? n.title}
                   </div>
                   <div
                     style={{
                       fontSize: 10.5,
-                      color: "var(--ink-500)",
-                      marginTop: 3,
+                      color: "var(--ink-400)",
+                      marginTop: 4,
                       lineHeight: 1.4,
                     }}
                   >

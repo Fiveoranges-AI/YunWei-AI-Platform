@@ -154,26 +154,27 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯" },
 ];
 
+// 视觉减负：每 tab 副标精简到 1 句，去除长 narration
 const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
   overview: {
     title: "试点总览",
-    sub: "锦泰承烧板 / 推板 / 匣钵 试点 · Hero 价值主张 + 今日 KPI + 经营风险简报，3 秒看清今天要紧的事。",
+    sub: "今日 KPI、风险简报，3 秒看清要紧的事。",
   },
   inbox: {
     title: "AI 资料收件箱",
-    sub: "合同 / 纸质流转单 / 出货单 / Excel / 微信截图 上传 → AI 抽字段 → 销售或生产 1 步确认 → 自动生成订单 / 流转单 / 出货草稿。AI 不直接入库。",
+    sub: "AI 抽取字段 → 人工 1 步确认 → 自动生成订单 / 流转单 / 出货草稿。",
   },
   production: {
     title: "生产流转",
-    sub: "CRM → 订单 → 计划 → 流转 → 入库 → 出货 全程闭环 + 生产三张表（流转单 / 工艺单 / 出货单），客户随时回放任意单的当前节点。",
+    sub: "CRM → 订单 → 计划 → 流转 → 入库 → 出货，全过程可回放任意节点。",
   },
   ask: {
     title: "老板 AI 助手",
-    sub: "用中文问「容百那批 SK-02 烧到哪了 / 本月哪些单要延期」，AI 拿已确认的订单 / 流转单 / 出货单作答，每条结论都带原始来源引用。",
+    sub: "用中文问，AI 拿已确认数据作答，每条结论都附原始来源引用。",
   },
   trust: {
     title: "可信 AI · 来源追溯 & 数据安全",
-    sub: "6 项数据安全承诺 + 来源追溯示例：每条 AI 抽取都附「OCR 时间 + 置信度」与「人工确认人 + 时间」双重锚点，客户老板可一眼判断是否可信。",
+    sub: "每条 AI 抽取都附 OCR 置信度 + 人工确认双重锚点。",
   },
 };
 
@@ -513,17 +514,16 @@ export function JintaiDemoPage() {
 
         <div
           style={{
-            marginTop: 32,
-            padding: "16px 18px",
-            borderRadius: 12,
-            background: "var(--surface)",
-            border: "1px dashed var(--ink-200)",
-            color: "var(--ink-500)",
-            fontSize: 12,
+            marginTop: 36,
+            paddingTop: 16,
+            borderTop: "1px solid var(--ink-100)",
+            color: "var(--ink-400)",
+            fontSize: 11.5,
             lineHeight: 1.6,
+            textAlign: "center",
           }}
         >
-          演示版本 · 纯前端 · 所有数据均为 mock。本 demo 用于客户演示与方案对齐，不接后端、不写入任何真实业务系统。
+          演示版本 · 纯前端 mock，不接后端、不写入真实业务系统
         </div>
       </div>
     </div>
