@@ -124,17 +124,43 @@ function FinanceReportView({ report }: { report: FinanceReport }) {
           </span>
         </div>
 
-        {/* 来源 chips */}
+        {/* 来源 chips — 按报表类型换 */}
         <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
-          <JintaiSourceCitation source={{ kind: "Excel", label: "2026-05 凭证汇总.xlsx" }} />
-          <JintaiSourceCitation source={{ kind: "合同", label: "5 张销售/采购合同" }} />
-          <JintaiSourceCitation source={{ kind: "入库单", label: "采购入库 5 张" }} />
+          <ReportSources reportId={report.id} />
         </div>
       </div>
 
       {/* 右侧 AI 财务洞察 */}
       <AIInsightCard reportId={report.id} />
     </div>
+  );
+}
+
+const REPORT_SOURCES: Record<ReportId, { kind: "合同" | "Excel" | "入库单" | "工艺单"; label: string }[]> = {
+  balance: [
+    { kind: "Excel", label: "Kingdee 月末科目余额表.xlsx" },
+    { kind: "入库单", label: "本月 5 张采购入库 · 已记账" },
+    { kind: "Excel", label: "招行 + 工行月末对账单" },
+  ],
+  income: [
+    { kind: "合同", label: "本月 3 张销售合同（容百 / 横店 / 风华）" },
+    { kind: "入库单", label: "5 张采购入库 · 计入成本" },
+    { kind: "Excel", label: "本月期间费用凭证 12 张" },
+  ],
+  cashflow: [
+    { kind: "Excel", label: "招行 / 工行月度流水 · 已对账" },
+    { kind: "入库单", label: "采购付款凭证 5 张" },
+    { kind: "合同", label: "客户回款明细（容百首付 + 横店尾款）" },
+  ],
+};
+
+function ReportSources({ reportId }: { reportId: ReportId }) {
+  return (
+    <>
+      {REPORT_SOURCES[reportId].map((s, i) => (
+        <JintaiSourceCitation key={i} source={s} />
+      ))}
+    </>
   );
 }
 

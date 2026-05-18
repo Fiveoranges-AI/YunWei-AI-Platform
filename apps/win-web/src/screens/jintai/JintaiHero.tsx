@@ -91,6 +91,51 @@ export function JintaiHero({
           {I.ask(16)} 询问 AI 助手
         </button>
       </div>
+
+      {/* 副导航：财务 + 采购入口（iter 10） */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          marginTop: 14,
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontSize: 11.5, color: "var(--ink-500)" }}>或直接查看：</span>
+        <button
+          onClick={() => onScrollTo("finance")}
+          style={{
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 8,
+            border: "1px solid var(--ink-200)",
+            background: "var(--surface-2)",
+            color: "var(--ink-700)",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          💰 财务 AI 三表
+        </button>
+        <button
+          onClick={() => onScrollTo("purchase")}
+          style={{
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 8,
+            border: "1px solid var(--ink-200)",
+            background: "var(--surface-2)",
+            color: "var(--ink-700)",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          📦 采购订单 + 供应商
+        </button>
+      </div>
     </div>
   );
 }

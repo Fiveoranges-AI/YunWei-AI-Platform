@@ -739,6 +739,15 @@ export const traceExamples: Array<{
     extractedBy: "AI 聚合计算 · 数据基于 5 张已确认入库的检包单",
     confirmedBy: "原始 5 张检包单分别由 周师傅 / 检包组长 确认",
   },
+  {
+    aiFact: "2026-05 月净利润 1,189 K¥（毛利率 35.0%）",
+    source: {
+      kind: "Excel",
+      label: "Kingdee 月度损益表 2026-05 · AI 草稿",
+    },
+    extractedBy: "AI 自三方账套（Kingdee + PayPal + 银行流水）聚合 · 不修改原凭证",
+    confirmedBy: "财务 · 王会计 · 2026-05-17 09:31 复核确认 + 财务总监二签",
+  },
 ];
 
 /* ===========================================================================
