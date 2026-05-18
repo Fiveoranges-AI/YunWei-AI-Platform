@@ -627,6 +627,48 @@ export const presetQuestions: AIBlock[] = [
       "厦钨新能本月发货 1 笔尚未确认收货，建议本周内通知物流催签。",
     ],
   },
+  /* ---- 采购预设问题 (Iter 9) ---- */
+  {
+    question: "α 氧化铝粉这批多少钱进的？跟上批比涨跌？",
+    verdict:
+      "PO-2026-008 山东中铝物资 α 氧化铝粉 CT3000SG · 4,000 kg · 单价 ¥24.00 / kg · 总价 ¥96,000，已到货待入库。对比上批 PO-2026-002（02-15 入库）¥22.50 / kg，本次涨价 +6.7%。山东中铝近 3 月质量稳定，但价格随大宗微涨，建议关注后续季度行情。",
+    details: [
+      { key: "本批单价", value: "¥24.00 / kg" },
+      { key: "上批单价", value: "¥22.50 / kg（02-15 PO-2026-002）" },
+      { key: "涨幅", value: "+6.7% · 与同期国内电池级氧化铝大宗价吻合" },
+      { key: "数量 / 总价", value: "4,000 kg · ¥96,000" },
+      { key: "账期", value: "60 天 · 应付到期 2026-07-24" },
+      { key: "建议替代", value: "宜兴蓝海 W18 电熔白刚玉部分场景可替代 · 价差 ¥10/kg" },
+    ],
+    evidence: [
+      { kind: "合同", label: "山东中铝物资 增值税专票 20260517-A001.pdf" },
+      { kind: "入库单", label: "采购订单 PO-2026-008（待入库）" },
+    ],
+    next: [
+      "询价万华化学水玻璃，作为部分配方的替代结合剂方案。",
+      "Q3 锁价：与山东中铝洽谈 5 吨级框架协议，争取年内回到 ¥22.5 价位。",
+    ],
+  },
+  {
+    question: "哪个供应商最近账期最紧？该优先付？",
+    verdict:
+      "5 大供应商中，山东中铝物资账期最长（60 天）但金额最大（月均 ¥85K + 本月新增 ¥96K），下一笔应付到期日 2026-07-24 ¥96,000，是最值得跟踪的对象。建议本周内优先回款客户应收（容百 ¥1,800K 到期一笔）来对冲。",
+    details: [
+      { key: "山东中铝", value: "60 天 · 应付 ¥96K · 到期 2026-07-24" },
+      { key: "萍乡耐材", value: "45 天 · 应付 ¥76K · 到期 2026-07-06" },
+      { key: "宜兴蓝海", value: "30 天 · 应付 ¥84K · 到期 2026-06-11" },
+      { key: "焦作高纯石墨", value: "30 天 · 应付 ¥27K · 到期 2026-06-18" },
+      { key: "上海博凯化工", value: "30 天 · 应付 ¥13.6K · 到期 2026-06-14" },
+    ],
+    evidence: [
+      { kind: "Excel", label: "应付账款明细表 2026-05 · 财务王会计已确认" },
+      { kind: "合同", label: "5 张采购合同（账期条款）" },
+    ],
+    next: [
+      "本周内对账容百到期回款 ¥1,800K，到账即可优先付山东中铝。",
+      "宜兴蓝海距离近、关系长，可提前 3 天主动结清以维护应急加急通道。",
+    ],
+  },
 ];
 
 export const trustItems = [
@@ -871,3 +913,214 @@ export const financeReports: FinanceReport[] = [
   },
 ];
 
+/* ===========================================================================
+ *  采购模块 (Iter 9)
+ *
+ *  - 物料按宜兴锦泰耐火材料真实原料结构：
+ *      α 氧化铝粉 / 莫来石骨料 / 刚玉骨料 / 石墨电极粉 / 硅微粉 / 磷酸二氢铝
+ *  - 采购金额量级与损益表 营业成本 4,420K 自洽（本月约 ¥327K 原料入库）
+ * ========================================================================= */
+
+export type PurchaseOrder = {
+  poNo: string;
+  supplier: string;
+  material: string;
+  spec: string;
+  qty: string;
+  unitPrice: string;
+  amount: string; // ¥
+  deliveryDate: string;
+  status: "已入库" | "已到货待入库" | "在途";
+  warehouse?: string;
+};
+
+export const purchaseOrders: PurchaseOrder[] = [
+  {
+    poNo: "PO-2026-008",
+    supplier: "山东中铝物资",
+    material: "α 氧化铝粉",
+    spec: "CT3000SG · 5N 级",
+    qty: "4,000 kg",
+    unitPrice: "¥24.00 / kg",
+    amount: "¥96,000",
+    deliveryDate: "2026-05-25",
+    status: "已到货待入库",
+  },
+  {
+    poNo: "PO-2026-007",
+    supplier: "萍乡耐材原料",
+    material: "莫来石骨料",
+    spec: "3–5 mm · M70",
+    qty: "8,000 kg",
+    unitPrice: "¥9.50 / kg",
+    amount: "¥76,000",
+    deliveryDate: "2026-05-22",
+    status: "已入库",
+    warehouse: "原料库 A-03",
+  },
+  {
+    poNo: "PO-2026-006",
+    supplier: "焦作高纯石墨",
+    material: "石墨电极粉",
+    spec: "200 目 · C ≥ 99.9%",
+    qty: "1,500 kg",
+    unitPrice: "¥18.00 / kg",
+    amount: "¥27,000",
+    deliveryDate: "2026-05-19",
+    status: "已入库",
+    warehouse: "原料库 B-02",
+  },
+  {
+    poNo: "PO-2026-005",
+    supplier: "上海博凯化工",
+    material: "硅微粉",
+    spec: "SF965 · D50 ≈ 1.5 μm",
+    qty: "2,000 kg",
+    unitPrice: "¥6.80 / kg",
+    amount: "¥13,600",
+    deliveryDate: "2026-05-15",
+    status: "已入库",
+    warehouse: "原料库 C-01",
+  },
+  {
+    poNo: "PO-2026-004",
+    supplier: "宜兴蓝海耐火",
+    material: "刚玉骨料",
+    spec: "W18 · 电熔白刚玉",
+    qty: "6,000 kg",
+    unitPrice: "¥14.00 / kg",
+    amount: "¥84,000",
+    deliveryDate: "2026-05-12",
+    status: "已入库",
+    warehouse: "原料库 A-01",
+  },
+  {
+    poNo: "PO-2026-003",
+    supplier: "杭州瑞晟化工",
+    material: "磷酸二氢铝 (结合剂)",
+    spec: "工业级 ≥ 99%",
+    qty: "800 kg",
+    unitPrice: "¥38.00 / kg",
+    amount: "¥30,400",
+    deliveryDate: "2026-05-08",
+    status: "已入库",
+    warehouse: "原料库 D-01",
+  },
+];
+
+export type Supplier = {
+  shortName: string;
+  fullName: string;
+  category: string;
+  monthlySpend: string;
+  paymentTerm: string;
+  trustNote: string;
+};
+
+export const suppliers: Supplier[] = [
+  {
+    shortName: "山东中铝物资",
+    fullName: "山东中铝物资贸易有限公司",
+    category: "α 氧化铝粉 / 高纯氧化铝",
+    monthlySpend: "¥85K / 月",
+    paymentTerm: "账期 60 天",
+    trustNote: "近 3 月质量稳定 · 价格随大宗微涨 6.7%",
+  },
+  {
+    shortName: "萍乡耐材原料",
+    fullName: "萍乡市耐火材料原料有限公司",
+    category: "莫来石 + 刚玉骨料",
+    monthlySpend: "¥160K / 月",
+    paymentTerm: "账期 45 天",
+    trustNote: "本地长期合作 · 物流稳定",
+  },
+  {
+    shortName: "焦作高纯石墨",
+    fullName: "焦作市高纯石墨制品有限公司",
+    category: "石墨电极粉 / 石墨匣钵料",
+    monthlySpend: "¥30K / 月",
+    paymentTerm: "账期 30 天",
+    trustNote: "供货周期 7 天 · 小批量灵活",
+  },
+  {
+    shortName: "上海博凯化工",
+    fullName: "上海博凯精细化工有限公司",
+    category: "硅微粉 / 化工辅料",
+    monthlySpend: "¥40K / 月",
+    paymentTerm: "账期 30 天",
+    trustNote: "技术支持响应快 · 配方咨询免费",
+  },
+  {
+    shortName: "宜兴蓝海耐火",
+    fullName: "宜兴市蓝海耐火材料有限公司",
+    category: "电熔白刚玉 W18 / 本地原料",
+    monthlySpend: "¥90K / 月",
+    paymentTerm: "账期 30 天",
+    trustNote: "本地 · 半小时车程到厂 · 应急加急可优先",
+  },
+];
+
+export type PurchaseInboxCard = {
+  id: string;
+  kind: "采购发票" | "采购合同" | "字段缺失";
+  source: string;
+  uploadedAt: string;
+  aiSummary: string;
+  fields: { key: string; value: string }[];
+  suggestedAction: string;
+};
+
+export const purchaseInboxCards: PurchaseInboxCard[] = [
+  {
+    id: "PIN-2026-014",
+    kind: "采购发票",
+    source: "山东中铝物资_增值税专票_20260517-A001.pdf",
+    uploadedAt: "2026-05-17 09:12",
+    aiSummary:
+      "已抽取到金额、税率、货物、数量；与 PO-2026-008 自动匹配，建议确认后自动入库 + 生成应付账款凭证。",
+    fields: [
+      { key: "发票号", value: "20260517-A001" },
+      { key: "供应商", value: "山东中铝物资" },
+      { key: "金额 (含税)", value: "¥96,000" },
+      { key: "税率", value: "13%" },
+      { key: "货物", value: "α 氧化铝粉 CT3000SG" },
+      { key: "数量", value: "4,000 kg" },
+      { key: "匹配订单", value: "PO-2026-008" },
+    ],
+    suggestedAction: "建议：确认 → 自动入库到 A-02 → 生成应付账款 ¥96,000 · 账期至 2026-07-24",
+  },
+  {
+    id: "PIN-2026-013",
+    kind: "采购合同",
+    source: "万华化学_水玻璃采购合同_2026Q3.pdf",
+    uploadedAt: "2026-05-17 08:48",
+    aiSummary:
+      "新供应商，已抽出合同金额、货物、数量、首单交期；建议生成新的采购订单 PO-2026-009 并建档供应商。",
+    fields: [
+      { key: "供应商", value: "万华化学集团股份有限公司" },
+      { key: "货物", value: "钠水玻璃 (Na₂SiO₃ · 模数 3.3)" },
+      { key: "数量", value: "5 吨" },
+      { key: "合同金额", value: "¥120,000" },
+      { key: "账期", value: "60 天" },
+      { key: "首单交期", value: "2026-06-15" },
+    ],
+    suggestedAction: "建议：生成 PO-2026-009 + 新建「万华化学」供应商档案 + 提示采购经理预付定金 30%",
+  },
+  {
+    id: "PIN-2026-012",
+    kind: "字段缺失",
+    source: "上海博凯化工_发票_20260515-B003.pdf",
+    uploadedAt: "2026-05-17 08:21",
+    aiSummary:
+      "AI 已抽出发票主要信息，但「税率」字段缺失（票面被印章遮挡），无法自动生成应付凭证。",
+    fields: [
+      { key: "发票号", value: "20260515-B003" },
+      { key: "供应商", value: "上海博凯化工" },
+      { key: "金额 (含税)", value: "¥13,600" },
+      { key: "税率", value: "— 未识别" },
+      { key: "货物", value: "硅微粉 SF965" },
+      { key: "匹配订单", value: "PO-2026-005" },
+    ],
+    suggestedAction: "建议：人工补充税率（推测 13%）→ 重新生成应付凭证；或退回供应商重开发票",
+  },
+];

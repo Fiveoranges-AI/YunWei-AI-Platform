@@ -17,6 +17,7 @@ import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
 import { JintaiDailyBriefing } from "./JintaiDailyBriefing";
 import { JintaiTrustPanel } from "./JintaiTrustPanel";
 import { JintaiFinancePanel } from "./JintaiFinancePanel";
+import { JintaiPurchasePanel } from "./JintaiPurchasePanel";
 
 function makeSimulatedCard(
   kind: ExtractionCard["kind"],
@@ -150,6 +151,7 @@ type TabKey =
   | "inbox"
   | "production"
   | "finance"
+  | "purchase"
   | "ask"
   | "trust";
 
@@ -158,6 +160,7 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统" },
   { key: "production", label: "生产流转", hint: "这单生产到哪了" },
   { key: "finance", label: "💰 财务", hint: "AI 三表 · 草稿待复核" },
+  { key: "purchase", label: "📦 采购", hint: "订单 · 供应商 · AI 收件箱" },
   { key: "ask", label: "问问 AI", hint: "中文问，答案带来源" },
   { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯" },
 ];
@@ -180,6 +183,10 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
     title: "财务 · AI 三表",
     sub: "AI 已自动归集本月凭证 → 生成资产负债表 / 损益表 / 现金流量表草稿 → 王会计一键复核确认。",
   },
+  purchase: {
+    title: "采购 · 订单 + 供应商",
+    sub: "AI 自动抽取邮件合同、发票、入库单字段，采购 + 财务双确认入账，防漏付防漏入。",
+  },
   ask: {
     title: "老板 AI 助手",
     sub: "用中文问，AI 拿已确认数据作答，每条结论都附原始来源引用。",
@@ -195,6 +202,7 @@ const HASH_TO_TAB: Record<string, TabKey> = {
   "#inbox": "inbox",
   "#production": "production",
   "#finance": "finance",
+  "#purchase": "purchase",
   "#ask": "ask",
   "#trust": "trust",
 };
@@ -217,6 +225,7 @@ const SECTION_TO_TAB: Record<string, TabKey> = {
   briefing: "overview",
   trust: "trust",
   finance: "finance",
+  purchase: "purchase",
 };
 
 export function JintaiDemoPage() {
@@ -521,12 +530,17 @@ export function JintaiDemoPage() {
           <JintaiFinancePanel />
         </div>
 
-        {/* Tab 5: 问问 AI */}
+        {/* Tab 5: 📦 采购 — 订单 + 供应商 + AI 收件箱 */}
+        <div role="tabpanel" hidden={activeTab !== "purchase"}>
+          <JintaiPurchasePanel />
+        </div>
+
+        {/* Tab 6: 问问 AI */}
         <div role="tabpanel" hidden={activeTab !== "ask"}>
           <JintaiAIQueryPanel />
         </div>
 
-        {/* Tab 6: 可信 AI */}
+        {/* Tab 7: 可信 AI */}
         <div role="tabpanel" hidden={activeTab !== "trust"}>
           <JintaiTrustPanel />
         </div>
