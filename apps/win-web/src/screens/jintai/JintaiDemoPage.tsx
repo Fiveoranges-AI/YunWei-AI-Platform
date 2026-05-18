@@ -16,6 +16,7 @@ import { JintaiProductionTabs } from "./JintaiProductionTabs";
 import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
 import { JintaiDailyBriefing } from "./JintaiDailyBriefing";
 import { JintaiTrustPanel } from "./JintaiTrustPanel";
+import { JintaiFinancePanel } from "./JintaiFinancePanel";
 
 function makeSimulatedCard(
   kind: ExtractionCard["kind"],
@@ -144,12 +145,19 @@ const KIND_SIZE: Record<ExtractionCard["kind"], string> = {
   "Excel 订单": "76 KB · 1 sheet · 12 行",
 };
 
-type TabKey = "overview" | "inbox" | "production" | "ask" | "trust";
+type TabKey =
+  | "overview"
+  | "inbox"
+  | "production"
+  | "finance"
+  | "ask"
+  | "trust";
 
 const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "overview", label: "概览", hint: "今天总体什么情况" },
   { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统" },
   { key: "production", label: "生产流转", hint: "这单生产到哪了" },
+  { key: "finance", label: "💰 财务", hint: "AI 三表 · 草稿待复核" },
   { key: "ask", label: "问问 AI", hint: "中文问，答案带来源" },
   { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯" },
 ];
@@ -168,6 +176,10 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
     title: "生产流转",
     sub: "CRM → 订单 → 计划 → 流转 → 入库 → 出货，全过程可回放任意节点。",
   },
+  finance: {
+    title: "财务 · AI 三表",
+    sub: "AI 已自动归集本月凭证 → 生成资产负债表 / 损益表 / 现金流量表草稿 → 王会计一键复核确认。",
+  },
   ask: {
     title: "老板 AI 助手",
     sub: "用中文问，AI 拿已确认数据作答，每条结论都附原始来源引用。",
@@ -182,6 +194,7 @@ const HASH_TO_TAB: Record<string, TabKey> = {
   "#overview": "overview",
   "#inbox": "inbox",
   "#production": "production",
+  "#finance": "finance",
   "#ask": "ask",
   "#trust": "trust",
 };
@@ -203,6 +216,7 @@ const SECTION_TO_TAB: Record<string, TabKey> = {
   production: "production",
   briefing: "overview",
   trust: "trust",
+  finance: "finance",
 };
 
 export function JintaiDemoPage() {
@@ -502,12 +516,17 @@ export function JintaiDemoPage() {
           <JintaiProductionTabs />
         </div>
 
-        {/* Tab 4: 问问 AI */}
+        {/* Tab 4: 💰 财务 — AI 三表草稿 + 复核 */}
+        <div role="tabpanel" hidden={activeTab !== "finance"}>
+          <JintaiFinancePanel />
+        </div>
+
+        {/* Tab 5: 问问 AI */}
         <div role="tabpanel" hidden={activeTab !== "ask"}>
           <JintaiAIQueryPanel />
         </div>
 
-        {/* Tab 5: 可信 AI */}
+        {/* Tab 6: 可信 AI */}
         <div role="tabpanel" hidden={activeTab !== "trust"}>
           <JintaiTrustPanel />
         </div>

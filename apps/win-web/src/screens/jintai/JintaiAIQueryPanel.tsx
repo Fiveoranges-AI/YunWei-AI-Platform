@@ -8,8 +8,10 @@ import { JintaiSourceCitation } from "./components";
 
 export function JintaiAIQueryPanel() {
   const isDesktop = useIsDesktop();
-  // 视觉减负：6 → 4 个最有故事性的预设问题
-  const visibleQuestions = presetQuestions.slice(0, 4);
+  // Iter 8：4 业务进度 + 2 财务（采购在 Iter 9 接入）
+  const visibleQuestions = presetQuestions.slice(0, 6);
+  const productionQs = visibleQuestions.slice(0, 4);
+  const financeQs = visibleQuestions.slice(4, 6);
   const [active, setActive] = useState<AIBlock | null>(presetQuestions[0]);
   const [draft, setDraft] = useState("");
   const [isAsking, setIsAsking] = useState(false);
@@ -92,46 +94,18 @@ export function JintaiAIQueryPanel() {
           </button>
         </div>
 
-        <div
-          style={{
-            fontSize: 10.5,
-            color: "var(--ink-500)",
-            fontWeight: 700,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-            marginTop: 6,
-          }}
-        >
-          预设问题
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {visibleQuestions.map((q) => {
-            const isActive = active?.question === q.question;
-            return (
-              <button
-                key={q.question}
-                onClick={() => void ask(q.question)}
-                className="pill"
-                style={{
-                  display: "block",
-                  textAlign: "left",
-                  background: isActive ? "var(--ai-100)" : "var(--surface-2)",
-                  color: isActive ? "var(--ai-700)" : "var(--ink-700)",
-                  border: `1px solid ${isActive ? "#bddff3" : "var(--ink-100)"}`,
-                  padding: "9px 12px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  borderRadius: 10,
-                  lineHeight: 1.45,
-                  whiteSpace: "normal",
-                }}
-              >
-                {q.question}
-              </button>
-            );
-          })}
-        </div>
+        <QuestionGroup
+          label="业务进度"
+          items={productionQs}
+          activeQuestion={active?.question}
+          onPick={ask}
+        />
+        <QuestionGroup
+          label="财务 · 采购"
+          items={financeQs}
+          activeQuestion={active?.question}
+          onPick={ask}
+        />
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -141,6 +115,60 @@ export function JintaiAIQueryPanel() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function QuestionGroup({
+  label,
+  items,
+  activeQuestion,
+  onPick,
+}: {
+  label: string;
+  items: AIBlock[];
+  activeQuestion?: string;
+  onPick: (q: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+      <div
+        style={{
+          fontSize: 10.5,
+          color: "var(--ink-500)",
+          fontWeight: 700,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </div>
+      {items.map((q) => {
+        const isActive = activeQuestion === q.question;
+        return (
+          <button
+            key={q.question}
+            onClick={() => void onPick(q.question)}
+            className="pill"
+            style={{
+              display: "block",
+              textAlign: "left",
+              background: isActive ? "var(--ai-100)" : "var(--surface-2)",
+              color: isActive ? "var(--ai-700)" : "var(--ink-700)",
+              border: `1px solid ${isActive ? "#bddff3" : "var(--ink-100)"}`,
+              padding: "9px 12px",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              borderRadius: 10,
+              lineHeight: 1.45,
+              whiteSpace: "normal",
+            }}
+          >
+            {q.question}
+          </button>
+        );
+      })}
     </div>
   );
 }

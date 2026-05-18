@@ -88,7 +88,7 @@ export type ExtractionCard = {
   kind: "合同" | "生产流转单" | "出货单" | "Excel 订单";
   source: string;
   uploadedAt: string;
-  status: "待确认" | "订单已生成" | "流转单已生成" | "出货已记录";
+  status: "待确认" | "已确认" | "已驳回" | "订单已生成" | "流转单已生成" | "出货已记录";
   confidence: number;
   fields: { key: string; value: string; confidence?: number }[];
   toBeGenerated: string;
@@ -585,6 +585,48 @@ export const presetQuestions: AIBlock[] = [
     ],
     next: ["销售今日内分别发出 3 条客户进度通知（建议附 1 张烧结实时照片给容百）。"],
   },
+  /* ---- 财务 + 采购预设问题 (Iter 8/9) ---- */
+  {
+    question: "本月利润多少？毛利率怎么样？",
+    verdict:
+      "2026-05 月营业收入 6,800 K¥，净利润 1,189 K¥，毛利率 35.0%（环比 +0.2 个点）。锂电承烧板（容百 3,200K + 风华 950K）占收入 61%，是利润主引擎；横店东磁匣钵单价小幅下行，拉低毛利 0.4 个点。",
+    details: [
+      { key: "营业收入", value: "6,800 K¥（环比 +8.6%）" },
+      { key: "营业成本", value: "4,420 K¥" },
+      { key: "毛利率", value: "35.0%（行业上限 35–40%）" },
+      { key: "期间费用", value: "795 K¥（销 280 + 管 350 + 财 45 + 研 120）" },
+      { key: "净利润", value: "1,189 K¥" },
+      { key: "来源", value: "损益表 2026-05 · 王会计 05-17 09:31 确认" },
+    ],
+    evidence: [
+      { kind: "Excel", label: "2026-05 损益表 · AI 草稿已确认" },
+      { kind: "合同", label: "本月 3 张销售合同（容百 / 横店 / 风华）" },
+    ],
+    next: [
+      "横店东磁匣钵单价压力建议 Q3 谈判提示成本上行（电熔白刚玉 +6.7%）。",
+      "下月排产时优先调度容百高毛利单，减少横店低价单的产能占用。",
+    ],
+  },
+  {
+    question: "本周回款情况？哪几笔到账？",
+    verdict:
+      "本周（05-12 ~ 05-17）已收回款 ¥2,150 K：容百锂电 SO-2026-001 首付 ¥1,200K（合同 30% 首款，05-14 到账）+ 横店东磁 ZC-022 验收尾款 ¥800K（05-15 到账）+ 其他小额 ¥150K。本周应收净增加 ¥520K（容百 + 厦钨新单发货确认应收）。",
+    details: [
+      { key: "容百锂电", value: "¥1,200K · 05-14 招行到账 · 首付 30%" },
+      { key: "横店东磁", value: "¥800K · 05-15 工行到账 · 验收尾款" },
+      { key: "其他", value: "¥150K · 风华 + 三环零碎尾款" },
+      { key: "本周入金合计", value: "¥2,150K" },
+      { key: "下周预计回款", value: "¥1,800K（容百 SO-2026-001 60 天账期到期一笔）" },
+    ],
+    evidence: [
+      { kind: "Excel", label: "招行 + 工行流水 05-12~05-17 · 银行已对账" },
+      { kind: "合同", label: "容百 / 横店 销售合同（付款节奏条款）" },
+    ],
+    next: [
+      "提醒销售王经理：容百 SO-2026-001 下周到期账款 ¥1,800K 提前 3 天去催对账。",
+      "厦钨新能本月发货 1 笔尚未确认收货，建议本周内通知物流催签。",
+    ],
+  },
 ];
 
 export const trustItems = [
@@ -597,8 +639,16 @@ export const trustItems = [
     body: "AI 抽取后先生成「待确认草稿」，必须由对应业务人员（销售 / 生产 / 检验）审核后才会进入正式订单 / 生产流转单。",
   },
   {
+    title: "财务三表绝不被 AI 修改",
+    body: "资产负债表 / 损益表 / 现金流量表 全程 AI 只生成草稿，财务总监 + 王会计双签确认后才入账，不接管任何凭证修改权限。",
+  },
+  {
+    title: "财务级双签 · 银行级加密",
+    body: "采购付款、应收冲账、报表确认 全部要求双人复核 + AES-256 端到端加密 + 操作日志可导出审计。",
+  },
+  {
     title: "每条字段都有置信度",
-    body: "置信度低于 85% 的字段会高亮提示（如手写操作人姓名），提醒人工重点检查。",
+    body: "置信度低于 85% 的字段会高亮提示（如手写操作人姓名 / 印章遮挡的税率），提醒人工重点检查。",
   },
   {
     title: "原始资料原样保存",
@@ -648,3 +698,176 @@ export const traceExamples: Array<{
     confirmedBy: "原始 5 张检包单分别由 周师傅 / 检包组长 确认",
   },
 ];
+
+/* ===========================================================================
+ *  财务模块 (Iter 8)
+ *
+ *  设计原则：
+ *  - 数字单位统一千元 (K¥)，避免演示时跳行
+ *  - 资产负债表 + 损益表 + 现金流量表 内部数字呼应：
+ *      · 资产负债表 货币资金 8,200  ↔ 现金流量表 期末余额 8,200
+ *      · 损益表 销售收入 6,800     ↔ 现金流量表 销售商品收到现金 5,500（差额计入应收）
+ *      · 损益表 净利润 1,189       ↔ 资产负债表 留存收益本期增加
+ *  - 月份口径：2026-05；资产负债表为 2026-05-31 时点
+ * ========================================================================= */
+
+export type FinanceRow = {
+  key: string;
+  value: string;
+  bold?: boolean; // 小计 / 合计加粗
+  indent?: number; // 0 = 顶级科目，1 = 子科目
+};
+
+export type FinanceReport = {
+  id: "balance" | "income" | "cashflow";
+  label: string;
+  sub: string;
+  period: string; // 报表期间文字
+  aiDraft: string; // 顶部 "AI 已自动生成" 草稿提示
+  confirmedBy: string; // 人工确认锚点
+  sections: { title: string; rows: FinanceRow[]; subtotal?: FinanceRow }[];
+  bottomLine: FinanceRow; // 资产合计 / 净利润 / 现金净增加
+};
+
+export const financeReports: FinanceReport[] = [
+  {
+    id: "balance",
+    label: "资产负债表",
+    sub: "Balance Sheet · 2026-05-31",
+    period: "2026-05-31 月末",
+    aiDraft:
+      "智通 AI 已根据本月 12 张凭证、5 张采购入库单、3 张销售出库单自动汇总科目余额，生成草稿。",
+    confirmedBy: "财务 · 王会计 · 2026-05-17 09:24 复核确认",
+    sections: [
+      {
+        title: "流动资产",
+        rows: [
+          { key: "货币资金", value: "8,200" },
+          { key: "应收账款", value: "12,500" },
+          { key: "存货", value: "6,800" },
+          { key: "预付账款", value: "1,500" },
+        ],
+        subtotal: { key: "流动资产小计", value: "29,000", bold: true },
+      },
+      {
+        title: "非流动资产",
+        rows: [
+          { key: "固定资产 (账面净额)", value: "18,000" },
+          { key: "长期股权投资", value: "0" },
+        ],
+        subtotal: { key: "非流动资产小计", value: "18,000", bold: true },
+      },
+      {
+        title: "流动负债",
+        rows: [
+          { key: "短期借款", value: "5,000" },
+          { key: "应付账款", value: "7,800" },
+          { key: "应交税费", value: "1,200" },
+        ],
+        subtotal: { key: "流动负债小计", value: "14,000", bold: true },
+      },
+      {
+        title: "非流动负债 + 所有者权益",
+        rows: [
+          { key: "长期借款", value: "3,000" },
+          { key: "实收资本", value: "10,000" },
+          { key: "留存收益", value: "19,300", indent: 0 },
+          { key: "  本期净利润已结转 +1,189", value: "—", indent: 1 },
+        ],
+        subtotal: { key: "权益 + 长借小计", value: "32,300", bold: true },
+      },
+    ],
+    bottomLine: { key: "资产总计 = 负债 + 所有者权益", value: "47,000", bold: true },
+  },
+  {
+    id: "income",
+    label: "损益表",
+    sub: "Income Statement · 2026-05",
+    period: "2026-05-01 ~ 05-31",
+    aiDraft:
+      "智通 AI 已根据本月 3 张销售出库单、5 张采购入库单、12 张费用凭证自动归集收入与成本，生成草稿。",
+    confirmedBy: "财务 · 王会计 · 2026-05-17 09:31 复核确认",
+    sections: [
+      {
+        title: "营业收入",
+        rows: [
+          { key: "容百锂电 · 承烧板", value: "3,200", indent: 1 },
+          { key: "横店东磁 · 匣钵", value: "1,800", indent: 1 },
+          { key: "风华高科 · MLCC 承烧板", value: "950", indent: 1 },
+          { key: "其他客户合计", value: "850", indent: 1 },
+        ],
+        subtotal: { key: "营业收入合计", value: "6,800", bold: true },
+      },
+      {
+        title: "营业成本与毛利",
+        rows: [
+          { key: "营业成本", value: "4,420" },
+          { key: "毛利 (毛利率 35.0%)", value: "2,380", bold: true },
+        ],
+      },
+      {
+        title: "期间费用",
+        rows: [
+          { key: "销售费用", value: "280" },
+          { key: "管理费用", value: "350" },
+          { key: "财务费用", value: "45" },
+          { key: "研发费用", value: "120" },
+        ],
+        subtotal: { key: "期间费用合计", value: "795", bold: true },
+      },
+      {
+        title: "利润与所得税",
+        rows: [
+          { key: "营业利润", value: "1,585" },
+          { key: "利润总额", value: "1,585" },
+          { key: "所得税 (25%)", value: "396" },
+        ],
+      },
+    ],
+    bottomLine: { key: "本月净利润", value: "1,189", bold: true },
+  },
+  {
+    id: "cashflow",
+    label: "现金流量表",
+    sub: "Cash Flow · 2026-05",
+    period: "2026-05-01 ~ 05-31",
+    aiDraft:
+      "智通 AI 已根据本月 8 张银行流水、PayPal 入账、5 张采购付款单自动归集三类现金流，生成草稿。",
+    confirmedBy: "财务 · 王会计 · 2026-05-17 09:38 复核确认",
+    sections: [
+      {
+        title: "经营活动现金流",
+        rows: [
+          { key: "销售商品收到现金", value: "5,500", indent: 1 },
+          { key: "购买商品支付现金", value: "−3,800", indent: 1 },
+          { key: "支付职工工资", value: "−650", indent: 1 },
+          { key: "支付各项税费", value: "−180", indent: 1 },
+        ],
+        subtotal: { key: "经营活动净现金流", value: "+870", bold: true },
+      },
+      {
+        title: "投资活动现金流",
+        rows: [
+          { key: "购置生产设备 (等静压辅机)", value: "−200", indent: 1 },
+        ],
+        subtotal: { key: "投资活动净现金流", value: "−200", bold: true },
+      },
+      {
+        title: "筹资活动现金流",
+        rows: [
+          { key: "偿还短期借款本金", value: "−500", indent: 1 },
+        ],
+        subtotal: { key: "筹资活动净现金流", value: "−500", bold: true },
+      },
+      {
+        title: "现金余额",
+        rows: [
+          { key: "期初货币资金余额", value: "8,030" },
+          { key: "本期现金净增加", value: "+170", bold: true },
+        ],
+      },
+    ],
+    bottomLine: { key: "期末货币资金余额 (与资产负债表一致)", value: "8,200", bold: true },
+  },
+];
+

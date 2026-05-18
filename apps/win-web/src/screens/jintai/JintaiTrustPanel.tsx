@@ -5,8 +5,8 @@ import { JintaiSourceCitation } from "./components";
 
 export function JintaiTrustPanel() {
   const isMobile = useIsMobile();
-  // 视觉减负：6 → 4 张安全卡（其余在其他 tab 已自然展示）；trace 示例 2 → 1
-  const visibleTrust = trustItems.slice(0, 4);
+  // Iter 8/9：在 4 张原有 + 2 张新增财务安全后扩到 6 张展示（其余在其他 tab 自然展示）
+  const visibleTrust = trustItems.slice(0, 6);
   const visibleTrace = traceExamples.slice(0, 1);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
