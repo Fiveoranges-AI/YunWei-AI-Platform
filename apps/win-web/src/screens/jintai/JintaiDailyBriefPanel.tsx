@@ -359,6 +359,7 @@ function ActionsBlock({ actions }: { actions: DailyBriefAction[] }) {
       else next.add(i);
       return next;
     });
+  const allDone = done.size === actions.length;
 
   return (
     <div className="card" style={{ padding: 18 }}>
@@ -368,13 +369,37 @@ function ActionsBlock({ actions }: { actions: DailyBriefAction[] }) {
           AI 建议今日行动
         </span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: "var(--ink-500)" }}>
+        <span
+          style={{
+            fontSize: 11,
+            color: allDone ? "var(--ok-700)" : "var(--ink-500)",
+            fontWeight: allDone ? 700 : 500,
+          }}
+        >
           已处理 {done.size} / {actions.length}
+          {allDone && " ✓"}
         </span>
       </div>
       <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 12 }}>
         点一下勾选「已处理」，AI 会同步到日报历史里。
       </div>
+      {allDone && (
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "var(--ok-100)",
+            border: "1px solid #c7e4d2",
+            color: "var(--ok-700)",
+            fontSize: 12.5,
+            fontWeight: 600,
+            marginBottom: 10,
+            lineHeight: 1.55,
+          }}
+        >
+          🎉 今日 AI 建议 100% 已执行。明早 7:55 AI 会自动准备明日日报。
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {actions.map((a, i) => {
           const isDone = done.has(i);
