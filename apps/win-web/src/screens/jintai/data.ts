@@ -669,6 +669,30 @@ export const presetQuestions: AIBlock[] = [
       "宜兴蓝海距离近、关系长，可提前 3 天主动结清以维护应急加急通道。",
     ],
   },
+  /* ---- 经营日报预设问题 (Iter 11) ---- */
+  {
+    question: "今日经营日报怎么写的？哪些重点？",
+    verdict:
+      "2026-05-18（周一）经营日报 AI 07:55 已自动生成，标记 1 红 / 2 黄 / 4 行动。最该关注 3 件事：① 容百 SC-2026-016 烧结晚 2 天影响 06-20 交期（高风险） ② 王会计 5 月三表 1,189K 净利润已生成等您看一眼 ③ α 氧化铝粉本批涨价 6.7%（中风险）。完整版在「📅 经营日报」tab。",
+    details: [
+      { key: "今日要事", value: "销售 1 / 财务 1 / 生产 2 / 采购 1 / 风险 1" },
+      { key: "财务", value: "今日回款 ¥1,200K · 月累计 ¥4,800K · 货币资金 ¥8,200K" },
+      { key: "生产", value: "进行中 12 张 · 今日完成 2 张 · 延期风险 1 单" },
+      { key: "采购", value: "今日入库 α 氧化铝粉 ¥96K · 在途莫来石 5-22 到 · 1 笔账期超期" },
+      { key: "客户", value: "跟进容百王主管 · 新询盘宁波锂电 12,000 件 · 风华 -15%" },
+      { key: "AI 建议", value: "4 个行动 · 上午 9:00 优先电话容百车间确认 SC-2026-016 进度" },
+    ],
+    evidence: [
+      { kind: "Excel", label: "经营日报 2026-05-18 · AI 草稿" },
+      { kind: "生产流转单", label: "SC-2026-015 / 016 / 017" },
+      { kind: "合同", label: "容百 + 横店 + 风华 5 月订单合计" },
+    ],
+    next: [
+      "上午 9:00 给容百锂电王主管去电（高风险跟进）",
+      "上午 10:30 和王会计 review 5 月三表（财务一签）",
+      "下午 14:00 对采购小李，山东中铝 6 月行情 + 锁价决策",
+    ],
+  },
 ];
 
 export const trustItems = [
@@ -747,6 +771,15 @@ export const traceExamples: Array<{
     },
     extractedBy: "AI 自三方账套（Kingdee + PayPal + 银行流水）聚合 · 不修改原凭证",
     confirmedBy: "财务 · 王会计 · 2026-05-17 09:31 复核确认 + 财务总监二签",
+  },
+  {
+    aiFact: "2026-05-18 经营日报由 AI 07:55 自动生成（1 红 / 2 黄 / 4 行动）",
+    source: {
+      kind: "Excel",
+      label: "经营日报 2026-05-18 · AI 草稿 · 已推送许总微信",
+    },
+    extractedBy: "AI 跨 5 模块聚合（财务 + 生产 + 采购 + 客户 + 风险）· 07:55 触发",
+    confirmedBy: "许总 · 2026-05-18 08:02 在手机端打开 · 1 条已标「已处理」",
   },
 ];
 
@@ -1133,3 +1166,124 @@ export const purchaseInboxCards: PurchaseInboxCard[] = [
     suggestedAction: "建议：人工补充税率（推测 13%）→ 重新生成应付凭证；或退回供应商重开发票",
   },
 ];
+
+/* ===========================================================================
+ *  📅 经营日报 (Iter 11)
+ *
+ *  老板早上 8 点打开手机看的 5 分钟摘要。
+ *  跨 tab 聚合：财务 / 生产 / 采购 / 客户 / 风险 / AI 今日行动建议
+ *  数字 100% 自洽于其它 tab：
+ *    - 货币资金 8,200 ↔ 资产负债表
+ *    - 容百回款 1,200K ↔ Ask AI 本周回款 Q6
+ *    - α 氧化铝粉涨价 6.7% ↔ Ask AI Q7
+ *    - 进行中流转 12 张 ↔ 概览 KPI
+ *    - 5 月净利润 1,189K ↔ 损益表
+ * ========================================================================= */
+
+export type DailyBriefBlock = {
+  icon: string;
+  category: "财务" | "生产" | "采购" | "客户";
+  bullets: string[]; // 每条 ≤ 60 字，数字用 「」包裹
+  aiHint: string;
+};
+
+export type DailyBriefRisk = {
+  level: "high" | "medium" | "low";
+  title: string;
+  recommendation: string;
+};
+
+export type DailyBriefAction = {
+  time: string; // "上午 9:00"
+  action: string;
+  category: "财务" | "生产" | "采购" | "销售";
+};
+
+export type DailyBriefHistory = {
+  date: string;
+  status: "已读" | "未读";
+  red: number;
+  yellow: number;
+  actions: number;
+};
+
+export const dailyBrief = {
+  date: "2026-05-18",
+  weekday: "周一",
+  generatedAt: "2026-05-18 07:55",
+  counts: { sales: 1, finance: 1, production: 2, purchase: 1, risk: 1 },
+  aiSummary:
+    "今天最该关注 3 件事：① 容百锂电 SC-2026-016 烧结进度比计划晚 2 天，影响 06-20 交期；② 王会计 5 月三表（净利润 1,189K · 毛利率 35.0%）已生成，等您看一眼； ③ α 氧化铝粉本批 PO-2026-008 比上批涨价 6.7%，下批采购前建议先问行情。",
+  blocks: [
+    {
+      icon: "💰",
+      category: "财务",
+      bullets: [
+        "今日回款「¥1,200K」(容百锂电 SO-2026-001 首付) · 本月累计回款「¥4,800K」/ 应收「¥5,200K」",
+        "货币资金余额「¥8,200K」(月初 ¥8,030K · +¥170K)",
+        "下月初有 3 张原料采购付款合计「¥327K」到期，建议预留备用金",
+      ],
+      aiHint: "5 月利润「¥1,189K」已交财务总监二签，您可直接在「💰 财务」tab 看三表草稿。",
+    },
+    {
+      icon: "🏭",
+      category: "生产",
+      bullets: [
+        "进行中流转单「12 张」· 今日完成「2 张」(容百 SC-2026-015 烧结 / 横店东磁 SC-2026-017 检包)",
+        "延期风险「1 单」: 容百 SC-2026-016 烧结进度比计划晚「2 天」",
+        "今日待出货「2 单」合计「¥315K」(容百宁波 + 厦钨宁德)",
+      ],
+      aiHint: "建议上午 9:00 给容百锂电王主管去电，提前告知交期可能偏移 1-2 天。",
+    },
+    {
+      icon: "📦",
+      category: "采购",
+      bullets: [
+        "今日入库: 山东中铝 α 氧化铝粉 「4,000 kg / ¥96K」(PO-2026-008)",
+        "在途: 萍乡耐材 莫来石骨料预计「05-22」到货 (PO-2026-007 已发运)",
+        "异常: 杭州瑞晟 磷酸二氢铝供应商账期约定「30 天」，本笔已「45 天」未付",
+      ],
+      aiHint: "α 氧化铝粉本批 ¥24/kg 比上批涨「+6.7%」，建议下批采购前问行情。",
+    },
+    {
+      icon: "🤝",
+      category: "客户",
+      bullets: [
+        "今日跟进: 容百锂电王主管，确认 5 月 SC-2026-016 排产 + 6 月计划",
+        "新询盘: 宁波某锂电厂询 莫来石承烧板「12,000 件」(销售已应答)",
+        "异常: 风华高科本月订单同比「-15%」，需主动拜访",
+      ],
+      aiHint: "已为您起草 1 条客户跟进短信（容百王主管），「问问 AI」一键查看。",
+    },
+  ] as DailyBriefBlock[],
+  risks: [
+    {
+      level: "high",
+      title: "容百 SC-2026-016 烧结进度晚 2 天，可能影响 06-20 交期",
+      recommendation: "立即跟进车间主管 + 提前告知容百仓储经理交期偏移",
+    },
+    {
+      level: "medium",
+      title: "α 氧化铝粉本批涨价「+6.7%」(¥22.5 → ¥24 / kg)",
+      recommendation: "下批采购前问行情；可考虑 Q3 与山东中铝洽谈 5 吨锁价框架协议",
+    },
+    {
+      level: "medium",
+      title: "风华高科本月订单同比「-15%」",
+      recommendation: "销售小张本周内主动拜访，了解需求变化原因",
+    },
+  ] as DailyBriefRisk[],
+  actions: [
+    { time: "上午 9:00", category: "生产", action: "电话容百锂电王主管，确认 SC-2026-016 是否可接受 06-22 交付（原 06-20）" },
+    { time: "上午 10:30", category: "财务", action: "和王会计 review 5 月三表，重点看销售费用环比 ↑ 12% 是否合理" },
+    { time: "下午 14:00", category: "采购", action: "和采购小李对 山东中铝 6 月行情，决策是否提前锁价 5 吨" },
+    { time: "下午 16:00", category: "销售", action: "给销售小张派任务：本月二次拜访风华高科（订单 -15%）" },
+  ] as DailyBriefAction[],
+  history: [
+    { date: "2026-05-17 周日", status: "已读", red: 1, yellow: 2, actions: 6 },
+    { date: "2026-05-16 周六", status: "已读", red: 0, yellow: 3, actions: 4 },
+    { date: "2026-05-15 周五", status: "已读", red: 2, yellow: 1, actions: 5 },
+    { date: "2026-05-14 周四", status: "已读", red: 0, yellow: 2, actions: 3 },
+    { date: "2026-05-13 周三", status: "已读", red: 1, yellow: 1, actions: 4 },
+  ] as DailyBriefHistory[],
+};

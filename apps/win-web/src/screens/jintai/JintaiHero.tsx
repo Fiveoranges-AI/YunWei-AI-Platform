@@ -135,6 +135,22 @@ export function JintaiHero({
         >
           📦 采购订单 + 供应商
         </button>
+        <button
+          onClick={() => onScrollTo("briefing")}
+          style={{
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 8,
+            border: "1px solid var(--ai-500)",
+            background: "var(--ai-100)",
+            color: "var(--ai-700)",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          📅 今日经营日报
+        </button>
       </div>
     </div>
   );

@@ -14,10 +14,11 @@ import type { ProcessingCard } from "./JintaiUploadInbox";
 import { JintaiWorkflowTimeline } from "./JintaiWorkflowTimeline";
 import { JintaiProductionTabs } from "./JintaiProductionTabs";
 import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
-import { JintaiDailyBriefing } from "./JintaiDailyBriefing";
 import { JintaiTrustPanel } from "./JintaiTrustPanel";
+import { dailyBrief } from "./data";
 import { JintaiFinancePanel } from "./JintaiFinancePanel";
 import { JintaiPurchasePanel } from "./JintaiPurchasePanel";
+import { JintaiDailyBriefPanel } from "./JintaiDailyBriefPanel";
 
 function makeSimulatedCard(
   kind: ExtractionCard["kind"],
@@ -152,6 +153,7 @@ type TabKey =
   | "production"
   | "finance"
   | "purchase"
+  | "briefing"
   | "ask"
   | "trust";
 
@@ -161,6 +163,7 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "production", label: "生产流转", hint: "这单生产到哪了" },
   { key: "finance", label: "💰 财务", hint: "AI 三表 · 草稿待复核" },
   { key: "purchase", label: "📦 采购", hint: "订单 · 供应商 · AI 收件箱" },
+  { key: "briefing", label: "📅 经营日报", hint: "老板 5 分钟看完今天" },
   { key: "ask", label: "问问 AI", hint: "中文问，答案带来源" },
   { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯" },
 ];
@@ -187,6 +190,10 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
     title: "采购 · 订单 + 供应商",
     sub: "AI 自动抽取邮件合同、发票、入库单字段，采购 + 财务双确认入账，防漏付防漏入。",
   },
+  briefing: {
+    title: "经营日报 · 老板 5 分钟",
+    sub: "AI 早上 7:55 自动整合财务 / 生产 / 采购 / 客户 / 风险 5 大模块，许总醒后 5 分钟看完。",
+  },
   ask: {
     title: "老板 AI 助手",
     sub: "用中文问，AI 拿已确认数据作答，每条结论都附原始来源引用。",
@@ -203,6 +210,7 @@ const HASH_TO_TAB: Record<string, TabKey> = {
   "#production": "production",
   "#finance": "finance",
   "#purchase": "purchase",
+  "#briefing": "briefing",
   "#ask": "ask",
   "#trust": "trust",
 };
@@ -222,7 +230,8 @@ const SECTION_TO_TAB: Record<string, TabKey> = {
   "ai-query": "ask",
   workflow: "production",
   production: "production",
-  briefing: "overview",
+  // legacy「briefing」(原指概览内的每日简报) 现重定向到新的「📅 经营日报」tab
+  briefing: "briefing",
   trust: "trust",
   finance: "finance",
   purchase: "purchase",
@@ -477,7 +486,7 @@ export function JintaiDemoPage() {
             state (selected preset Q, A/B/C tab, flow card variant, etc.) survives
             tab switches. */}
 
-        {/* Tab 1: 概览 — Hero + KPI + 每日简报 */}
+        {/* Tab 1: 概览 — Hero + KPI + 跳经营日报链接（iter 11 简化：DailyBriefing 移至独立 tab） */}
         <div role="tabpanel" hidden={activeTab !== "overview"}>
           <JintaiHero
             onScrollTo={handleScrollTo}
@@ -486,7 +495,7 @@ export function JintaiDemoPage() {
           />
           <JintaiKpiCards />
           <div style={{ height: 20 }} />
-          <JintaiDailyBriefing />
+          <BriefingShortcut onGo={() => switchTab("briefing")} />
         </div>
 
         {/* Tab 2: AI 收件箱 */}
@@ -535,12 +544,17 @@ export function JintaiDemoPage() {
           <JintaiPurchasePanel />
         </div>
 
-        {/* Tab 6: 问问 AI */}
+        {/* Tab 6: 📅 经营日报 — 老板 5 分钟摘要 */}
+        <div role="tabpanel" hidden={activeTab !== "briefing"}>
+          <JintaiDailyBriefPanel />
+        </div>
+
+        {/* Tab 7: 问问 AI */}
         <div role="tabpanel" hidden={activeTab !== "ask"}>
           <JintaiAIQueryPanel />
         </div>
 
-        {/* Tab 7: 可信 AI */}
+        {/* Tab 8: 可信 AI */}
         <div role="tabpanel" hidden={activeTab !== "trust"}>
           <JintaiTrustPanel />
         </div>
@@ -559,6 +573,53 @@ export function JintaiDemoPage() {
           演示版本 · 纯前端 mock，不接后端、不写入真实业务系统
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- 概览 → 经营日报 跳转入口（iter 11） ---------------- */
+
+function BriefingShortcut({ onGo }: { onGo: () => void }) {
+  const b = dailyBrief;
+  const total =
+    b.counts.sales + b.counts.finance + b.counts.production + b.counts.purchase + b.counts.risk;
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 16,
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap",
+        borderLeft: "3px solid var(--ai-500)",
+      }}
+    >
+      <span style={{ fontSize: 22 }}>📅</span>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", lineHeight: 1.4 }}>
+          今日经营日报 · {b.date} {b.weekday}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--ink-600)", marginTop: 3, lineHeight: 1.5 }}>
+          AI 已于 {b.generatedAt} 生成 · 今日要事 {total} · 1 红 / 2 黄 / 4 行动 · 5 分钟可读完
+        </div>
+      </div>
+      <button
+        onClick={onGo}
+        style={{
+          padding: "8px 14px",
+          fontSize: 12.5,
+          fontWeight: 600,
+          borderRadius: 8,
+          border: "none",
+          background: "var(--brand-500)",
+          color: "#fff",
+          cursor: "pointer",
+          fontFamily: "var(--font)",
+        }}
+      >
+        → 看完整版
+      </button>
     </div>
   );
 }
