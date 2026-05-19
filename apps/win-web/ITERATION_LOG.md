@@ -475,16 +475,59 @@ panel 内部装饰性 emoji（`💰 财务一句话` / `🏭 生产一句话` / 
 
 ---
 
-## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13）
+## Iteration 14 — 2026-05-18 (凌晨) · 锦泰品牌 accent 注入
 
-6 commit 全部 local 落地：
+### 用户反馈
+"结合锦泰 logo 红绿配色 + kamtai.cc 网站风格，让 demo 看起来是给锦泰定制的，不是套模板。"
+
+### 流程
+**Step 1 抓取（Chrome MCP → kamtai.cc）**
+- 主红：`#C32629` (rgb 195,38,41) — active nav link / section title「车间环境/新闻资讯」/ 序号 03 红方块 / 多处 emphasis
+- 锦泰绿：`#1B7F3A` — logo 草字头叶（user spec 采用）
+- 字体：`sans-serif + Microsoft Yahei + Hiragino Sans GB`（system CJK stack，无 web font）
+- 圆角：`0px`（工业直角）— demo 维持既有 8-12px，不强行变直角
+- Hero：大红底 + 金色山脉 + "锦泰"印章 + "JIN TAI"金英文 → 中国工业品牌经典构成
+
+**Step 2 brand-tokens.md**：写抓取结果 + 注入策略到 `apps/win-web/src/screens/jintai/brand-tokens.md`（仅文档，不入运行时）
+
+**Step 3 不替换主色**：`--brand-*` 蓝（智通客户产品色）全程保留，锦泰红绿只做 accent。
+
+### 本轮改动（6 处 accent）
+1. `tokens.css` 新增 `--jintai-red: #C32629` / `--jintai-red-50: #FBE9E9` / `--jintai-green: #1B7F3A`
+2. **Hero 顶部 3px 装饰条**：`linear-gradient(90deg, jintai-red 0-38%, transparent 38-62%, jintai-green 62-100%)` — 整个 demo 第一眼信号
+3. **Hero 右上角版本号**：`● 锦泰定制版 v2026.05 · 发布 2026-05-17` jintai-green 字 + 同色 5px dot
+4. **Hero h1**：3px `jintai-red` 左侧 border + "宜兴市锦泰耐火材料" 800 加粗，后段 `· AI 生产流转试点` 灰 500 弱化对比 — 公司名是主角
+5. **财务 AI 草稿条**「✓ 王会计 复核确认」前加 jintai-green 7px dot — 强化"自己人复核"信号
+6. **采购 AI 草稿条**「✓ 张主管 复核确认」前同样加 jintai-green dot
+7. **footer**：`Powered by 智通 AI · © 2026 Five Oranges AI · 为 [16px 锦泰 logo] 宜兴市锦泰耐火材料 定制 · 演示版本`
+
+### 不做
+- 不换 nav 蓝色为红
+- 不引锦泰金色（避免色板过载 — demo 已有 AI 蓝 / brand 蓝 / ok 绿 / warn 琥珀 / risk 红）
+- panel 内既有 emoji（💰🏭📦🤝⚠️🎯🎉🔴🟡）保留 — 那是 user spec 的内容层装饰
+- 不动 mock data / 业务逻辑 / icon 库（iter 13 已统一）
+
+### 截图验证
+- Hero 红绿渐变装饰条 + 版本号 jintai-green + h1 红边加粗 ✓
+- 财务 / 采购 AI 草稿条 jintai-green dot ✓
+- footer DOM 渲染确认（小 16px logo + 锦泰定制字样）
+
+### Commit
+`d9178ce feat(jintai-demo): integrate 锦泰 brand color accents + kamtai.cc visual cues (iter 14)`
+
+---
+
+## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14）
+
+7 commit 全部 local 落地：
 - **4281a69** iter 8 加 💰 财务 tab（AI 三表草稿 + 复核）
 - **276566c** iter 9 加 📦 采购 tab（订单 + 供应商 + AI 收件箱）
 - **89ed141** iter 10 演示动线 + 来源精度打磨
 - **75f1040** iter 11 加 📅 经营日报 tab（老板早 8 点 5 分钟摘要）
 - **5e2c3ae** iter 12 8 tab 全验证 + AI 行动庆祝 state
 - **ead41c3** iter 13 统一 8 tab icon 与 codebase I.* outline 风格
+- **d9178ce** iter 14 锦泰品牌 accent 注入（红绿条 + 版本号 + h1 红边 + 确认绿 dot + footer）
 
-**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 在 iter 13 加 icon 前 0 改动，iter 13 仅为 nav 层 + 入口层装饰统一（不动 panel 内容）。符合「不破坏现有」红线。
+**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 加 icon、iter 14 加品牌 accent 都仅装饰层。「不破坏现有」红线达成。
 
 **待 push**：local 未 push，等用户 review。
