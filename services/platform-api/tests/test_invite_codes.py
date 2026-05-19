@@ -71,7 +71,7 @@ def test_register_happy_path_creates_everything():
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["ok"] is True
-    assert data["redirect"] == "/win/"
+    assert data["redirect"] == "/dashboard"
     assert data["user_id"] == "u_alice"
     # Server set the auth cookie
     assert "app_session" in r.cookies

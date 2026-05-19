@@ -739,10 +739,11 @@
           });
 
           if (res.ok) {
+            const data = await res.json().catch(() => ({}));
             btn.dataset.state = 'success';
             btnLabel.textContent = '登录成功，正在跳转...';
             btnEn.textContent = 'REDIRECTING';
-            setTimeout(() => { window.location.href = '/'; }, 600);
+            setTimeout(() => { window.location.href = data.redirect || '/dashboard'; }, 600);
             return;
           }
 

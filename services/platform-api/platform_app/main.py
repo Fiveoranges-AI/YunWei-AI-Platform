@@ -1,18 +1,33 @@
 """FastAPI 入口 + 路由分发。"""
 from __future__ import annotations
 import asyncio
+import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import admin_api, api, context as _context, db, enterprise_api
+from . import admin_api, api, context as _context, db, enterprise_api, firewall, proxy
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 # yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /api/win/.
 # Per-enterprise Postgres database; lazy-provisioned on first access.
 from yunwei_win.routes import router as _win_router
 from yunwei_win.db import dispose_all as _win_dispose
+
+PATH_RE = re.compile(r"^/(?P<client>[a-z0-9-]{1,32})/(?P<agent>[a-z0-9-]{1,32})(?P<sub>/.*)?$")
+RESERVED_TOP_LEVEL = {
+    "admin",
+    "api",
+    "auth",
+    "dashboard",
+    "data",
+    "daily-report",
+    "enterprise",
+    "register",
+    "static",
+    "win",
+}
 
 
 @asynccontextmanager
@@ -104,6 +119,10 @@ _WIN_DIST = _resolve_win_dist()
 _NO_STORE = {"Cache-Control": "no-store, must-revalidate"}
 
 
+def _dashboard_response() -> FileResponse:
+    return FileResponse(_STATIC / "agents.html", headers=_NO_STORE)
+
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def index(request: Request):
     # no-store: index branches on the app_session cookie, so the response
@@ -111,12 +130,18 @@ def index(request: Request):
     # login.html before login will keep serving the cached login.html
     # after login until the user manually refreshes (Cmd+Shift+R).
     #
-    # Logged-in users go to /win/ (the 智通客户 SPA, the customer-facing
-    # product). The legacy agents.html dashboard has been archived under
-    # docs/migration/archive/ and is no longer in the customer path.
+    # Logged-in users land on the agent dashboard. The 智通客户 SPA remains
+    # available at /win/ and is linked from the dashboard card.
     if not request.cookies.get("app_session"):
         return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
-    return RedirectResponse("/win/", status_code=303, headers=_NO_STORE)
+    return _dashboard_response()
+
+
+@app.api_route("/dashboard", methods=["GET", "HEAD"])
+def dashboard(request: Request):
+    if not request.cookies.get("app_session"):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+    return _dashboard_response()
 
 
 @app.api_route("/register", methods=["GET", "HEAD"])
@@ -171,3 +196,39 @@ def win_static(subpath: str, request: Request):
     if win_index.is_file():
         return HTMLResponse(win_index.read_text(encoding="utf-8"), headers=_NO_STORE)
     raise HTTPException(404)
+
+
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
+async def catch_all(full_path: str, request: Request):
+    m = PATH_RE.match("/" + full_path)
+    if not m:
+        raise HTTPException(404)
+
+    client_id = m.group("client")
+    if client_id in RESERVED_TOP_LEVEL:
+        raise HTTPException(404)
+    agent_id = m.group("agent")
+    subpath = m.group("sub") or "/"
+
+    user = api._user_from_request(request)
+
+    if not db.has_acl(user["id"], client_id, agent_id):
+        raise HTTPException(403, {"error": "not_authorized_for_tenant", "message": "无权访问"})
+
+    try:
+        firewall.check_request(
+            sec_fetch_mode=request.headers.get("sec-fetch-mode"),
+            sec_fetch_site=request.headers.get("sec-fetch-site"),
+            referer=request.headers.get("referer"),
+            host=request.headers.get("host", ""),
+            dest_path_prefix=f"/{client_id}/{agent_id}/",
+            csrf_header=request.headers.get("x-csrf-token"),
+            csrf_cookie=request.cookies.get("app_csrf"),
+            method=request.method,
+        )
+    except firewall.FirewallReject as e:
+        raise HTTPException(403, {"error": "cross_agent_blocked", "message": str(e)})
+
+    return await proxy.reverse_proxy(
+        request, client_id=client_id, agent_id=agent_id, user=user, subpath=subpath
+    )
