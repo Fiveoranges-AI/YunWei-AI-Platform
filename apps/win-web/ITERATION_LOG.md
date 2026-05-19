@@ -626,9 +626,43 @@ grep 验证 0 处残留，截图确认 briefing tab "陈总醒后 5 分钟看完
 
 ---
 
-## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 16 / 17）
+## Iteration 18 — 2026-05-18 (凌晨) · 生产流转 timeline 10 → 5 节点简化
 
-10 commit 全部 local 落地：
+### 用户反馈
+"生产流转 tab 的 timeline 节点太多（CRM → 订单 → 工单 → 计划单 → 生产流转 → 成型 → 烧结 → 检包 → 入库 → 出货 共 10 个），客户演示开场眼花。简化成 5 节点：订单 → 计划 → 生产 → 入库 → 出货。"
+
+### 改动
+- `data.ts` `workflowNodes` 10 → 5：
+    1. 订单 (done) · SO-2026-001 · 已生成
+    2. 计划 (done) · SC-2026-015 · 18,000 块
+    3. 生产 (current) · ZC-2026-015 · 烧结中
+    4. 入库 (pending) · 待生产完成
+    5. 出货 (pending) · 容百宁波厂
+- 「生产」节点合并表达原 成型/烧结/检包；详细 3 工序仍在 ProductionTabs Tab A「生产流转单」可点开（mock flowCards 0 改动）
+- `JintaiWorkflowTimeline.tsx` 视觉升级：
+  - 圆圈 22 → 28 px，连线 2 → 2.5 px，段间距增大
+  - done 状态用 `--jintai-green` 实心圆 + 白色对勾（与 finance tab 同源）
+  - current 状态 `--brand-500` 蓝圆 + 白色 spark + `box-shadow: 0 0 0 4px rgba(45,155,216,0.18)` 蓝光晕（强化进行中焦点）
+  - pending 浅灰 surface-2 圆 + ink-200 描边
+  - 连线段颜色 = 下一节点 status 色
+- breadcrumb 简化：
+  - 卡内副标 "CRM → 订单 → 工单 → 计划单 → 生产流转 → 成型 → 烧结 → 检包 → 成品入库 → 出货容百宁波" → "订单 → 计划 → 生产 → 入库 → 出货"
+  - `JintaiDemoPage` production TAB_HEAD.sub 同步缩 "...5 段流转可回放任意节点；详细工序在下方「流转单 / 工艺单 / 出货入库」3 子 tab"
+- 移除 `SHORT_TITLE` 映射（5 节点 title 已是 ≤ 4 字）和 `minWidth: 880`（1280 内自然舒展，desktop 无需水平滚）
+
+### 截图验证（Chrome MCP）
+- breadcrumb "订单 → 计划 → 生产 → 入库 → 出货" 顶部 + 卡内一致 ✓
+- 5 节点：订单 ✓绿 / 计划 ✓绿 / 生产 ✨蓝+光晕 / 入库 ○灰 / 出货 ○灰
+- 连线段「绿-绿-蓝-灰-灰」颜色梯度反映流程进度
+
+### Commit
+`ef46f1c refactor(jintai-demo): simplify production timeline to 5 nodes (iter 18)`
+
+---
+
+## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 16 / 17 / 18）
+
+11 commit 全部 local 落地：
 - **4281a69** iter 8 加 💰 财务 tab（AI 三表草稿 + 复核）
 - **276566c** iter 9 加 📦 采购 tab（订单 + 供应商 + AI 收件箱）
 - **89ed141** iter 10 演示动线 + 来源精度打磨
@@ -639,7 +673,8 @@ grep 验证 0 处残留，截图确认 briefing tab "陈总醒后 5 分钟看完
 - **b8bae99** iter 15 许总 → 陈总 重命名（5 处）
 - **a791915** iter 16 tab icon 加颜色 + 锦泰品牌呼应 + 2-tone 专业 SaaS 风格
 - **859f1c4** iter 17 财务本地化 PayPal→支付宝 + K元→元 (×1000 展开)
+- **ef46f1c** iter 18 生产流转 timeline 10 → 5 节点简化（订单 → 计划 → 生产 → 入库 → 出货）
 
-**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 / 14 / 16 / 17 都仅装饰层 / 单位层 / 本地化，「不破坏现有」红线达成。
+**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 / 14 / 16 / 17 / 18 仅装饰层 / 单位层 / 本地化 / 视觉减负，「不破坏现有」红线达成。
 
 **待 push**：local 未 push，等用户 review。
