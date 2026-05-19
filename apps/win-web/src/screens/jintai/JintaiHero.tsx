@@ -17,21 +17,66 @@ export function JintaiHero({
     <div
       className="card"
       style={{
-        padding: isDesktop ? "28px 32px" : "22px 18px",
+        padding: 0,
         marginBottom: 24,
         background: "var(--surface)",
         border: "1px solid var(--ink-100)",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+      {/* iter 14：锦泰品牌装饰条 — 红 → 透明 → 绿渐变，3px 高 */}
+      <div
+        aria-hidden
+        style={{
+          height: 3,
+          background:
+            "linear-gradient(90deg, var(--jintai-red) 0%, var(--jintai-red) 38%, transparent 38%, transparent 62%, var(--jintai-green) 62%, var(--jintai-green) 100%)",
+        }}
+      />
+      <div style={{ padding: isDesktop ? "28px 32px" : "22px 18px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 14,
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span
+            className="pill pill-ai"
+            style={{ fontSize: 11, padding: "3px 9px", letterSpacing: 0.02 }}
+          >
+            {I.spark(10)} 客户试点演示 · 2026-05
+          </span>
+          <span className="pill pill-outline" style={{ fontSize: 11, padding: "3px 9px" }}>
+            试点 2–3 周 · 不替换 ERP · 来源 100% 可追溯
+          </span>
+        </div>
+        {/* iter 14：锦泰定制版本号（右上角，jintai-green 小字） */}
         <span
-          className="pill pill-ai"
-          style={{ fontSize: 11, padding: "3px 9px", letterSpacing: 0.02 }}
+          style={{
+            fontSize: 10.5,
+            color: "var(--jintai-green)",
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
         >
-          {I.spark(10)} 客户试点演示 · 2026-05
-        </span>
-        <span className="pill pill-outline" style={{ fontSize: 11, padding: "3px 9px" }}>
-          试点 2–3 周 · 不替换 ERP · 来源 100% 可追溯
+          <span
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: 3,
+              background: "var(--jintai-green)",
+              flexShrink: 0,
+            }}
+          />
+          锦泰定制版 v2026.05 · 发布 2026-05-17
         </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: isDesktop ? 16 : 12, flexWrap: "wrap" }}>
@@ -49,9 +94,16 @@ export function JintaiHero({
               color: "var(--ink-900)",
               letterSpacing: "-0.01em",
               lineHeight: 1.2,
+              paddingLeft: 12,
+              borderLeft: "3px solid var(--jintai-red)",
             }}
           >
-            宜兴市锦泰耐火材料 · AI 生产流转试点
+            <span style={{ color: "var(--ink-900)", fontWeight: 800 }}>
+              宜兴市锦泰耐火材料
+            </span>
+            <span style={{ color: "var(--ink-500)", fontWeight: 500 }}>
+              {" · AI 生产流转试点"}
+            </span>
           </h1>
           <div
             style={{
@@ -160,6 +212,7 @@ export function JintaiHero({
         >
           {I.calendar(14)} 今日经营日报
         </button>
+      </div>
       </div>
     </div>
   );

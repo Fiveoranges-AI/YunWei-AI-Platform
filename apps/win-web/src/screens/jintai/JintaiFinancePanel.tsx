@@ -199,8 +199,21 @@ function AIDraftBanner({ draft, confirmedBy }: { draft: string; confirmedBy: str
           fontWeight: 600,
           paddingTop: 4,
           borderTop: "1px dashed #bddff3",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
+        {/* iter 14：锦泰绿确认 dot — 强化"自己人复核"信号 */}
+        <span
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 4,
+            background: "var(--jintai-green)",
+            flexShrink: 0,
+          }}
+        />
         ✓ {confirmedBy}
       </div>
     </div>

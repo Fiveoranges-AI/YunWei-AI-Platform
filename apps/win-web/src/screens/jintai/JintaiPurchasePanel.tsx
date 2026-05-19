@@ -95,7 +95,26 @@ function PurchaseOrderTable({ orders }: { orders: PurchaseOrder[] }) {
         <span style={{ color: "var(--ink-700)" }}>
           智通 AI 已从 6 封邮件合同 / 3 张纸质订单中自动抽取建单
         </span>
-        <span style={{ color: "var(--ok-700)", fontWeight: 600, marginLeft: "auto" }}>
+        <span
+          style={{
+            color: "var(--ok-700)",
+            fontWeight: 600,
+            marginLeft: "auto",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+          }}
+        >
+          {/* iter 14：锦泰绿确认 dot */}
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 4,
+              background: "var(--jintai-green)",
+              flexShrink: 0,
+            }}
+          />
           ✓ 采购 · 张主管 · 2026-05-17 09:42 复核确认
         </span>
       </div>

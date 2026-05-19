@@ -575,6 +575,7 @@ export function JintaiDemoPage() {
           <JintaiTrustPanel />
         </div>
 
+        {/* iter 14：footer 加锦泰定制字样 + logo */}
         <div
           style={{
             marginTop: 36,
@@ -584,9 +585,31 @@ export function JintaiDemoPage() {
             fontSize: 11.5,
             lineHeight: 1.6,
             textAlign: "center",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
           }}
         >
-          演示版本 · 纯前端 mock，不接后端、不写入真实业务系统
+          <span>Powered by 智通 AI · © 2026 Five Oranges AI · 为</span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              color: "var(--ink-700)",
+              fontWeight: 600,
+            }}
+          >
+            <img
+              src={`${import.meta.env.BASE_URL}jintai-logo.png`}
+              alt="锦泰耐火材料"
+              style={{ height: 16, width: "auto" }}
+            />
+            宜兴市锦泰耐火材料
+          </span>
+          <span>定制 · 演示版本 (纯前端 mock，不接后端)</span>
         </div>
       </div>
     </div>
