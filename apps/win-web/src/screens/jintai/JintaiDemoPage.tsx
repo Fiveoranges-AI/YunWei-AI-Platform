@@ -195,7 +195,7 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
   },
   briefing: {
     title: "经营日报 · 老板 5 分钟",
-    sub: "AI 早上 7:55 自动整合财务 / 生产 / 采购 / 客户 / 风险 5 大模块，许总醒后 5 分钟看完。",
+    sub: "AI 早上 7:55 自动整合财务 / 生产 / 采购 / 客户 / 风险 5 大模块，陈总醒后 5 分钟看完。",
   },
   ask: {
     title: "老板 AI 助手",

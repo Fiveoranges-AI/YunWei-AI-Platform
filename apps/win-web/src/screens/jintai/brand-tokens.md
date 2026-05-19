@@ -52,7 +52,7 @@ system Chinese font stack，无 web font 引入。
 2. Hero 右上角"锦泰定制版 v2026.05 · 发布于 2026-05-17"小字 + jintai-green 色
 3. Hero 标题"宜兴市锦泰耐火材料"行 加 jintai-red 左侧 2px border + 黑字加粗
 4. 财务 / 采购 AI 草稿提示条「✓ 王会计/张主管 复核确认」前加 jintai-green 圆点
-5. 经营日报 AI 草稿条「✓ 许总 ... 已标已处理」同样加 jintai-green 圆点
+5. 经营日报 AI 草稿条「✓ 陈总 ... 已标已处理」同样加 jintai-green 圆点
 6. footer 改为「Powered by 智通 AI · © 2026 Five Oranges AI · 为 宜兴市锦泰耐火材料 定制」+ 16px logo
 7. Hero 既有 56px logo 保留（已是锦泰元素，不动）
 

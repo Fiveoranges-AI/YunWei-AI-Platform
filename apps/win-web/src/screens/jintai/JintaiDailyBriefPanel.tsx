@@ -87,7 +87,7 @@ function TopSummary() {
         <span>
           <strong style={{ color: "var(--ai-700)" }}>AI 草稿</strong> · 智通 AI 已于{" "}
           <strong>{b.generatedAt}</strong> 自动生成今日经营日报，
-          整合财务、生产、采购、客户、风险 5 大模块数据。许总，您醒后 5 分钟看完。
+          整合财务、生产、采购、客户、风险 5 大模块数据。陈总，您醒后 5 分钟看完。
         </span>
       </div>
 
