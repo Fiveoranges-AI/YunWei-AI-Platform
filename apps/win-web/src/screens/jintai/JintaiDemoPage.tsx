@@ -4,6 +4,7 @@ import {
   createJintaiIngestPlaceholder,
   listJintaiExtractions,
 } from "../../api/jintai";
+import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { initialExtractionCards } from "./data";
 import type { ExtractionCard } from "./data";
@@ -157,15 +158,17 @@ type TabKey =
   | "ask"
   | "trust";
 
-const TABS: { key: TabKey; label: string; hint: string }[] = [
-  { key: "overview", label: "概览", hint: "今天总体什么情况" },
-  { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统" },
-  { key: "production", label: "生产流转", hint: "这单生产到哪了" },
-  { key: "finance", label: "💰 财务", hint: "AI 三表 · 草稿待复核" },
-  { key: "purchase", label: "📦 采购", hint: "订单 · 供应商 · AI 收件箱" },
-  { key: "briefing", label: "📅 经营日报", hint: "老板 5 分钟看完今天" },
-  { key: "ask", label: "问问 AI", hint: "中文问，答案带来源" },
-  { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯" },
+// iter 13：统一 8 tab icon — 全部用 codebase 现有 I.* outline 风格
+// 移除 emoji（💰 📦 📅），改为 SVG icon，与原 5 tab 一致
+const TABS: { key: TabKey; label: string; hint: string; icon: typeof I.grid }[] = [
+  { key: "overview", label: "概览", hint: "今天总体什么情况", icon: I.grid },
+  { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统", icon: I.inbox },
+  { key: "production", label: "生产流转", hint: "这单生产到哪了", icon: I.factory },
+  { key: "finance", label: "财务", hint: "AI 三表 · 草稿待复核", icon: I.cash },
+  { key: "purchase", label: "采购", hint: "订单 · 供应商 · AI 收件箱", icon: I.pkg },
+  { key: "briefing", label: "经营日报", hint: "老板 5 分钟看完今天", icon: I.calendar },
+  { key: "ask", label: "问问 AI", hint: "中文问，答案带来源", icon: I.ask },
+  { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯", icon: I.shield },
 ];
 
 // 视觉减负：每 tab 副标精简到 1 句，去除长 narration
@@ -409,7 +412,7 @@ export function JintaiDemoPage() {
                 onClick={() => switchTab(t.key)}
                 aria-current={active ? "page" : undefined}
                 style={{
-                  padding: isDesktop ? "10px 16px" : "9px 12px",
+                  padding: isDesktop ? "10px 14px" : "9px 11px",
                   borderRadius: 9,
                   border: "none",
                   background: active ? "var(--brand-500)" : "transparent",
@@ -429,12 +432,25 @@ export function JintaiDemoPage() {
                   transition: "background 0.15s ease",
                 }}
               >
-                <span>{t.label}</span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    color: active ? "#fff" : "var(--ink-700)",
+                  }}
+                >
+                  <span style={{ display: "inline-flex", opacity: active ? 1 : 0.75 }}>
+                    {t.icon(14, active ? "#fff" : "currentColor")}
+                  </span>
+                  {t.label}
+                </span>
                 <span
                   style={{
                     fontSize: 10.5,
                     fontWeight: 500,
                     color: active ? "rgba(255,255,255,0.85)" : "var(--ink-500)",
+                    paddingLeft: 20,
                   }}
                 >
                   {t.hint}
@@ -595,7 +611,21 @@ function BriefingShortcut({ onGo }: { onGo: () => void }) {
         borderLeft: "3px solid var(--ai-500)",
       }}
     >
-      <span style={{ fontSize: 22 }}>📅</span>
+      <span
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          background: "var(--ai-100)",
+          color: "var(--ai-700)",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {I.calendar(18)}
+      </span>
       <div style={{ flex: 1, minWidth: 220 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", lineHeight: 1.4 }}>
           今日经营日报 · {b.date} {b.weekday}

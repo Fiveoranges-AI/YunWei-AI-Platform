@@ -115,9 +115,12 @@ export function JintaiHero({
             color: "var(--ink-700)",
             cursor: "pointer",
             fontFamily: "var(--font)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          💰 财务 AI 三表
+          {I.cash(14)} 财务 AI 三表
         </button>
         <button
           onClick={() => onScrollTo("purchase")}
@@ -131,9 +134,12 @@ export function JintaiHero({
             color: "var(--ink-700)",
             cursor: "pointer",
             fontFamily: "var(--font)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          📦 采购订单 + 供应商
+          {I.pkg(14)} 采购订单 + 供应商
         </button>
         <button
           onClick={() => onScrollTo("briefing")}
@@ -147,9 +153,12 @@ export function JintaiHero({
             color: "var(--ai-700)",
             cursor: "pointer",
             fontFamily: "var(--font)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          📅 今日经营日报
+          {I.calendar(14)} 今日经营日报
         </button>
       </div>
     </div>
