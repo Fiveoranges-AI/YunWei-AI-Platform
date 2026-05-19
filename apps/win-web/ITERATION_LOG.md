@@ -517,9 +517,79 @@ panel 内部装饰性 emoji（`💰 财务一句话` / `🏭 生产一句话` / 
 
 ---
 
-## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14）
+## Iteration 15 — 2026-05-18 (凌晨) · 许总 → 陈总 重命名
 
-7 commit 全部 local 落地：
+### 用户反馈
+"陈总是锦泰真实联系人，许总是早期 mock 占位，全部替换。"
+
+### 改动
+sed `s/许总/陈总/g` 5 处一次完成：
+- `data.ts` L779 traceExamples 经营日报 source.label
+- `data.ts` L782 traceExamples confirmedBy
+- `JintaiDailyBriefPanel.tsx` L90 AI 草稿 banner subtitle
+- `JintaiDemoPage.tsx` L198 briefing tab TAB_HEAD.sub
+- `brand-tokens.md` L55 注入策略文档
+
+grep 验证 0 处残留，截图确认 briefing tab "陈总醒后 5 分钟看完" 正确。
+
+### Commit
+`b8bae99 style(jintai-demo): 许总 → 陈总 throughout demo (iter 15)`
+
+---
+
+## Iteration 16 — 2026-05-18 (凌晨) · tab icon 加颜色 + 锦泰品牌呼应 + 专业 2-tone
+
+### 用户反馈
+"iter 13 让 tab icon 全部 outline 统一了，但 icon 全黑/灰显得单调不够专业。要加颜色（结合锦泰红/绿/kamtai.cc 风格），仍然统一（不是 8 种乱七八糟），更专业（参考 Linear / Notion / Atlassian SaaS icon 风格）。"
+
+### 设计方案：4 业务族分组配色
+
+| Group | Tab | Token | Hex |
+|---|---|---|---|
+| 蓝（经营管理） | overview | `--brand-500` | #2d9bd8 |
+|  | briefing | `--brand-700` | #1f5fa3 |
+| 锦泰红（业务核心） | production | `--jintai-red` | #C32629 |
+|  | purchase | `--jintai-red-40` (新) | #D85A5D |
+| 锦泰绿（资金合规） | finance | `--jintai-green` | #1B7F3A |
+|  | trust | `--jintai-green-dark` (新) | #115624 |
+| AI 紫（智能能力） | inbox | `--ai-purple` (新) | #7B5CFA |
+|  | ask | `--ai-purple-deep` (新) | #5B3FE0 |
+
+⚠ 既有 `--ai-500` 与 `--brand-500` 同值 `#2d9bd8` 不能区分，必须加 AI 紫族 token。
+
+### Icon 2-tone 升级
+8 个 tab icon 全部从单色 outline 改 2-tone：
+- 外形：`fill={c} fillOpacity=0.18 + stroke 实色`
+- 关键细节实色：cash 内圆币 / shield 对勾 / calendar 3 dots / ask 主星 + dot / pkg 棱线 / factory 烟囱柱
+- icon size 14 → 16 px，更易看清
+
+### TABS 渲染
+- 加 color 字段，render 时传给 icon
+- **active**：tab 背景 = color，icon 白色 + `transform: scale(1.05)` + 底部 2px `rgba(255,255,255,0.6)` indicator
+- **inactive**：背景透明，icon 本色 `opacity: 0.6`（点亮但克制）
+- transition `0.15s ease` 平滑切换
+- gap icon → label `6 → 8 px`，hint paddingLeft `20 → 24`
+
+### 与 iter 14 视觉呼应
+- 生产红 tab + 财务绿 tab 与 hero 装饰条（红 38% → 透明 → 绿 38%）同色
+- h1 红边 + 生产 tab 红 + 财务确认 dot 绿都来自同一品牌色族
+- 整个 demo 颜色语义闭环：财务一律绿、生产一律红、AI 一律紫、经营管理一律蓝
+
+### 截图验证（Chrome MCP · 4 active 状态）
+- Overview active：tab 整体 brand 蓝高亮 ✓
+- Production active：锦泰红 tab + 白 icon + 底白 indicator ✓
+- Finance active：锦泰绿 tab + 白 icon ✓
+- Briefing active：深 brand 蓝 tab ✓
+- 4 个非 active tab 显示 2-tone 彩色 icon (opacity 0.6)，颜色按分组清晰
+
+### Commit
+`a791915 feat(jintai-demo): colorize tab icons w/ 锦泰 brand + ai accents (iter 16)`
+
+---
+
+## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 16）
+
+9 commit 全部 local 落地：
 - **4281a69** iter 8 加 💰 财务 tab（AI 三表草稿 + 复核）
 - **276566c** iter 9 加 📦 采购 tab（订单 + 供应商 + AI 收件箱）
 - **89ed141** iter 10 演示动线 + 来源精度打磨
@@ -527,7 +597,9 @@ panel 内部装饰性 emoji（`💰 财务一句话` / `🏭 生产一句话` / 
 - **5e2c3ae** iter 12 8 tab 全验证 + AI 行动庆祝 state
 - **ead41c3** iter 13 统一 8 tab icon 与 codebase I.* outline 风格
 - **d9178ce** iter 14 锦泰品牌 accent 注入（红绿条 + 版本号 + h1 红边 + 确认绿 dot + footer）
+- **b8bae99** iter 15 许总 → 陈总 重命名（5 处）
+- **a791915** iter 16 tab icon 加颜色 + 锦泰品牌呼应 + 2-tone 专业 SaaS 风格
 
-**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 加 icon、iter 14 加品牌 accent 都仅装饰层。「不破坏现有」红线达成。
+**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 加 icon、iter 14 加品牌 accent、iter 16 给 icon 配色 — 都仅装饰层，「不破坏现有」红线达成。
 
 **待 push**：local 未 push，等用户 review。
