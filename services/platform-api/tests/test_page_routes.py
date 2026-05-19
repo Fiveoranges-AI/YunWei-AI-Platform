@@ -1,12 +1,11 @@
-"""Page route smoke tests for /admin and the /win SPA.
+"""Page route smoke tests for /admin, the agent dashboard, and the /win SPA.
 
 The HTML payloads are not fully exercised here — we just confirm the
 routes serve the expected static file when the user is logged in and
 fall through to the login page otherwise.
 
 Routes that used to exist but no longer do (``/data``,
-``/enterprise/<id>``, the ``/<client>/<agent>`` HMAC catch-all,
-``/api/agents``) have their 404 contract pinned in
+``/enterprise/<id>``) have their 404 contract pinned in
 ``test_url_contract.py``.
 """
 from __future__ import annotations
@@ -51,18 +50,21 @@ def test_root_serves_login_when_unauthed(client):
     assert b"\xe7\x99\xbb\xe5\xbd\x95" in r.content or b"login" in r.content.lower()
 
 
-def test_root_redirects_to_win_when_authed(client, logged_in):
-    """GET / with a valid session cookie redirects (303) to /win/.
-
-    The legacy agents.html dashboard is no longer the logged-in entry
-    point — customers land on the 智通客户 SPA at /win/.
-    """
+def test_root_serves_agent_dashboard_when_authed(client, logged_in):
+    """GET / with a valid session cookie serves the agent dashboard."""
     r = client.get("/", cookies={"app_session": logged_in}, follow_redirects=False)
-    assert r.status_code == 303
-    assert r.headers["location"] == "/win/"
+    assert r.status_code == 200
+    assert b"\xe6\x88\x91\xe7\x9a\x84\xe6\x99\xba\xe8\x83\xbd\xe4\xbd\x93" in r.content
+    assert b"https://app.fiveoranges.ai/win/" in r.content
     # Cache-Control: no-store must still be set so a browser that cached
     # the login.html response from before sign-in doesn't keep serving it.
     assert "no-store" in r.headers.get("cache-control", "")
+
+
+def test_dashboard_route_serves_agent_dashboard_when_authed(client, logged_in):
+    r = client.get("/dashboard", cookies={"app_session": logged_in})
+    assert r.status_code == 200
+    assert b"My Agents" in r.content
 
 
 def test_admin_page_serves_dashboard_when_authed(client, logged_in):
