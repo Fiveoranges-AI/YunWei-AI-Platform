@@ -23,6 +23,7 @@ const VIEW_META: Record<TabName, ViewMeta> = {
   ask: { title: "AI 助手", sub: "基于客户档案问答 · 来源可追溯" },
   profile: { title: "我的", sub: "账号 · 团队 · 设置" },
   jintai: { title: "宜兴市锦泰耐火材料 · AI 生产流转试点", sub: "承烧板 / 推板 / 匣钵 · 锂电 / 磁材 / MLCC 下游 · 来源 100% 可追溯" },
+  guangtian: { title: "宜兴光天耐火材料 · AI 库存管家", sub: "1,000+ SKU 实时记录 · 入出库可追溯 · 缺货风险提前 3 天预警" },
 };
 
 export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, children }: Props) {
@@ -125,5 +126,6 @@ function detailLikeBackground(screen: ScreenName): string {
   if (screen === "upload" || screen === "profile") return "var(--surface-2)";
   if (screen === "ask") return "var(--surface-2)";
   if (screen === "jintai") return "var(--bg)";
+  if (screen === "guangtian") return "var(--bg)";
   return "#fff";
 }

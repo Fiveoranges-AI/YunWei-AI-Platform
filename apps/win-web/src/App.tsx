@@ -8,6 +8,7 @@ import { ReviewScreen } from "./screens/Review";
 import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
 import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
+import { GuangtianDemoPage } from "./screens/guangtian/GuangtianDemoPage";
 
 export type ScreenName =
   | "list"
@@ -17,8 +18,9 @@ export type ScreenName =
   | "review"
   | "ask"
   | "profile"
-  | "jintai";
-export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
+  | "jintai"
+  | "guangtian";
+export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai" | "guangtian";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -36,6 +38,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
   ask: "ask",
   profile: "profile",
   jintai: "jintai",
+  guangtian: "guangtian",
 };
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
@@ -45,11 +48,19 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
   ask: "ask",
   profile: "profile",
   jintai: "jintai",
+  guangtian: "guangtian",
 };
 
+function initialTabFromUrl(): TabName {
+  if (typeof window === "undefined") return "customers";
+  const requested = new URLSearchParams(window.location.search).get("tab") ?? window.location.hash.slice(1);
+  return requested && requested in TAB_TO_SCREEN ? (requested as TabName) : "customers";
+}
+
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabName>("customers");
-  const [stack, setStack] = useState<ScreenStackEntry[]>([{ name: "list" }]);
+  const initialTab = initialTabFromUrl();
+  const [activeTab, setActiveTab] = useState<TabName>(initialTab);
+  const [stack, setStack] = useState<ScreenStackEntry[]>([{ name: TAB_TO_SCREEN[initialTab] }]);
 
   const go: GoFn = (name, params = {}) => {
     const tab = SCREEN_TO_TAB[name];
@@ -64,6 +75,7 @@ export function App() {
   const setTab = (tab: TabName) => {
     setActiveTab(tab);
     setStack([{ name: TAB_TO_SCREEN[tab] }]);
+    window.history.replaceState(null, "", `${window.location.pathname}?tab=${tab}`);
   };
 
   const current = stack[stack.length - 1];
@@ -93,5 +105,7 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
       return <ProfileScreen go={go} />;
     case "jintai":
       return <JintaiDemoPage />;
+    case "guangtian":
+      return <GuangtianDemoPage />;
   }
 }

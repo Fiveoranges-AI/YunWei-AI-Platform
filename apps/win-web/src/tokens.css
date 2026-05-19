@@ -175,4 +175,19 @@
      与既有 --ai-* (= --brand-* 同蓝) 区分，给 AI 收件箱 / 问问 AI 用专属紫色族。 */
   --ai-purple:      #7B5CFA;
   --ai-purple-deep: #5B3FE0;
+
+  /* ---------- 光天科技品牌 accent (Guangtian Demo) ----------
+     抓取自 gtnckj.com / 光天科技 logo：正红字 + 深蓝标语。
+     仅作 demo 内 accent 使用，不替换主色 --brand-*。 */
+  --guangtian-red:      #D92020; /* 主红 · logo 文字色 */
+  --guangtian-red-50:   #FBE6E6; /* 红淡色 · badge bg */
+  --guangtian-red-soft: #E04949; /* 浅一档红 · 状态徽章 */
+  --guangtian-blue:     #1A3F8E; /* 深蓝 · logo 副标 / 数据 tab icon */
+  --guangtian-blue-dark:#102A66; /* 深一档蓝 · 强调 */
+
+  /* 仓储 / 库存状态色（独立于 jintai 业务色） */
+  --stock-low:    #F59E0B; /* 低库存 橙 */
+  --stock-out:    #C32629; /* 已缺货 红 (与 jintai-red 同色) */
+  --stock-ok:     #1B7F3A; /* 正常 绿 (与 jintai-green 同色) */
+  --stock-dead:   #6B7280; /* 呆滞 灰 */
 }

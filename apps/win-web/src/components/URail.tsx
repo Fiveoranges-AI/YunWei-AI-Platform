@@ -12,6 +12,7 @@ const ITEMS: Item[] = [
   { id: "inbox", label: "上传记录", icon: I.layers },
   { id: "ask", label: "AI 助手", icon: I.ask },
   { id: "jintai", label: "锦泰试点", icon: I.bulb },
+  { id: "guangtian", label: "光天试点", icon: I.pkg },
   { id: "profile", label: "我的", icon: I.profile },
 ];
 
