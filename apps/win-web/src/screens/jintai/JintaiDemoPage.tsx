@@ -190,7 +190,7 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
   },
   production: {
     title: "生产流转",
-    sub: "CRM → 订单 → 计划 → 流转 → 入库 → 出货，全过程可回放任意节点。",
+    sub: "订单 → 计划 → 生产 → 入库 → 出货，5 段流转可回放任意节点；详细工序在下方「流转单 / 工艺单 / 出货入库」3 子 tab。",
   },
   finance: {
     title: "财务 · AI 三表",

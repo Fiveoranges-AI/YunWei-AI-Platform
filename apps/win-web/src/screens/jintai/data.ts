@@ -406,17 +406,14 @@ export const kpis = [
   { label: "来源可追溯率", value: 100, hint: "每条字段均可点击回溯原件", suffix: "%" },
 ];
 
+// iter 18：从 10 节点简化为 5 节点（订单 → 计划 → 生产 → 入库 → 出货）。
+// 「生产」节点把原成型/烧结/检包合并表达，详细 3 工序仍在 ProductionTabs Tab A 「生产流转单」里。
 export const workflowNodes = [
-  { id: "crm", title: "CRM / 客户", desc: "容百锂电已建档", status: "done" as const },
-  { id: "order", title: "订单", desc: "SO-2026-001 已生成", status: "done" as const },
-  { id: "wo", title: "工单", desc: "WO-2026-015", status: "done" as const },
-  { id: "plan", title: "计划单", desc: "SC-2026-015 · 18,000 块", status: "done" as const },
-  { id: "flow", title: "生产流转", desc: "ZC-2026-015 进行中", status: "current" as const },
-  { id: "molding", title: "成型", desc: "已完成 · IP-03 等静压", status: "done" as const },
-  { id: "sinter", title: "烧结", desc: "进行中 · SK-02 · LB-1580 曲线", status: "current" as const },
-  { id: "pack", title: "检包", desc: "未开始", status: "pending" as const },
-  { id: "stock", title: "成品入库", desc: "未开始", status: "pending" as const },
-  { id: "ship", title: "出货", desc: "未开始 · 容百宁波厂", status: "pending" as const },
+  { id: "order", title: "订单", desc: "SO-2026-001 · 已生成", status: "done" as const },
+  { id: "plan", title: "计划", desc: "SC-2026-015 · 18,000 块", status: "done" as const },
+  { id: "produce", title: "生产", desc: "ZC-2026-015 · 烧结中", status: "current" as const },
+  { id: "stock", title: "入库", desc: "待生产完成", status: "pending" as const },
+  { id: "ship", title: "出货", desc: "容百宁波厂", status: "pending" as const },
 ];
 
 export const dailyBriefingMetrics = [

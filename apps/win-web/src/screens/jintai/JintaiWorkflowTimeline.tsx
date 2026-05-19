@@ -3,27 +3,15 @@ import { useIsDesktop } from "../../lib/breakpoints";
 import { workflowNodes } from "./data";
 import { JintaiSourceCitation } from "./components";
 
+// iter 18：简化为 5 节点后视觉升级 — 已完成用锦泰绿（与 finance tab 同源）
+// 进行中保留 brand-500 蓝（与右栏 AI 摘要呼应），未开始低饱和灰
 const STATUS_STYLE: Record<
   "done" | "current" | "pending",
   { fg: string; bg: string; line: string; label: string }
 > = {
-  done: { fg: "var(--ok-700)", bg: "var(--ok-100)", line: "var(--ok-500)", label: "已完成" },
-  current: { fg: "var(--brand-700)", bg: "var(--brand-100)", line: "var(--brand-500)", label: "进行中" },
-  pending: { fg: "var(--ink-500)", bg: "var(--ink-100)", line: "var(--ink-200)", label: "未开始" },
-};
-
-// 视觉减负：长 title 缩到 ≤ 4 字（已用色环 + icon 表达状态，desc 已说明细节）
-const SHORT_TITLE: Record<string, string> = {
-  "CRM / 客户": "客户",
-  订单: "订单",
-  工单: "工单",
-  计划单: "计划",
-  生产流转: "流转",
-  成型: "成型",
-  烧结: "烧结",
-  检包: "检包",
-  成品入库: "入库",
-  出货: "出货",
+  done: { fg: "#fff", bg: "var(--jintai-green)", line: "var(--jintai-green)", label: "已完成" },
+  current: { fg: "#fff", bg: "var(--brand-500)", line: "var(--brand-500)", label: "进行中" },
+  pending: { fg: "var(--ink-400)", bg: "var(--surface-2)", line: "var(--ink-200)", label: "未开始" },
 };
 
 export function JintaiWorkflowTimeline() {
@@ -40,14 +28,13 @@ export function JintaiWorkflowTimeline() {
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", marginBottom: 4 }}>
           示例订单 SO-2026-001 · 容百锂电 · 刚玉莫来石承烧板 18,000 块 · ¥327.6 万
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 18 }}>
-          CRM → 订单 → 工单 → 计划单 → 生产流转 → 成型 → 烧结 → 检包 → 成品入库 → 出货容百宁波
+        <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 22 }}>
+          订单 → 计划 → 生产 → 入库 → 出货
         </div>
         <div
           style={{
             display: "flex",
             alignItems: "stretch",
-            minWidth: 880,
             gap: 0,
           }}
         >
@@ -62,15 +49,23 @@ export function JintaiWorkflowTimeline() {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    minHeight: 22,
+                    minHeight: 28,
                   }}
                 >
-                  <div style={{ flex: 1, height: 2, background: i === 0 ? "transparent" : s.line }} />
+                  {/* iter 18：5 节点 — 圆圈 28px / 连线 2.5px / 段间距更宽 */}
                   <div
                     style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 11,
+                      flex: 1,
+                      height: 2.5,
+                      background: i === 0 ? "transparent" : s.line,
+                      borderRadius: 1,
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
                       background: s.bg,
                       color: s.fg,
                       border: `2px solid ${s.line}`,
@@ -78,31 +73,33 @@ export function JintaiWorkflowTimeline() {
                       alignItems: "center",
                       justifyContent: "center",
                       flexShrink: 0,
+                      boxShadow: n.status === "current" ? "0 0 0 4px rgba(45,155,216,0.18)" : "none",
                     }}
                   >
-                    {n.status === "done" ? I.check(11) : n.status === "current" ? I.spark(11) : null}
+                    {n.status === "done" ? I.check(14) : n.status === "current" ? I.spark(13) : null}
                   </div>
                   <div
                     style={{
                       flex: 1,
-                      height: 2,
+                      height: 2.5,
                       background:
                         i === workflowNodes.length - 1
                           ? "transparent"
                           : STATUS_STYLE[workflowNodes[i + 1].status].line,
+                      borderRadius: 1,
                     }}
                   />
                 </div>
-                <div style={{ textAlign: "center", marginTop: 10, padding: "0 4px" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink-900)" }}>
-                    {SHORT_TITLE[n.title] ?? n.title}
+                <div style={{ textAlign: "center", marginTop: 12, padding: "0 6px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>
+                    {n.title}
                   </div>
                   <div
                     style={{
-                      fontSize: 10.5,
-                      color: "var(--ink-400)",
+                      fontSize: 11,
+                      color: "var(--ink-500)",
                       marginTop: 4,
-                      lineHeight: 1.4,
+                      lineHeight: 1.5,
                     }}
                   >
                     {n.desc}
