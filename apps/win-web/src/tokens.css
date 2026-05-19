@@ -167,5 +167,12 @@
      抓取自 kamtai.cc：active nav link / section title / 序号方块。 */
   --jintai-red:    #C32629; /* 主红 · 中国红 */
   --jintai-red-50: #FBE9E9; /* 红淡色 · badge bg */
+  --jintai-red-40: #D85A5D; /* 浅一档红 · 采购 tab icon 用 */
   --jintai-green:  #1B7F3A; /* logo 草头 · 深翠绿 */
+  --jintai-green-dark: #115624; /* 深一档绿 · 可信 AI tab icon 用 */
+
+  /* ---------- AI 紫 (iter 16) ----------
+     与既有 --ai-* (= --brand-* 同蓝) 区分，给 AI 收件箱 / 问问 AI 用专属紫色族。 */
+  --ai-purple:      #7B5CFA;
+  --ai-purple-deep: #5B3FE0;
 }

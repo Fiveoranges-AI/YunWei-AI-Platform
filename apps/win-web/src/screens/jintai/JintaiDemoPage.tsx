@@ -159,16 +159,23 @@ type TabKey =
   | "trust";
 
 // iter 13：统一 8 tab icon — 全部用 codebase 现有 I.* outline 风格
-// 移除 emoji（💰 📦 📅），改为 SVG icon，与原 5 tab 一致
-const TABS: { key: TabKey; label: string; hint: string; icon: typeof I.grid }[] = [
-  { key: "overview", label: "概览", hint: "今天总体什么情况", icon: I.grid },
-  { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统", icon: I.inbox },
-  { key: "production", label: "生产流转", hint: "这单生产到哪了", icon: I.factory },
-  { key: "finance", label: "财务", hint: "AI 三表 · 草稿待复核", icon: I.cash },
-  { key: "purchase", label: "采购", hint: "订单 · 供应商 · AI 收件箱", icon: I.pkg },
-  { key: "briefing", label: "经营日报", hint: "老板 5 分钟看完今天", icon: I.calendar },
-  { key: "ask", label: "问问 AI", hint: "中文问，答案带来源", icon: I.ask },
-  { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯", icon: I.shield },
+// iter 16：按 4 个业务族分组配色（经营管理 brand 蓝 / 业务核心 锦泰红 / 资金合规 锦泰绿 / AI 智能 ai 紫）
+// 每 icon 2-tone（外形填淡 + 描边实色 + 关键细节实色）
+const TABS: {
+  key: TabKey;
+  label: string;
+  hint: string;
+  icon: typeof I.grid;
+  color: string;
+}[] = [
+  { key: "overview", label: "概览", hint: "今天总体什么情况", icon: I.grid, color: "var(--brand-500)" },
+  { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统", icon: I.inbox, color: "var(--ai-purple)" },
+  { key: "production", label: "生产流转", hint: "这单生产到哪了", icon: I.factory, color: "var(--jintai-red)" },
+  { key: "finance", label: "财务", hint: "AI 三表 · 草稿待复核", icon: I.cash, color: "var(--jintai-green)" },
+  { key: "purchase", label: "采购", hint: "订单 · 供应商 · AI 收件箱", icon: I.pkg, color: "var(--jintai-red-40)" },
+  { key: "briefing", label: "经营日报", hint: "陈总 5 分钟看完今天", icon: I.calendar, color: "var(--brand-700)" },
+  { key: "ask", label: "问问 AI", hint: "中文问，答案带来源", icon: I.ask, color: "var(--ai-purple-deep)" },
+  { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯", icon: I.shield, color: "var(--jintai-green-dark)" },
 ];
 
 // 视觉减负：每 tab 副标精简到 1 句，去除长 narration
@@ -412,10 +419,12 @@ export function JintaiDemoPage() {
                 onClick={() => switchTab(t.key)}
                 aria-current={active ? "page" : undefined}
                 style={{
+                  position: "relative",
                   padding: isDesktop ? "10px 14px" : "9px 11px",
                   borderRadius: 9,
                   border: "none",
-                  background: active ? "var(--brand-500)" : "transparent",
+                  // iter 16: active 用 tab 主色背景，inactive 透明（保留底部 indicator 显色）
+                  background: active ? t.color : "transparent",
                   color: active ? "#fff" : "var(--ink-700)",
                   fontSize: isDesktop ? 13 : 12.5,
                   fontWeight: active ? 700 : 600,
@@ -429,19 +438,28 @@ export function JintaiDemoPage() {
                   minWidth: 0,
                   fontFamily: "var(--font)",
                   boxShadow: active ? "var(--shadow-card-soft)" : "none",
-                  transition: "background 0.15s ease",
+                  transition: "background 0.15s ease, transform 0.15s ease",
                 }}
               >
                 <span
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: 6,
+                    gap: 8,
                     color: active ? "#fff" : "var(--ink-700)",
                   }}
                 >
-                  <span style={{ display: "inline-flex", opacity: active ? 1 : 0.75 }}>
-                    {t.icon(14, active ? "#fff" : "currentColor")}
+                  {/* iter 16：icon 用 tab 主色 (active 白 / inactive 本色 0.6 opacity)，
+                      active 时 scale 1.05 强化层级 */}
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      opacity: active ? 1 : 0.6,
+                      transform: active ? "scale(1.05)" : "scale(1)",
+                      transition: "opacity 0.15s ease, transform 0.15s ease",
+                    }}
+                  >
+                    {t.icon(16, active ? "#fff" : t.color)}
                   </span>
                   {t.label}
                 </span>
@@ -450,11 +468,26 @@ export function JintaiDemoPage() {
                     fontSize: 10.5,
                     fontWeight: 500,
                     color: active ? "rgba(255,255,255,0.85)" : "var(--ink-500)",
-                    paddingLeft: 20,
+                    paddingLeft: 24,
                   }}
                 >
                   {t.hint}
                 </span>
+                {/* iter 16：active tab 底部 2px 颜色 indicator (与 icon 主色呼应) */}
+                {active && (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      left: 8,
+                      right: 8,
+                      bottom: -1,
+                      height: 2,
+                      borderRadius: 1,
+                      background: "rgba(255,255,255,0.6)",
+                    }}
+                  />
+                )}
               </button>
             );
           })}

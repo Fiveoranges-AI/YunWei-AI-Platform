@@ -44,9 +44,17 @@ export const I = {
   ),
   ask: (s = 22, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2l1.6 4.2L18 8l-4.4 1.8L12 14l-1.6-4.2L6 8l4.4-1.8L12 2z" fill={c} />
-      <circle cx="18.5" cy="17" r="2" fill={c} opacity="0.6" />
-      <circle cx="6.5" cy="18" r="1.4" fill={c} opacity="0.4" />
+      {/* iter 16: 2-tone — 主星填充淡 + 描边实色 + 两 dot 实色 */}
+      <path
+        d="M12 2l1.6 4.2L18 8l-4.4 1.8L12 14l-1.6-4.2L6 8l4.4-1.8L12 2z"
+        fill={c}
+        fillOpacity="0.22"
+        stroke={c}
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="18.5" cy="17" r="2" fill={c} />
+      <circle cx="6.5" cy="18" r="1.4" fill={c} opacity="0.7" />
     </svg>
   ),
   profile: (s = 22, c = "currentColor") => (
@@ -131,8 +139,9 @@ export const I = {
   ),
   cash: (s = 16, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="6" width="18" height="12" rx="2" stroke={c} strokeWidth="1.6" />
-      <circle cx="12" cy="12" r="2.5" stroke={c} strokeWidth="1.6" />
+      {/* iter 16: 2-tone — 钱包外壳填淡 + 描边 + 内圆币实色 */}
+      <rect x="3" y="6" width="18" height="12" rx="2" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <circle cx="12" cy="12" r="2.5" fill={c} />
     </svg>
   ),
   task: (s = 16, c = "currentColor") => (
@@ -208,8 +217,16 @@ export const I = {
   ),
   shield: (s = 16, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6l8-3z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M9 12l2 2 4-4" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      {/* iter 16: 2-tone — 盾形填充淡 + 描边实色 + 对勾实色 */}
+      <path
+        d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6l8-3z"
+        fill={c}
+        fillOpacity="0.18"
+        stroke={c}
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M9 12l2 2 4-4" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   lock: (s = 14, c = "currentColor") => (
@@ -224,39 +241,40 @@ export const I = {
       <path d="M12 7v5l3 2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   ),
+  /* iter 16: 8 个 tab icon 全部升级 2-tone（外形填淡 + 描边实色 + 关键细节实色） */
   grid: (s = 14, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <rect x="4" y="4" width="7" height="7" rx="1.5" stroke={c} strokeWidth="1.6" />
-      <rect x="13" y="4" width="7" height="7" rx="1.5" stroke={c} strokeWidth="1.6" />
-      <rect x="4" y="13" width="7" height="7" rx="1.5" stroke={c} strokeWidth="1.6" />
-      <rect x="13" y="13" width="7" height="7" rx="1.5" stroke={c} strokeWidth="1.6" />
+      <rect x="4" y="4" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
     </svg>
   ),
   inbox: (s = 14, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M3 13l3-8h12l3 8v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M3 13h5l1.5 3h5L16 13h5" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 13l3-8h12l3 8v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6z" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 13h5l1.5 3h5L16 13h5" stroke={c} strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   ),
   factory: (s = 14, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M3 21V11l5 3V11l5 3V9l8 5v7H3z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 21V11l5 3V11l5 3V9l8 5v7H3z" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
       <path d="M3 21h18M7 17v2M11 17v2M15 17v2M19 17v2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   ),
   pkg: (s = 14, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
       <path d="M3 7l9 4 9-4M12 11v10M7.5 5.2l9 4" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   ),
   calendar: (s = 14, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="5" width="18" height="16" rx="2" stroke={c} strokeWidth="1.6" />
+      <rect x="3" y="5" width="18" height="16" rx="2" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
       <path d="M3 10h18M8 3v4M16 3v4" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
-      <circle cx="8" cy="15" r="1" fill={c} />
-      <circle cx="12" cy="15" r="1" fill={c} />
-      <circle cx="16" cy="15" r="1" fill={c} />
+      <circle cx="8" cy="15" r="1.2" fill={c} />
+      <circle cx="12" cy="15" r="1.2" fill={c} />
+      <circle cx="16" cy="15" r="1.2" fill={c} />
     </svg>
   ),
 } as const satisfies Record<string, IconFn>;
