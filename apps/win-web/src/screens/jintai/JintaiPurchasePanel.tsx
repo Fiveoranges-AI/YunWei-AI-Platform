@@ -11,14 +11,14 @@ export function JintaiPurchasePanel() {
       {/* Section 1: 采购订单列表 */}
       <SectionHeader
         title="本月采购订单"
-        sub="6 张已下单 · 总金额 ¥327K · 全部来自 AI 抽取的纸质合同 / 邮件订单，财务确认后入账"
+        sub="6 张已下单 · 总金额 ¥327,000 · 全部来自 AI 抽取的纸质合同 / 邮件订单，财务确认后入账"
       />
       <PurchaseOrderTable orders={purchaseOrders} />
 
       {/* Section 2: 供应商档案 */}
       <SectionHeader
         title="主要供应商"
-        sub="5 家长期供应商 · 每月采购总额 ¥405K · 账期 30–60 天 · AI 维护账期与质量评分"
+        sub="5 家长期供应商 · 每月采购总额 ¥405,000 · 账期 30–60 天 · AI 维护账期与质量评分"
       />
       <div
         style={{

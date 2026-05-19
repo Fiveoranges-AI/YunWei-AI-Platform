@@ -7,6 +7,16 @@ import { JintaiSourceCitation } from "./components";
 
 type ReportId = FinanceReport["id"];
 
+/**
+ * iter 17: 把财务报表 mock 的"千元"基数 ×1000 展开为完整元数。
+ * mock data 仍以千元字串存（"8,200" / "+870" / "−3,800"），display 层 append ",000"。
+ * 0 / — 不变。
+ */
+function expandYuan(v: string): string {
+  if (v === "—" || v === "0") return v;
+  return v + ",000";
+}
+
 export function JintaiFinancePanel() {
   const [active, setActive] = useState<ReportId>("balance");
   const report = financeReports.find((r) => r.id === active) ?? financeReports[0];
@@ -85,7 +95,7 @@ function FinanceReportView({ report }: { report: FinanceReport }) {
             {report.label}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 3 }}>
-            报表期间：{report.period} · 单位：千元 (K¥)
+            报表期间：{report.period} · 单位：元 (¥)
           </div>
         </div>
 
@@ -120,7 +130,7 @@ function FinanceReportView({ report }: { report: FinanceReport }) {
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {report.bottomLine.value === "—" ? "—" : `${report.bottomLine.value} K¥`}
+            {report.bottomLine.value === "—" ? "—" : `${expandYuan(report.bottomLine.value)} 元`}
           </span>
         </div>
 
@@ -294,7 +304,7 @@ function FinanceRowItem({ row }: { row: FinanceRow }) {
           fontVariantNumeric: "tabular-nums",
         }}
       >
-        {row.value === "—" ? "—" : `${row.value}`}
+        {row.value === "—" ? "—" : expandYuan(row.value)}
       </span>
     </div>
   );
@@ -306,20 +316,20 @@ const AI_INSIGHTS: Record<ReportId, { headline: string; body: string; suggestion
   balance: {
     headline: "资产结构健康，应收占比偏高",
     body:
-      "总资产 47M¥，流动资产 62%、固定资产 38%。应收账款 12.5M¥ 占流动资产 43%，主要集中在容百锂电（5.2M）和横店东磁（3.1M），账期未到 ≤ 60 天的占 78%。",
+      "总资产 4,700 万元，流动资产 62%、固定资产 38%。应收账款 1,250 万元 占流动资产 43%，主要集中在容百锂电（520 万元）和横店东磁（310 万元），账期未到 ≤ 60 天的占 78%。",
     suggestion: "AI 建议：本月底前与容百对接确认 2 张到期发票回款节奏，避免应收账款挤压本季现金。",
   },
   income: {
-    headline: "本月利润 1,189 K¥，毛利率 35.0%",
+    headline: "本月利润 1,189,000 元，毛利率 35.0%",
     body:
-      "营业收入 6,800 K¥，环比上月 +8.6%；锂电承烧板 (容百) 占收入 47%，是利润主引擎。期间费用 795 K¥ 控制平稳，研发费用 120 K¥ 持续投入工业陶瓷新品。",
+      "营业收入 6,800,000 元，环比上月 +8.6%；锂电承烧板 (容百) 占收入 47%，是利润主引擎。期间费用 795,000 元 控制平稳，研发费用 120,000 元 持续投入工业陶瓷新品。",
     suggestion: "AI 建议：横店东磁匣钵单价下行压力 −2.1%，本月毛利率被拉低 0.4 个点，可在 Q3 谈判时提示成本压力。",
   },
   cashflow: {
-    headline: "经营现金流 +870 K¥，期末余额回升至 8,200",
+    headline: "经营现金流 +870,000 元，期末余额回升至 8,200,000",
     body:
-      "经营活动净流入 870 K¥，主要来自容百 + 厦钨集中回款；投资支出 200 K¥ 为等静压辅机升级。本月偿还短期借款 500 K¥，符合年度去杠杆计划。",
-    suggestion: "AI 建议：下月初有 3 张原料采购付款（合计 ¥327K）到期，建议预留 ¥400K 经营备用金。",
+      "经营活动净流入 870,000 元，主要来自容百 + 厦钨集中回款；投资支出 200,000 元 为等静压辅机升级。本月偿还短期借款 500,000 元，符合年度去杠杆计划。",
+    suggestion: "AI 建议：下月初有 3 张原料采购付款（合计 ¥327,000）到期，建议预留 ¥400,000 经营备用金。",
   },
 };
 
@@ -385,9 +395,9 @@ function CrossCheckHint() {
       }}
     >
       <span style={{ fontWeight: 700, color: "var(--ok-700)", marginRight: 6 }}>✓ 三表自洽：</span>
-      资产负债表 货币资金 <strong>8,200</strong> = 现金流量表 期末余额 <strong>8,200</strong> ·
-      损益表 净利润 <strong>+1,189</strong> 已结转至 资产负债表 留存收益 ·
-      所有数字均由 AI 自三方账套数据 (Kingdee / PayPal / 银行流水) 自动归集，不修改任何原始凭证。
+      资产负债表 货币资金 <strong>8,200,000 元</strong> = 现金流量表 期末余额 <strong>8,200,000 元</strong> ·
+      损益表 净利润 <strong>+1,189,000 元</strong> 已结转至 资产负债表 留存收益 ·
+      所有数字均由 AI 自三方账套数据 (Kingdee / 支付宝 / 银行流水) 自动归集，不修改任何原始凭证。
     </div>
   );
 }
