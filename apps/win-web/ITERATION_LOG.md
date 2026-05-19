@@ -587,9 +587,48 @@ grep 验证 0 处残留，截图确认 briefing tab "陈总醒后 5 分钟看完
 
 ---
 
-## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 16）
+## Iteration 17 — 2026-05-18 (凌晨) · 财务本地化（PayPal→支付宝 + K元→元）
 
-9 commit 全部 local 落地：
+### 用户反馈
+"国内 SME 不用 PayPal；单位千元（k¥）改成元，下面数字直接以元为单位的计数。"
+
+### 改动
+1. **PayPal → 支付宝**（3 处 sed `s/PayPal/支付宝/g`）
+   - data.ts traceExamples extractedBy "Kingdee + PayPal + 银行流水" → "Kingdee + 支付宝 + 银行流水"
+   - data.ts cashflow aiDraft "8 张银行流水、PayPal 入账" → "8 张银行流水、支付宝 入账"
+   - JintaiFinancePanel CrossCheckHint footer "Kingdee / PayPal / 银行流水" → "Kingdee / 支付宝 / 银行流水"
+
+2. **K¥/千元 → 元 (¥)**：所有数字 ×1000 完整展开
+   - **财务三表（44 个 FinanceRow value）**：通过 display layer helper `expandYuan(v)`：
+     `v + ",000"`（"—" / "0" 不变）。mock data 字串保留为千元基数，
+     视图层 append ",000"，避免改 44 处字面值
+   - **单位 label** "千元 (K¥)" → "元 (¥)"
+   - **bottomLine 后缀** " K¥" → " 元"
+   - **AI_INSIGHTS** 3 段手动改：balance 用"4,700 万元 / 1,250 万元"自然中文；
+     income/cashflow 用千位分隔"1,189,000 元 / 6,800,000 元 / +870,000 元"
+   - **CrossCheckHint 三表自洽** "8,200 = 8,200 / +1,189" → "8,200,000 元 = 8,200,000 元 / +1,189,000 元"
+   - **Ask AI 9 预设 verdict/details/next** Python 脚本扫 38 行 K patterns：
+     `¥1,200K → ¥1,200,000` / `¥85K → ¥85,000` / `¥13.6K → ¥13,600` (decimal) /
+     `6,800 K¥ → 6,800,000 元` / `"容百 3,200K + 风华 950K" → "3,200,000 + 950,000"`
+   - **daily brief 财务/生产/采购一句话 + aiHint + aiSummary** 同覆盖
+   - **suppliers monthlySpend** ¥85K/月 → ¥85,000/月（5 处）
+   - **JintaiPurchasePanel section header** 总金额 ¥327K/¥405K → ¥327,000/¥405,000
+   - 注释 "单位千元 (K¥)" → "单位元 (¥)，演示时显示完整千位分隔"
+
+### 截图验证（Chrome MCP · 1440×900）
+- 资产负债表：货币资金 **8,200,000** / 应收 **12,500,000** / 流动资产小计 **29,000,000** / 资产总计 **47,000,000 元** ✓
+- 损益表：营业收入 **6,800,000** / 净利润 **1,189,000 元** / 期间费用 **795,000** ✓
+- 现金流量表：销售收到 **5,500,000** / 经营净 **+870,000 元** / "**支付宝** 入账" 字样 ✓
+- 全部数字带千位分隔符，单位 label "元 (¥)"，负数 −3,800,000 红色显示，无 PayPal 字样
+
+### Commit
+`859f1c4 style(jintai-demo): localize 财务 — PayPal→支付宝 + k元→元 (iter 17)`
+
+---
+
+## 通宵总结（iter 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 16 / 17）
+
+10 commit 全部 local 落地：
 - **4281a69** iter 8 加 💰 财务 tab（AI 三表草稿 + 复核）
 - **276566c** iter 9 加 📦 采购 tab（订单 + 供应商 + AI 收件箱）
 - **89ed141** iter 10 演示动线 + 来源精度打磨
@@ -599,7 +638,8 @@ grep 验证 0 处残留，截图确认 briefing tab "陈总醒后 5 分钟看完
 - **d9178ce** iter 14 锦泰品牌 accent 注入（红绿条 + 版本号 + h1 红边 + 确认绿 dot + footer）
 - **b8bae99** iter 15 许总 → 陈总 重命名（5 处）
 - **a791915** iter 16 tab icon 加颜色 + 锦泰品牌呼应 + 2-tone 专业 SaaS 风格
+- **859f1c4** iter 17 财务本地化 PayPal→支付宝 + K元→元 (×1000 展开)
 
-**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 加 icon、iter 14 加品牌 accent、iter 16 给 icon 配色 — 都仅装饰层，「不破坏现有」红线达成。
+**5 tab → 8 tab**：概览 / AI 收件箱 / 生产流转 / **财务** / **采购** / **经营日报** / 问问 AI / 可信 AI。所有既有 5 tab 0 业务改动；iter 13 / 14 / 16 / 17 都仅装饰层 / 单位层 / 本地化，「不破坏现有」红线达成。
 
 **待 push**：local 未 push，等用户 review。
