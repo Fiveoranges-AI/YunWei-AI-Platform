@@ -216,3 +216,96 @@
 | 库存日报 | 大块数 | 8 | 5 | -38% |
 | Hero | logo size | 84px | 120px | +43% |
 | Hero | h1 size | 22px | 30px | +36% |
+
+## Iter G10 — 全面交互激活 + Toast + 数字联动
+**Commit:** 4a8e50a
+
+### 用户反馈
+"让更多按钮可实际操作 + 增强真实感可用性 + 全面优化 UI。客户演示时点哪都有反应，像真能用的系统不是静态展示。"
+
+### 基础设施（新文件 2 个）
+
+#### `state.tsx` (Context Provider)
+- 提升 4 大状态到 GuangtianProvider 全局：
+  - `skuStocks: Record<string, number>` — 实时库存 map
+  - `inboundRecords / outboundRecords / ledgerEntries` — 流水列表
+  - `todayInboundCount / todayOutboundCount` — KPI 计数
+- `addInbound(entry)` — 一次提交联动 3 件事：库存 +N + 入库表 prepend + ledger prepend + toast
+- `addOutbound(entry)` — 同上反向 + 库存不足拒绝 + 错误 toast
+- `pendingAsk` + `setPendingAsk` — Dashboard 推送问题给 Ask tab
+
+#### `Toast.tsx` (Toast 系统)
+- 右上角固定 + 滑入动画 (220ms)
+- 5 种 level：ok 绿 / warn 黄 / err 红 / info 蓝 / ai 紫
+- 自动 3.5s 消失 / 点击立即关闭
+- icon: ✓ ⚠ ✗ ℹ ✦
+- 顺便提供 `<Spinner>` 组件给 loading 状态
+
+### 激活的交互（25+）
+
+**Dashboard**
+- 4 KPI 卡片 click → 跳对应 tab + info toast（低库存→SKU 等）
+- KPI hover translateY -2px + shadow lift
+- 4 AI 快捷问题 click → setPendingAsk + 跳 ask tab 自动 send
+- 风险列表 CTA "查看缺货预警" → 跳转 + toast
+- KPI 数值 live 派生（低库存 count 用 skuStocks 算）
+
+**SKU 档案**
+- 8 SKU 库存数字 live （入库后跳来这里看 +N）
+- 状态色重算（live stock 决定 正常/低库存/缺货/呆滞）
+- 行 hover 浅灰 + click → toast 显示库存详情
+- "让 AI 生成迁移映射表" → toast + 关闭弹窗
+
+**入库登记**
+- 9 字段全受控 state
+- SKU 切换 → 单位 + 库位自动同步
+- 数量行 live 预览 "提交后库存 X → Y"
+- 提交 → 0.7s spinner "AI 校验中…" → toast + 表格加行 + 库存 +N
+
+**出库登记**
+- 8 字段全受控 + SKU/订单联动
+- 数量 > 库存 → 红框 + 红警告 + 提交 disabled
+- 数量 ≤ 库存 → live 显示 "出库后剩 Y"
+- "分批出库（先出 X）" → 自动填入 currentStock
+- "触发补产单" / "联系客户" → toast
+- 提交 → 0.7s spinner → toast + 表格加行 + 库存 -N
+
+**库存流水**
+- ledgerEntries 全部 context 派生（入出库后自动 prepend）
+- "导出 Excel" → info toast (显示导出条数)
+
+**缺货预警**
+- 3 订单的 "采纳建议 / 联系客户 / 查看历史" 全 toast
+
+**AI 补产建议**
+- "生成本周补产计划" → 1.2s spinner → 弹窗
+- 每行 "挂到工艺组" → toast + 按钮变绿 "✓ 已挂"
+- 弹窗 "发送给工艺组" → 微信发送 toast
+
+**问问 AI**
+- 4 预设 mock 答案库（PRESET_ANSWERS）含数据来源
+- pendingAsk 自动 send
+- 输入框真响应 + 1s thinking spinner
+- 4 快捷按钮 → 对应回答或 toast
+- 600px 固定高 + 双 rAF 自动滚底
+
+**AI 库存日报**
+- "复制全文" → navigator.clipboard 真复制 + toast
+- "PDF / 微信发陈总 / 微信发王主管 / 修改模板" → toast
+
+### 验证截图
+
+通过 Chrome MCP 实测（1440×721 desktop）：
+- 入库提交 ID `ss_8981j4t26` — Toast "✓ 入库成功 · 高铝砖 +800 块 · 库存 4,280 → 5,080" 弹出 + SKU 下拉同步 + 表格 prepend
+- SKU 档案 `ss_6483whoan` — 跳到这里看库存数字已变 5,080
+- Dashboard KPI 点击 `ss_45632gas2` — 自动跳缺货预警 + info toast
+- 问问 AI 预设 `ss_04487bl2t` — JC-16 趋势 mock 答案 + 数据来源 1,842 条出货
+
+### 三大演示亮点
+
+1. **「录一笔库存全变」**：入库 tab 提交 → toast 弹 → SKU 档案库存数字立即同步 → 库存流水首行就是这笔
+2. **「KPI 是入口而非数字」**：工作台 4 个 KPI 都能直接点跳到对应明细 tab
+3. **「问问 AI 真像 AI」**：预设点击 → 用户气泡 → 1s spinner "AI 正在查询" → 答案带数据来源 + 滚到底部
+
+### Bug 修复
+- SKU 状态阈值：原逻辑 `< safety * 0.5 → 已缺货` 误判 M70 320/800 为缺货。修正为 0 → 已缺货 / 0<stock<safety → 低库存。
