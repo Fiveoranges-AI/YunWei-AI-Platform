@@ -1,25 +1,68 @@
 import { useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
-import { recentOutbounds, outboundAiAlerts } from "../data";
+import { outboundAiAlerts } from "../data";
+import { useGT } from "../state";
+import { Spinner } from "../Toast";
 
 const OUTBOUND_TYPES = ["销售出库", "样品出库", "退货退厂", "其他"];
 
+const SKU_OPTIONS = [
+  { code: "JT-JZL-JC16",       name: "浇注料 JC-16",      unit: "袋" },
+  { code: "JT-HLZ-230-114-65", name: "高铝砖（标准型）",  unit: "块" },
+  { code: "JT-MLS-M70",        name: "莫来石砖 M70",      unit: "块" },
+  { code: "JT-GZB-AL80",       name: "刚玉砖 AL80",       unit: "块" },
+  { code: "JT-JZL-JC18-LR",    name: "低水泥浇注料",      unit: "袋" },
+  { code: "JT-HLZ-T3-150",     name: "高铝砖 T3 异型",    unit: "块" },
+];
+
+const ORDER_OPTIONS = [
+  { id: "SO-20260519-001", customer: "江苏宏泰工程有限公司" },
+  { id: "SO-20260519-002", customer: "江苏宏泰工程有限公司" },
+  { id: "SO-20260519-003", customer: "常州新材科技有限公司" },
+  { id: "SO-20260518-007", customer: "宜兴华能材料" },
+];
+
 export function OutboundPanel() {
   const isDesktop = useIsDesktop();
+  const { skuStocks, outboundRecords, addOutbound, showToast } = useGT();
   const [sku, setSku] = useState("JT-JZL-JC16");
   const [qty, setQty] = useState(200);
-  const [showMore, setShowMore] = useState(false); // iter G9
+  const [unit, setUnit] = useState("袋");
+  const [showMore, setShowMore] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [orderId, setOrderId] = useState(ORDER_OPTIONS[0].id);
+  const [type, setType] = useState(OUTBOUND_TYPES[0]);
+  const [op, setOp] = useState("张仓管");
 
-  // 模拟库存 vs 出货数对比
-  const skuStock: Record<string, number> = {
-    "JT-JZL-JC16": 0,
-    "JT-HLZ-230-114-65": 4280,
-    "JT-MLS-M70": 320,
-    "JT-GZB-AL80": 1850,
-  };
-  const currentStock = skuStock[sku] ?? 0;
+  const currentStock = skuStocks[sku] ?? 0;
   const shortage = qty > currentStock;
+  const selectedOrder = ORDER_OPTIONS.find((o) => o.id === orderId) ?? ORDER_OPTIONS[0];
+  const selectedSku = SKU_OPTIONS.find((s) => s.code === sku) ?? SKU_OPTIONS[0];
+
+  const onSkuChange = (code: string) => {
+    setSku(code);
+    const s = SKU_OPTIONS.find((x) => x.code === code);
+    if (s) setUnit(s.unit);
+  };
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (shortage || !qty || qty <= 0) return;
+    setSubmitting(true);
+    window.setTimeout(() => {
+      addOutbound({
+        sku,
+        name: selectedSku.name,
+        qty,
+        unit,
+        customer: selectedOrder.customer,
+        order: orderId,
+        op,
+      });
+      setSubmitting(false);
+    }, 700);
+  };
 
   return (
     <div
@@ -32,7 +75,7 @@ export function OutboundPanel() {
       {/* 左：表单 + 最近记录 */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {/* 表单 */}
-        <form className="card" style={{ padding: "16px 18px" }} onSubmit={(e) => e.preventDefault()}>
+        <form className="card" style={{ padding: "16px 18px" }} onSubmit={onSubmit}>
           <header style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
             <span
               style={{
@@ -61,30 +104,28 @@ export function OutboundPanel() {
             }}
           >
             <Field label="客户订单 *">
-              <select defaultValue="SO-20260519-001" style={SELECT}>
-                <option>SO-20260519-001 · 江苏宏泰工程</option>
-                <option>SO-20260519-002 · 江苏宏泰工程</option>
-                <option>SO-20260519-003 · 常州新材科技</option>
-                <option>SO-20260518-007 · 宜兴华能材料</option>
+              <select value={orderId} onChange={(e) => setOrderId(e.target.value)} style={SELECT}>
+                {ORDER_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.id} · {o.customer}
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="出库类型 *">
-              <select defaultValue="销售出库" style={SELECT}>
+              <select value={type} onChange={(e) => setType(e.target.value)} style={SELECT}>
                 {OUTBOUND_TYPES.map((t) => (
                   <option key={t}>{t}</option>
                 ))}
               </select>
             </Field>
             <Field label="SKU *">
-              <select
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                style={SELECT}
-              >
-                <option value="JT-JZL-JC16">JT-JZL-JC16 · 浇注料 JC-16 (库存 0)</option>
-                <option value="JT-HLZ-230-114-65">JT-HLZ-230-114-65 · 高铝砖 (库存 4,280)</option>
-                <option value="JT-MLS-M70">JT-MLS-M70 · 莫来石砖 (库存 320)</option>
-                <option value="JT-GZB-AL80">JT-GZB-AL80 · 刚玉砖 (库存 1,850)</option>
+              <select value={sku} onChange={(e) => onSkuChange(e.target.value)} style={SELECT}>
+                {SKU_OPTIONS.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.code} · {s.name} (库存 {(skuStocks[s.code] ?? 0).toLocaleString()})
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="出库数量 *">
@@ -92,10 +133,11 @@ export function OutboundPanel() {
                 <input
                   type="number"
                   value={qty}
-                  onChange={(e) => setQty(Number(e.target.value))}
-                  style={{ ...INPUT, flex: 1 }}
+                  onChange={(e) => setQty(Number(e.target.value) || 0)}
+                  style={{ ...INPUT, flex: 1, borderColor: shortage ? "var(--guangtian-red)" : "var(--ink-200)" }}
+                  min={1}
                 />
-                <select defaultValue="袋" style={{ ...SELECT, width: 80, flex: "none" }}>
+                <select value={unit} onChange={(e) => setUnit(e.target.value)} style={{ ...SELECT, width: 80, flex: "none" }}>
                   <option>袋</option>
                   <option>块</option>
                   <option>吨</option>
@@ -103,6 +145,12 @@ export function OutboundPanel() {
               </div>
               <div style={{ fontSize: 10.5, color: "var(--ink-400)", marginTop: 3 }}>
                 当前库存：<strong>{currentStock.toLocaleString()}</strong>
+                {!shortage && qty > 0 && (
+                  <>
+                    {" · 出库后剩 "}
+                    <strong style={{ color: "var(--stock-ok)" }}>{(currentStock - qty).toLocaleString()}</strong>
+                  </>
+                )}
               </div>
             </Field>
             {showMore && (
@@ -122,7 +170,7 @@ export function OutboundPanel() {
                   <input type="text" defaultValue="德邦物流 · 整车" style={INPUT} />
                 </Field>
                 <Field label="操作人">
-                  <select defaultValue="张仓管" style={SELECT}>
+                  <select value={op} onChange={(e) => setOp(e.target.value)} style={SELECT}>
                     <option>张仓管</option>
                     <option>李师傅</option>
                     <option>王主管</option>
@@ -209,9 +257,38 @@ export function OutboundPanel() {
                   {qty * 2} 袋（5 月 22 日出炉）；③ 提前通知客户江苏宏泰工程预期延期 3 天。
                 </div>
                 <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button type="button" style={MINI_BTN_BLUE}>分批出库</button>
-                  <button type="button" style={MINI_BTN_PURPLE}>触发补产单</button>
-                  <button type="button" style={MINI_BTN_GHOST}>联系客户</button>
+                  <button
+                    type="button"
+                    style={MINI_BTN_BLUE}
+                    onClick={() => {
+                      if (currentStock > 0) {
+                        setQty(currentStock);
+                      }
+                    }}
+                  >
+                    分批出库（先出 {currentStock.toLocaleString()}）
+                  </button>
+                  <button
+                    type="button"
+                    style={MINI_BTN_PURPLE}
+                    onClick={() =>
+                      showToast(
+                        `✓ 已为 ${selectedSku.name} 触发补产 ${qty * 2} ${unit} (5/22 出炉)`,
+                        "ok",
+                      )
+                    }
+                  >
+                    触发补产单
+                  </button>
+                  <button
+                    type="button"
+                    style={MINI_BTN_GHOST}
+                    onClick={() =>
+                      showToast(`已起草延期通知 · 待发 ${selectedOrder.customer}`, "info")
+                    }
+                  >
+                    联系客户
+                  </button>
                 </div>
               </div>
             </div>
@@ -220,24 +297,37 @@ export function OutboundPanel() {
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
             <button
               type="submit"
-              disabled={shortage}
+              disabled={shortage || submitting || qty <= 0}
               style={{
                 padding: "9px 18px",
                 fontSize: 13,
                 fontWeight: 700,
                 borderRadius: 8,
                 border: "none",
-                background: shortage ? "var(--ink-200)" : "var(--guangtian-blue)",
+                background: shortage ? "var(--ink-200)" : submitting ? "var(--brand-400)" : "var(--guangtian-blue)",
                 color: "#fff",
-                cursor: shortage ? "not-allowed" : "pointer",
+                cursor: shortage ? "not-allowed" : submitting ? "wait" : "pointer",
                 fontFamily: "var(--font)",
                 boxShadow: shortage ? "none" : "0 3px 10px rgba(26,63,142,0.22)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                minWidth: 130,
+                justifyContent: "center",
               }}
             >
-              ✓ 确认出库
+              {submitting ? (
+                <>
+                  <Spinner size={12} color="#fff" />
+                  AI 校验中…
+                </>
+              ) : (
+                <>✓ 确认出库</>
+              )}
             </button>
             <button
               type="reset"
+              onClick={() => setQty(0)}
               style={{
                 padding: "9px 14px",
                 fontSize: 12.5,
@@ -269,7 +359,7 @@ export function OutboundPanel() {
             <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)" }}>
               最近出库记录
             </h3>
-            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>近 3 笔 · <a href="#" style={{ color: "var(--brand-700)", textDecoration: "none" }}>查看全部 →</a></span>
+            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>近 3 笔 · 共 {outboundRecords.length} 笔</span>
           </header>
           <div style={{ overflowX: "auto" }}>
             <table
@@ -300,8 +390,8 @@ export function OutboundPanel() {
                 </tr>
               </thead>
               <tbody>
-                {recentOutbounds.slice(0, 3).map((r, i) => (
-                  <tr key={i} style={{ borderTop: "1px solid var(--ink-50)" }}>
+                {outboundRecords.slice(0, 3).map((r, i) => (
+                  <tr key={`${r.time}-${r.sku}-${i}`} style={{ borderTop: "1px solid var(--ink-50)" }}>
                     <td style={CELL_MONO}>{r.time}</td>
                     <td style={CELL_MONO}>{r.sku}</td>
                     <td style={CELL}>{r.name}</td>

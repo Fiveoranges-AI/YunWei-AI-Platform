@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
-import { ledgerRows, ledgerAiAnomalies } from "../data";
+import { ledgerAiAnomalies } from "../data";
+import { useGT } from "../state";
 
 const OP_COLORS: Record<string, { color: string; bg: string }> = {
   入库: { color: "var(--stock-ok)", bg: "rgba(27,127,58,0.10)" },
@@ -14,10 +15,11 @@ const OP_COLORS: Record<string, { color: string; bg: string }> = {
 
 export function LedgerPanel() {
   const isDesktop = useIsDesktop();
+  const { ledgerEntries, showToast } = useGT();
   const [opFilter, setOpFilter] = useState<string>("全部");
   const [skuFilter, setSkuFilter] = useState<string>("");
 
-  const filtered = ledgerRows.filter((r) => {
+  const filtered = ledgerEntries.filter((r) => {
     if (opFilter !== "全部" && r.op !== opFilter) return false;
     if (skuFilter && !r.sku.includes(skuFilter) && !r.name.includes(skuFilter)) return false;
     return true;
@@ -70,6 +72,7 @@ export function LedgerPanel() {
           <input type="date" defaultValue="2026-05-19" style={SMALL_INPUT} />
         </div>
         <button
+          onClick={() => showToast(`已开始导出 ${filtered.length} 条流水到 Excel · 邮件发送中…`, "info")}
           style={{
             padding: "6px 13px",
             fontSize: 12,
@@ -173,7 +176,7 @@ export function LedgerPanel() {
             justifyContent: "space-between",
           }}
         >
-          <span>显示 {filtered.length} / {ledgerRows.length} 条流水</span>
+          <span>显示 {filtered.length} / {ledgerEntries.length} 条流水</span>
           <span>全部流水合计 1,247 条 · 近 30 天</span>
         </footer>
       </div>

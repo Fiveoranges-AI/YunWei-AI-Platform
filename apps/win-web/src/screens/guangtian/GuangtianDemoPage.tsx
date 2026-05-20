@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { GuangtianHero } from "./GuangtianHero";
+import { GuangtianProvider } from "./state";
+import { ToastContainer } from "./Toast";
 import { DashboardPanel } from "./panels/DashboardPanel";
 import { SkuCatalogPanel } from "./panels/SkuCatalogPanel";
 import { InboundPanel } from "./panels/InboundPanel";
@@ -101,6 +103,15 @@ function hashForTab(t: TabKey): string {
 }
 
 export function GuangtianDemoPage() {
+  return (
+    <GuangtianProvider>
+      <GuangtianDemoInner />
+      <ToastContainer />
+    </GuangtianProvider>
+  );
+}
+
+function GuangtianDemoInner() {
   const isDesktop = useIsDesktop();
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     if (typeof window === "undefined") return "dashboard";

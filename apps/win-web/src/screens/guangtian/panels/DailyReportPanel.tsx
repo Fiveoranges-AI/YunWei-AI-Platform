@@ -1,9 +1,23 @@
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { dailyReport } from "../data";
+import { useGT } from "../state";
 
 export function DailyReportPanel() {
   const isDesktop = useIsDesktop();
+  const { showToast } = useGT();
+
+  const onCopy = () => {
+    const flatText = `${dailyReport.date} ${dailyReport.weekday} · 光天耐火 AI 库存日报\n\n${dailyReport.summary}\n\n${dailyReport.sections.map((s) => `${s.title}\n${s.items.map((i) => `  · ${i}`).join("\n")}`).join("\n\n")}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(flatText).then(
+        () => showToast("✓ 日报全文已复制到剪贴板", "ok"),
+        () => showToast("复制失败 · 请手动选择", "err"),
+      );
+    } else {
+      showToast("✓ 日报全文已复制到剪贴板", "ok");
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -178,11 +192,31 @@ export function DailyReportPanel() {
         }}
       >
         <span style={{ fontSize: 12, color: "var(--ink-500)", marginRight: 4 }}>分发：</span>
-        <button style={ACTION_PRIMARY}>📋 复制全文</button>
-        <button style={ACTION_BLUE}>📄 导出 PDF</button>
-        <button style={ACTION_WX}>💬 发给陈总（微信）</button>
-        <button style={ACTION_WX}>💬 发给王主管（仓库主管）</button>
-        <button style={ACTION_GHOST}>修改模板</button>
+        <button style={ACTION_PRIMARY} onClick={onCopy}>📋 复制全文</button>
+        <button
+          style={ACTION_BLUE}
+          onClick={() => showToast(`✓ PDF 生成中 · 文件名 光天日报_${dailyReport.date}.pdf`, "info")}
+        >
+          📄 导出 PDF
+        </button>
+        <button
+          style={ACTION_WX}
+          onClick={() => showToast("✓ 已通过企业微信发送给陈总 · 阅读时间 18:32", "ok")}
+        >
+          💬 发给陈总（微信）
+        </button>
+        <button
+          style={ACTION_WX}
+          onClick={() => showToast("✓ 已通过企业微信发送给王主管 · 阅读时间 18:32", "ok")}
+        >
+          💬 发给王主管（仓库主管）
+        </button>
+        <button
+          style={ACTION_GHOST}
+          onClick={() => showToast("打开日报模板编辑器（演示版本暂未实现）", "warn")}
+        >
+          修改模板
+        </button>
       </div>
     </div>
   );

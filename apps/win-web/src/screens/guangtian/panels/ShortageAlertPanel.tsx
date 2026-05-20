@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { shortageOrders } from "../data";
+import { useGT } from "../state";
 
 const LEVEL_META: Record<
   "high" | "medium" | "low",
@@ -14,6 +15,7 @@ const LEVEL_META: Record<
 
 export function ShortageAlertPanel() {
   const isDesktop = useIsDesktop();
+  const { showToast } = useGT();
   // iter G9: 默认全部折叠（行内已显示风险 + 客户 + 金额），点击展开详情
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
@@ -196,9 +198,24 @@ export function ShortageAlertPanel() {
                       {order.aiSuggestion}
                     </div>
                     <div style={{ marginTop: 9, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button style={ACTION_PRIMARY}>采纳建议 · 生成补产单</button>
-                      <button style={ACTION_GHOST}>联系客户</button>
-                      <button style={ACTION_GHOST}>查看历史出货</button>
+                      <button
+                        style={ACTION_PRIMARY}
+                        onClick={() => showToast(`✓ 已采纳 · 已为 ${order.id} 生成补产单 + 通知工艺组`, "ok")}
+                      >
+                        采纳建议 · 生成补产单
+                      </button>
+                      <button
+                        style={ACTION_GHOST}
+                        onClick={() => showToast(`已为 ${order.customer} 起草延期通知短信 · 待人工审核`, "info")}
+                      >
+                        联系客户
+                      </button>
+                      <button
+                        style={ACTION_GHOST}
+                        onClick={() => showToast(`${order.customer} 过去 90 天出货 12 笔 · 详情已弹出`, "info")}
+                      >
+                        查看历史出货
+                      </button>
                     </div>
                   </div>
                 </div>

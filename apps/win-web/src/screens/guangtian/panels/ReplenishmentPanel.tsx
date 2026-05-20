@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { replenishmentItems } from "../data";
+import { useGT } from "../state";
+import { Spinner } from "../Toast";
 
 type Props = { onGoShortage: () => void };
 
@@ -16,7 +18,23 @@ const PRIORITY_META: Record<
 
 export function ReplenishmentPanel(_props: Props) {
   const isDesktop = useIsDesktop();
+  const { showToast } = useGT();
   const [showSummary, setShowSummary] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [assigned, setAssigned] = useState<Set<string>>(new Set());
+
+  const onGenerate = () => {
+    setGenerating(true);
+    window.setTimeout(() => {
+      setGenerating(false);
+      setShowSummary(true);
+    }, 1200);
+  };
+
+  const onAssign = (sku: string, name: string) => {
+    setAssigned((s) => new Set(s).add(sku));
+    showToast(`✓ ${name} 已挂到工艺组 · 工单号 SC-2026-${(Math.floor(Math.random() * 900) + 100).toString()}`, "ok");
+  };
 
   return (
     <div>
@@ -58,21 +76,34 @@ export function ReplenishmentPanel(_props: Props) {
           </p>
         </div>
         <button
-          onClick={() => setShowSummary(true)}
+          onClick={onGenerate}
+          disabled={generating}
           style={{
             padding: "9px 16px",
             fontSize: 12.5,
             fontWeight: 700,
             borderRadius: 8,
             border: "none",
-            background: "var(--ai-purple)",
+            background: generating ? "var(--ai-300)" : "var(--ai-purple)",
             color: "#fff",
-            cursor: "pointer",
+            cursor: generating ? "wait" : "pointer",
             fontFamily: "var(--font)",
             boxShadow: "0 3px 10px rgba(123,92,250,0.25)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            minWidth: 160,
+            justifyContent: "center",
           }}
         >
-          ✓ 生成本周补产计划
+          {generating ? (
+            <>
+              <Spinner size={12} color="#fff" />
+              AI 综合订单中…
+            </>
+          ) : (
+            <>✓ 生成本周补产计划</>
+          )}
         </button>
       </div>
 
@@ -198,8 +229,22 @@ export function ReplenishmentPanel(_props: Props) {
                   {item.reason.split("·")[0].trim()}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button style={CTA_PRIMARY}>挂到工艺组</button>
-                  <button style={CTA_GHOST}>查看详情</button>
+                  <button
+                    style={{
+                      ...CTA_PRIMARY,
+                      background: assigned.has(item.sku) ? "var(--stock-ok)" : "var(--ai-purple)",
+                    }}
+                    onClick={() => onAssign(item.sku, item.name)}
+                    disabled={assigned.has(item.sku)}
+                  >
+                    {assigned.has(item.sku) ? "✓ 已挂工艺组" : "挂到工艺组"}
+                  </button>
+                  <button
+                    style={CTA_GHOST}
+                    onClick={() => showToast(`${item.name} · AI 综合订单 + 月均出货 + 生产周期算得这个数量`, "info")}
+                  >
+                    查看详情
+                  </button>
                 </div>
               </div>
             </div>
@@ -216,6 +261,7 @@ export function ReplenishmentPanel(_props: Props) {
 }
 
 function ReplenishmentSummaryModal({ onClose }: { onClose: () => void }) {
+  const { showToast } = useGT();
   const total = replenishmentItems.reduce((acc, it) => acc + it.suggestQty, 0);
   return (
     <div
@@ -308,6 +354,10 @@ function ReplenishmentSummaryModal({ onClose }: { onClose: () => void }) {
 
         <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
           <button
+            onClick={() => {
+              showToast(`✓ 补产计划 ${total.toLocaleString()} 单位已发送 · 陈工（工艺组）微信收到`, "ok");
+              onClose();
+            }}
             style={{
               padding: "9px 16px",
               fontSize: 12.5,

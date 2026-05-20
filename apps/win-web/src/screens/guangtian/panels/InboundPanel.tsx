@@ -1,19 +1,68 @@
 import { useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
-import { recentInbounds, inboundAiChecks } from "../data";
+import { inboundAiChecks } from "../data";
+import { useGT } from "../state";
+import { Spinner } from "../Toast";
 
 const INBOUND_TYPES = ["生产入库", "采购入库", "退货入库", "其他"];
 
+// SKU 下拉选项（联动产品名 / 单位 / 库位）
+const SKU_OPTIONS = [
+  { code: "JT-HLZ-230-114-65", name: "高铝砖（标准型）",  unit: "块", loc: "A-03" },
+  { code: "JT-MLS-M70",        name: "莫来石砖 M70",      unit: "块", loc: "A-05" },
+  { code: "JT-JZL-JC16",       name: "浇注料 JC-16",      unit: "袋", loc: "B-02" },
+  { code: "JT-GZB-AL80",       name: "刚玉砖 AL80",       unit: "块", loc: "C-01" },
+  { code: "JT-HLZ-T3-150",     name: "高铝砖 T3 异型",    unit: "块", loc: "A-04" },
+  { code: "JT-JZL-JC18-LR",    name: "低水泥浇注料",      unit: "袋", loc: "B-03" },
+  { code: "JT-GZB-AL90",       name: "高纯刚玉砖 AL90",   unit: "块", loc: "C-02" },
+];
+
 export function InboundPanel() {
   const isDesktop = useIsDesktop();
-  const [toast, setToast] = useState<string | null>(null);
-  const [showMore, setShowMore] = useState(false); // iter G9
+  const { inboundRecords, addInbound, skuStocks } = useGT();
+  const [showMore, setShowMore] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 表单 state — iter G10 全部受控
+  const [sku, setSku] = useState(SKU_OPTIONS[0].code);
+  const [qty, setQty] = useState<number>(800);
+  const [unit, setUnit] = useState(SKU_OPTIONS[0].unit);
+  const [type, setType] = useState(INBOUND_TYPES[0]);
+  const [batch, setBatch] = useState("P20260520-01");
+  const [loc, setLoc] = useState(SKU_OPTIONS[0].loc);
+  const [source, setSource] = useState("SC-2026-0521");
+  const [op, setOp] = useState("王主管");
+
+  const currentStock = skuStocks[sku] ?? 0;
+  const selectedSku = SKU_OPTIONS.find((s) => s.code === sku) ?? SKU_OPTIONS[0];
+
+  const onSkuChange = (code: string) => {
+    setSku(code);
+    const s = SKU_OPTIONS.find((x) => x.code === code);
+    if (s) {
+      setUnit(s.unit);
+      setLoc(s.loc);
+    }
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setToast("入库登记成功 · 已写入流水 + 触发 AI 校验");
-    setTimeout(() => setToast(null), 3000);
+    if (!qty || qty <= 0) return;
+    setSubmitting(true);
+    window.setTimeout(() => {
+      addInbound({
+        sku,
+        name: selectedSku.name,
+        qty,
+        unit,
+        batch,
+        location: loc,
+        op,
+        source: `${type} · ${source}`,
+      });
+      setSubmitting(false);
+    }, 700);
   };
 
   return (
@@ -69,36 +118,52 @@ export function InboundPanel() {
             }}
           >
             <Field label="SKU 编码 *">
-              <select defaultValue="JT-HLZ-230-114-65" style={SELECT}>
-                <option>JT-HLZ-230-114-65 · 高铝砖 230×114×65</option>
-                <option>JT-MLS-M70 · 莫来石砖 M70</option>
-                <option>JT-JZL-JC16 · 浇注料 JC-16</option>
-                <option>JT-GZB-AL80 · 刚玉砖 AL80</option>
+              <select value={sku} onChange={(e) => onSkuChange(e.target.value)} style={SELECT}>
+                {SKU_OPTIONS.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.code} · {s.name} (库存 {(skuStocks[s.code] ?? 0).toLocaleString()})
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="数量 *">
               <div style={{ display: "flex", gap: 6 }}>
-                <input type="number" defaultValue={800} style={{ ...INPUT, flex: 1 }} />
-                <select defaultValue="块" style={{ ...SELECT, width: 80, flex: "none" }}>
+                <input
+                  type="number"
+                  value={qty}
+                  onChange={(e) => setQty(Number(e.target.value) || 0)}
+                  style={{ ...INPUT, flex: 1 }}
+                  min={1}
+                />
+                <select value={unit} onChange={(e) => setUnit(e.target.value)} style={{ ...SELECT, width: 80, flex: "none" }}>
                   <option>块</option>
                   <option>袋</option>
                   <option>吨</option>
                   <option>桶</option>
                 </select>
               </div>
+              <div style={{ fontSize: 10.5, color: "var(--ink-400)", marginTop: 3 }}>
+                提交后库存 <strong>{currentStock.toLocaleString()}</strong> →{" "}
+                <strong style={{ color: "var(--stock-ok)" }}>{(currentStock + qty).toLocaleString()}</strong>
+              </div>
             </Field>
             <Field label="入库类型 *">
-              <select defaultValue="生产入库" style={SELECT}>
+              <select value={type} onChange={(e) => setType(e.target.value)} style={SELECT}>
                 {INBOUND_TYPES.map((t) => (
                   <option key={t}>{t}</option>
                 ))}
               </select>
             </Field>
             <Field label="批次号 *">
-              <input type="text" defaultValue="P20260519-01" style={INPUT} />
+              <input
+                type="text"
+                value={batch}
+                onChange={(e) => setBatch(e.target.value)}
+                style={INPUT}
+              />
             </Field>
             <Field label="库位 *">
-              <select defaultValue="A-03" style={SELECT}>
+              <select value={loc} onChange={(e) => setLoc(e.target.value)} style={SELECT}>
                 <option>A-03 (高铝砖区)</option>
                 <option>A-04 (高铝砖区)</option>
                 <option>A-05 (莫来石区)</option>
@@ -111,10 +176,15 @@ export function InboundPanel() {
             {showMore && (
               <>
                 <Field label="关联生产单 / 采购单">
-                  <input type="text" defaultValue="SC-2026-0521" style={INPUT} />
+                  <input
+                    type="text"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    style={INPUT}
+                  />
                 </Field>
                 <Field label="操作人">
-                  <select defaultValue="王主管" style={SELECT}>
+                  <select value={op} onChange={(e) => setOp(e.target.value)} style={SELECT}>
                     <option>王主管</option>
                     <option>李师傅</option>
                     <option>张仓管</option>
@@ -181,23 +251,40 @@ export function InboundPanel() {
           <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center" }}>
             <button
               type="submit"
+              disabled={submitting || qty <= 0}
               style={{
                 padding: "9px 18px",
                 fontSize: 13,
                 fontWeight: 700,
                 borderRadius: 8,
                 border: "none",
-                background: "var(--guangtian-blue)",
+                background: submitting ? "var(--brand-400)" : "var(--guangtian-blue)",
                 color: "#fff",
-                cursor: "pointer",
+                cursor: submitting ? "wait" : "pointer",
                 fontFamily: "var(--font)",
                 boxShadow: "0 3px 10px rgba(26,63,142,0.22)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                minWidth: 130,
+                justifyContent: "center",
               }}
             >
-              ✓ 确认入库
+              {submitting ? (
+                <>
+                  <Spinner size={12} color="#fff" />
+                  AI 校验中…
+                </>
+              ) : (
+                <>✓ 确认入库</>
+              )}
             </button>
             <button
               type="reset"
+              onClick={() => {
+                setQty(800);
+                setBatch("P20260520-01");
+              }}
               style={{
                 padding: "9px 14px",
                 fontSize: 12.5,
@@ -212,21 +299,6 @@ export function InboundPanel() {
             >
               重置
             </button>
-            {toast && (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: "var(--stock-ok)",
-                  background: "rgba(27,127,58,0.08)",
-                  padding: "5px 11px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(27,127,58,0.20)",
-                  fontWeight: 600,
-                }}
-              >
-                ✓ {toast}
-              </span>
-            )}
           </div>
         </form>
 
@@ -244,10 +316,9 @@ export function InboundPanel() {
             <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)" }}>
               最近入库记录
             </h3>
-            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>近 3 笔 · <a href="#" style={{ color: "var(--brand-700)", textDecoration: "none" }}>查看全部 →</a></span>
+            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>近 3 笔 · 共 {inboundRecords.length} 笔</span>
           </header>
           <div style={{ overflowX: "auto" }}>
-            {/* iter G9: 最近 5 → 3，列减一（操作人合并入来源） */}
             <table
               style={{
                 width: "100%",
@@ -276,8 +347,8 @@ export function InboundPanel() {
                 </tr>
               </thead>
               <tbody>
-                {recentInbounds.slice(0, 3).map((r, i) => (
-                  <tr key={i} style={{ borderTop: "1px solid var(--ink-50)" }}>
+                {inboundRecords.slice(0, 3).map((r, i) => (
+                  <tr key={`${r.time}-${r.sku}-${i}`} style={{ borderTop: "1px solid var(--ink-50)" }}>
                     <td style={CELL_MONO}>{r.time}</td>
                     <td style={CELL_MONO}>{r.sku}</td>
                     <td style={CELL}>{r.name}</td>

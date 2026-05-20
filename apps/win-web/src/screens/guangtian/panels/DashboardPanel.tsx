@@ -1,10 +1,11 @@
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
+import { useGT } from "../state";
 import {
-  kpiCards,
   dashboardAlerts,
   dashboardQuickAsks,
   dashboardAiSample,
+  skuRows,
 } from "../data";
 
 type TabKey = "sku" | "inbound" | "outbound" | "ledger" | "shortage" | "replenish" | "ask" | "report" | "dashboard";
@@ -40,15 +41,46 @@ const LEVEL_STYLES: Record<
 
 export function DashboardPanel({ onGoTab }: Props) {
   const isDesktop = useIsDesktop();
+  const { skuStocks, setPendingAsk, showToast } = useGT();
+
+  // iter G10: KPI 数值从联动 state 派生
+  const lowStockCount = skuRows.filter((r) => {
+    const s = skuStocks[r.code] ?? r.stock;
+    return s > 0 && s < r.safety;
+  }).length + 38; // 演示用 +38 模拟 1,286 全量低库存
+  const outOfStockOrders = 7;
+  const anomalyCount = 12;
+  const totalSku = 1286;
+
+  type Kpi = {
+    label: string;
+    value: string;
+    trend: string;
+    trendLabel: string;
+    color: string;
+    target: TabKey;
+    skuFilter?: string;
+  };
+  const kpis: Kpi[] = [
+    { label: "SKU 总数",     value: totalSku.toLocaleString(), trend: "+12", trendLabel: "本月新增", color: "var(--brand-500)", target: "sku" },
+    { label: "低库存预警",   value: String(lowStockCount),     trend: "SKU", trendLabel: "点击查看 →", color: "var(--stock-low)", target: "sku" },
+    { label: "订单缺货风险", value: String(outOfStockOrders),  trend: "单",  trendLabel: "本周交付 · 点击 →", color: "var(--guangtian-red)", target: "shortage" },
+    { label: "异常记录",     value: String(anomalyCount),      trend: "条",  trendLabel: "盘点 / 错位 · 点击 →", color: "var(--warn-600)", target: "ledger" },
+  ];
 
   // iter G9: 风险提醒 5 → 3（最严重的）
   const topAlerts = dashboardAlerts.slice(0, 3);
   // iter G9: 快捷问题 6 → 4
   const topQuickAsks = dashboardQuickAsks.slice(0, 4);
 
+  const onAskQuestion = (q: string) => {
+    setPendingAsk(q);
+    onGoTab("ask");
+  };
+
   return (
     <div>
-      {/* KPI 卡片 - iter G9 减负到 4 张关键卡 */}
+      {/* KPI 卡片 - iter G10: 全卡可点跳对应 tab */}
       <section
         style={{
           display: "grid",
@@ -57,14 +89,34 @@ export function DashboardPanel({ onGoTab }: Props) {
           marginBottom: 24,
         }}
       >
-        {kpiCards.map((k) => (
-          <div
+        {kpis.map((k) => (
+          <button
             key={k.label}
+            onClick={() => {
+              onGoTab(k.target);
+              showToast(`已跳转至「${k.label}」明细`, "info");
+            }}
             className="card"
             style={{
               padding: "18px 18px 16px",
               borderLeft: `3px solid ${k.color}`,
               minWidth: 0,
+              textAlign: "left",
+              cursor: "pointer",
+              border: "1px solid var(--ink-100)",
+              borderLeftWidth: 3,
+              borderLeftColor: k.color,
+              background: "#fff",
+              fontFamily: "var(--font)",
+              transition: "transform 0.15s ease, box-shadow 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = "var(--shadow-card-hover)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = "";
             }}
           >
             <div
@@ -103,14 +155,15 @@ export function DashboardPanel({ onGoTab }: Props) {
             <div
               style={{
                 fontSize: 11,
-                color: "var(--ink-400)",
+                color: k.target !== "sku" || k.label === "SKU 总数" ? "var(--ink-400)" : "var(--guangtian-red)",
                 marginTop: 6,
                 lineHeight: 1.3,
+                fontWeight: 500,
               }}
             >
               {k.trendLabel}
             </div>
-          </div>
+          </button>
         ))}
       </section>
 
@@ -221,9 +274,11 @@ export function DashboardPanel({ onGoTab }: Props) {
                     </div>
                     {a.cta && (
                       <button
-                        onClick={() =>
-                          onGoTab(a.cta === "查看缺货预警" ? "shortage" : "replenish")
-                        }
+                        onClick={() => {
+                          const target = a.cta === "查看缺货预警" ? "shortage" : "replenish";
+                          onGoTab(target);
+                          showToast(`已跳转 · ${a.cta}`, "info");
+                        }}
                         style={{
                           marginTop: 7,
                           padding: "4px 10px",
@@ -286,12 +341,12 @@ export function DashboardPanel({ onGoTab }: Props) {
             老板手机一句话，AI 拿实时库存秒答。
           </p>
 
-          {/* iter G9: quick asks 6 → 4 */}
+          {/* iter G9: quick asks 6 → 4; iter G10: 点击自动填入问问 AI tab */}
           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
             {topQuickAsks.map((q) => (
               <button
                 key={q}
-                onClick={() => onGoTab("ask")}
+                onClick={() => onAskQuestion(q)}
                 style={{
                   padding: "9px 12px",
                   fontSize: 12,
@@ -303,6 +358,15 @@ export function DashboardPanel({ onGoTab }: Props) {
                   color: "var(--ink-700)",
                   cursor: "pointer",
                   fontFamily: "var(--font)",
+                  transition: "background 0.15s ease, border-color 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "var(--ai-50)";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--ai-200)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "#fff";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--ink-100)";
                 }}
               >
                 {q}
