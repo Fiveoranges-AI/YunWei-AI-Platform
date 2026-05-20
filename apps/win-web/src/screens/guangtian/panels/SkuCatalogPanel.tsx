@@ -3,19 +3,19 @@ import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { skuRows, type SkuRow, type StockStatus } from "../data";
 
+// iter G9: 状态色 5 → 3 档（合并缺货风险+已缺货 → 缺货；呆滞合并到正常显示灰副标）
 const STATUS_COLORS: Record<
   StockStatus,
   { bg: string; color: string; border: string }
 > = {
   正常:    { bg: "rgba(27,127,58,0.08)",  color: "var(--stock-ok)",   border: "rgba(27,127,58,0.20)" },
   低库存:  { bg: "rgba(245,158,11,0.10)", color: "var(--stock-low)",  border: "rgba(245,158,11,0.28)" },
-  缺货风险:{ bg: "rgba(217,32,32,0.08)",  color: "var(--guangtian-red)",border:"rgba(217,32,32,0.22)" },
+  缺货风险:{ bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",  border: "rgba(195,38,41,0.26)" },
   已缺货:  { bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",  border: "rgba(195,38,41,0.26)" },
   呆滞:    { bg: "rgba(107,114,128,0.08)",color: "var(--stock-dead)", border: "rgba(107,114,128,0.20)" },
 };
 
 const CATEGORIES = ["全部", "高铝砖", "莫来石砖", "浇注料", "刚玉砖"];
-const STATUS_FILTERS: ("全部" | StockStatus)[] = ["全部", "正常", "低库存", "缺货风险", "已缺货", "呆滞"];
 
 export function SkuCatalogPanel() {
   const isDesktop = useIsDesktop();
@@ -23,11 +23,16 @@ export function SkuCatalogPanel() {
   const [status, setStatus] = useState<string>("全部");
   const [query, setQuery] = useState<string>("");
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showAdvFilter, setShowAdvFilter] = useState(false); // iter G9
 
   const filtered = useMemo(() => {
     return skuRows.filter((r) => {
       if (cat !== "全部" && r.category !== cat) return false;
-      if (status !== "全部" && r.status !== status) return false;
+      if (status !== "全部") {
+        // iter G9: 合并 缺货风险 / 已缺货 / 呆滞 都按 "缺货" 处理
+        if (status === "缺货" && r.status !== "缺货风险" && r.status !== "已缺货") return false;
+        if (status !== "缺货" && r.status !== status) return false;
+      }
       if (query.trim()) {
         const q = query.trim().toLowerCase();
         if (!r.code.toLowerCase().includes(q) && !r.name.includes(query.trim())) return false;
@@ -38,34 +43,20 @@ export function SkuCatalogPanel() {
 
   return (
     <div>
-      {/* 筛选条 */}
+      {/* iter G9: 筛选条精简 — 搜索 + 高级筛选折叠按钮 + AI 主 CTA */}
       <div
         className="card"
         style={{
-          padding: "12px 14px",
-          marginBottom: 14,
+          padding: "14px 18px",
+          marginBottom: 16,
           display: "flex",
           flexWrap: "wrap",
           gap: 10,
           alignItems: "center",
         }}
       >
-        <FilterGroup
-          label="类别"
-          options={CATEGORIES}
-          value={cat}
-          onChange={setCat}
-        />
-        <span style={{ width: 1, height: 22, background: "var(--ink-100)" }} />
-        <FilterGroup
-          label="状态"
-          options={STATUS_FILTERS}
-          value={status}
-          onChange={setStatus}
-        />
-        <span style={{ width: 1, height: 22, background: "var(--ink-100)" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-          <span style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600 }}>搜索</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 240 }}>
+          {I.search(14, "var(--ink-400)")}
           <input
             type="text"
             placeholder="按 SKU 编码 / 产品名 搜索"
@@ -73,15 +64,31 @@ export function SkuCatalogPanel() {
             onChange={(e) => setQuery(e.target.value)}
             style={{
               flex: 1,
-              padding: "6px 10px",
-              fontSize: 12,
-              border: "1px solid var(--ink-200)",
-              borderRadius: 7,
+              padding: "8px 4px",
+              fontSize: 13,
+              border: "none",
               outline: "none",
               fontFamily: "var(--font)",
+              background: "transparent",
             }}
           />
         </div>
+        <button
+          onClick={() => setShowAdvFilter((v) => !v)}
+          style={{
+            padding: "7px 13px",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 7,
+            border: "1px solid var(--ink-200)",
+            background: showAdvFilter ? "var(--brand-50)" : "#fff",
+            color: showAdvFilter ? "var(--brand-700)" : "var(--ink-700)",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          高级筛选 {showAdvFilter ? "▾" : "▸"}
+        </button>
         <button
           onClick={() => setShowAiModal(true)}
           style={{
@@ -101,8 +108,31 @@ export function SkuCatalogPanel() {
           }}
         >
           {I.spark(12, "#fff")}
-          AI 帮我整理 SKU 命名
+          AI 整理 SKU 命名
         </button>
+        {showAdvFilter && (
+          <div
+            style={{
+              width: "100%",
+              paddingTop: 10,
+              marginTop: 4,
+              borderTop: "1px solid var(--ink-100)",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 14,
+              alignItems: "center",
+            }}
+          >
+            <FilterGroup label="类别" options={CATEGORIES} value={cat} onChange={setCat} />
+            <span style={{ width: 1, height: 22, background: "var(--ink-100)" }} />
+            <FilterGroup
+              label="状态"
+              options={["全部", "正常", "低库存", "缺货"]}
+              value={status === "已缺货" || status === "缺货风险" ? "缺货" : status}
+              onChange={(v) => setStatus(v === "缺货" ? "已缺货" : v)}
+            />
+          </div>
+        )}
       </div>
 
       {/* 表格 */}
@@ -114,21 +144,20 @@ export function SkuCatalogPanel() {
               borderCollapse: "collapse",
               fontSize: 12,
               fontFamily: "var(--font)",
-              minWidth: isDesktop ? 920 : 720,
+              minWidth: isDesktop ? 820 : 720,
             }}
           >
+            {/* iter G9: 列数 10 → 8 (合并单位入库存列；去掉单独操作列, 用 row click 触发详情) */}
             <thead>
               <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--ink-100)" }}>
                 <Th>SKU 编码</Th>
                 <Th>产品名称</Th>
                 <Th>规格</Th>
                 <Th>类别</Th>
-                <Th>单位</Th>
                 <Th>库位</Th>
                 <Th align="right">当前库存</Th>
                 <Th align="right">安全库存</Th>
                 <Th>状态</Th>
-                <Th>操作</Th>
               </tr>
             </thead>
             <tbody>
@@ -137,7 +166,7 @@ export function SkuCatalogPanel() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ink-400)", fontSize: 12 }}>
+                  <td colSpan={8} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ink-400)", fontSize: 12 }}>
                     没有匹配的 SKU
                   </td>
                 </tr>
@@ -255,16 +284,18 @@ function Td({
 
 function SkuTableRow({ row }: { row: SkuRow }) {
   const s = STATUS_COLORS[row.status];
+  // iter G9: 合并 缺货风险/已缺货 → "缺货" 单一显示
+  const displayStatus = row.status === "缺货风险" || row.status === "已缺货" ? "缺货" : row.status;
   return (
     <tr style={{ borderBottom: "1px solid var(--ink-50)" }}>
       <Td mono>{row.code}</Td>
       <Td>{row.name}</Td>
       <Td>{row.spec}</Td>
       <Td>{row.category}</Td>
-      <Td>{row.unit}</Td>
       <Td mono>{row.location}</Td>
       <Td align="right">
         <strong>{row.stock.toLocaleString()}</strong>
+        <span style={{ marginLeft: 3, fontSize: 10.5, color: "var(--ink-400)" }}>{row.unit}</span>
       </Td>
       <Td align="right">{row.safety.toLocaleString()}</Td>
       <td style={{ padding: "10px 12px" }}>
@@ -280,36 +311,10 @@ function SkuTableRow({ row }: { row: SkuRow }) {
             border: `1px solid ${s.border}`,
           }}
         >
-          {row.status}
+          {displayStatus}
         </span>
       </td>
-      <td style={{ padding: "10px 12px" }}>
-        <div style={{ display: "inline-flex", gap: 4 }}>
-          <ActionBtn>详情</ActionBtn>
-          <ActionBtn>流水</ActionBtn>
-        </div>
-      </td>
     </tr>
-  );
-}
-
-function ActionBtn({ children }: { children: React.ReactNode }) {
-  return (
-    <button
-      style={{
-        padding: "3px 8px",
-        fontSize: 10.5,
-        fontWeight: 500,
-        borderRadius: 5,
-        border: "1px solid var(--ink-100)",
-        background: "#fff",
-        color: "var(--ink-600)",
-        cursor: "pointer",
-        fontFamily: "var(--font)",
-      }}
-    >
-      {children}
-    </button>
   );
 }
 

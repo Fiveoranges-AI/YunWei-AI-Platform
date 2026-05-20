@@ -184,7 +184,7 @@ export function ReplenishmentPanel(_props: Props) {
                 </div>
               </div>
 
-              {/* AI 原因 + 操作 */}
+              {/* iter G9: AI 理由仅 1 句概要 + 操作 */}
               <div>
                 <div
                   style={{
@@ -194,12 +194,12 @@ export function ReplenishmentPanel(_props: Props) {
                     marginBottom: 8,
                   }}
                 >
-                  <strong style={{ color: "var(--ai-purple-deep)" }}>AI 理由：</strong>
-                  {item.reason}
+                  <strong style={{ color: "var(--ai-purple-deep)" }}>AI：</strong>
+                  {item.reason.split("·")[0].trim()}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button style={CTA_PRIMARY}>挂到工艺组</button>
-                  <button style={CTA_GHOST}>调整数量</button>
+                  <button style={CTA_GHOST}>查看详情</button>
                 </div>
               </div>
             </div>

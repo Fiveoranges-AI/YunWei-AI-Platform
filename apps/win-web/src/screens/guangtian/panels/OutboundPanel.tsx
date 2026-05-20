@@ -9,6 +9,7 @@ export function OutboundPanel() {
   const isDesktop = useIsDesktop();
   const [sku, setSku] = useState("JT-JZL-JC16");
   const [qty, setQty] = useState(200);
+  const [showMore, setShowMore] = useState(false); // iter G9
 
   // 模拟库存 vs 出货数对比
   const skuStock: Record<string, number> = {
@@ -104,43 +105,68 @@ export function OutboundPanel() {
                 当前库存：<strong>{currentStock.toLocaleString()}</strong>
               </div>
             </Field>
-            <Field label="库位">
-              <select defaultValue="B-02" style={SELECT}>
-                <option>B-02 (浇注料区)</option>
-                <option>A-03 (高铝砖区)</option>
-                <option>A-05 (莫来石区)</option>
-                <option>C-01 (刚玉砖区)</option>
-              </select>
-            </Field>
-            <Field label="批次（先进先出推荐）">
-              <input type="text" defaultValue="P20260515-03" style={INPUT} />
-            </Field>
-            <Field label="承运 / 物流">
-              <input type="text" defaultValue="德邦物流 · 整车" style={INPUT} />
-            </Field>
-            <Field label="操作人">
-              <select defaultValue="张仓管" style={SELECT}>
-                <option>张仓管</option>
-                <option>李师傅</option>
-                <option>王主管</option>
-              </select>
-            </Field>
+            {showMore && (
+              <>
+                <Field label="库位">
+                  <select defaultValue="B-02" style={SELECT}>
+                    <option>B-02 (浇注料区)</option>
+                    <option>A-03 (高铝砖区)</option>
+                    <option>A-05 (莫来石区)</option>
+                    <option>C-01 (刚玉砖区)</option>
+                  </select>
+                </Field>
+                <Field label="批次（先进先出推荐）">
+                  <input type="text" defaultValue="P20260515-03" style={INPUT} />
+                </Field>
+                <Field label="承运 / 物流">
+                  <input type="text" defaultValue="德邦物流 · 整车" style={INPUT} />
+                </Field>
+                <Field label="操作人">
+                  <select defaultValue="张仓管" style={SELECT}>
+                    <option>张仓管</option>
+                    <option>李师傅</option>
+                    <option>王主管</option>
+                  </select>
+                </Field>
+              </>
+            )}
           </div>
 
-          <Field label="备注" full>
-            <textarea
-              rows={2}
-              defaultValue=""
-              placeholder="客户对接人、特殊要求等"
-              style={{
-                ...INPUT,
-                width: "100%",
-                resize: "vertical",
-                minHeight: 50,
-                fontFamily: "var(--font)",
-              }}
-            />
-          </Field>
+          {/* iter G9: 折叠按钮 */}
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            style={{
+              marginTop: 12,
+              padding: "5px 11px",
+              fontSize: 11.5,
+              fontWeight: 600,
+              borderRadius: 6,
+              border: "1px solid var(--ink-100)",
+              background: "transparent",
+              color: "var(--ink-600)",
+              cursor: "pointer",
+              fontFamily: "var(--font)",
+            }}
+          >
+            {showMore ? "收起更多字段 ▾" : "更多字段（库位 / 批次 / 物流 / 操作人 / 备注）▸"}
+          </button>
+          {showMore && (
+            <Field label="备注" full>
+              <textarea
+                rows={2}
+                defaultValue=""
+                placeholder="客户对接人、特殊要求等"
+                style={{
+                  ...INPUT,
+                  width: "100%",
+                  resize: "vertical",
+                  minHeight: 50,
+                  fontFamily: "var(--font)",
+                }}
+              />
+            </Field>
+          )}
 
           {/* 库存不足红色警告 */}
           {shortage && (
@@ -243,7 +269,7 @@ export function OutboundPanel() {
             <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)" }}>
               最近出库记录
             </h3>
-            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>今日 4 笔</span>
+            <span style={{ fontSize: 11, color: "var(--ink-400)" }}>近 3 笔 · <a href="#" style={{ color: "var(--brand-700)", textDecoration: "none" }}>查看全部 →</a></span>
           </header>
           <div style={{ overflowX: "auto" }}>
             <table
@@ -274,7 +300,7 @@ export function OutboundPanel() {
                 </tr>
               </thead>
               <tbody>
-                {recentOutbounds.map((r, i) => (
+                {recentOutbounds.slice(0, 3).map((r, i) => (
                   <tr key={i} style={{ borderTop: "1px solid var(--ink-50)" }}>
                     <td style={CELL_MONO}>{r.time}</td>
                     <td style={CELL_MONO}>{r.sku}</td>
@@ -327,8 +353,9 @@ export function OutboundPanel() {
         <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "var(--ink-500)", lineHeight: 1.5 }}>
           AI 实时核对订单需求 vs 库存，缺货 / 部分出库 / 安全线警告即时弹出。
         </p>
+        {/* iter G9: 2 → 1 最严重风险 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {outboundAiAlerts.map((a, i) => (
+          {outboundAiAlerts.slice(0, 1).map((a, i) => (
             <div
               key={i}
               style={{

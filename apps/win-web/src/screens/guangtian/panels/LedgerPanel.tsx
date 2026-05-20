@@ -97,9 +97,10 @@ export function LedgerPanel() {
               minWidth: isDesktop ? 1080 : 900,
             }}
           >
+            {/* iter G9: 列 10 → 7（合并操作前后为 "前→后"，合并操作人入备注，去掉单独备注列） */}
             <thead style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--ink-100)" }}>
               <tr>
-                {["时间", "操作", "SKU", "产品", "变动", "操作前", "操作后", "关联单据", "操作人", "备注"].map((h) => (
+                {["时间", "操作", "SKU", "产品", "变动", "前→后", "关联单据 / 操作人"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -145,11 +146,16 @@ export function LedgerPanel() {
                     <td style={CELL_MONO}>{r.sku}</td>
                     <td style={CELL}>{r.name}</td>
                     <td style={{ ...CELL_MONO, color: deltaColor, fontWeight: 700 }}>{r.delta}</td>
-                    <td style={{ ...CELL_MONO, color: "var(--ink-500)" }}>{r.before.toLocaleString()}</td>
-                    <td style={{ ...CELL_MONO, fontWeight: 700 }}>{r.after.toLocaleString()}</td>
-                    <td style={{ ...CELL, fontSize: 11, color: "var(--ink-600)" }}>{r.ref}</td>
-                    <td style={CELL}>{r.user}</td>
-                    <td style={{ ...CELL, fontSize: 11, color: "var(--ink-500)" }}>{r.note || "—"}</td>
+                    <td style={CELL_MONO}>
+                      <span style={{ color: "var(--ink-400)" }}>{r.before.toLocaleString()}</span>
+                      <span style={{ margin: "0 5px", color: "var(--ink-300)" }}>→</span>
+                      <strong>{r.after.toLocaleString()}</strong>
+                    </td>
+                    <td style={{ ...CELL, fontSize: 11, color: "var(--ink-600)" }}>
+                      {r.ref}
+                      <span style={{ color: "var(--ink-400)" }}> · {r.user}</span>
+                      {r.note && <div style={{ fontSize: 10.5, color: "var(--ink-400)", marginTop: 2 }}>{r.note}</div>}
+                    </td>
                   </tr>
                 );
               })}
@@ -200,17 +206,18 @@ export function LedgerPanel() {
             AI 流水异常识别
           </h3>
           <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--ink-400)" }}>
-            近 7 天扫描 · 发现 3 条可疑
+            近 7 天扫描 · 最严重 1 条 / 共 3 条
           </span>
         </header>
+        {/* iter G9: 3 → 1 最严重 */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "1fr",
+            gridTemplateColumns: "1fr",
             gap: 10,
           }}
         >
-          {ledgerAiAnomalies.map((a, i) => (
+          {ledgerAiAnomalies.slice(0, 1).map((a, i) => (
             <div
               key={i}
               style={{

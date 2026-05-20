@@ -14,7 +14,8 @@ const LEVEL_META: Record<
 
 export function ShortageAlertPanel() {
   const isDesktop = useIsDesktop();
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set(["SO-20260519-001"]));
+  // iter G9: 默认全部折叠（行内已显示风险 + 客户 + 金额），点击展开详情
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) => {
     setOpenIds((prev) => {
@@ -103,6 +104,21 @@ export function ShortageAlertPanel() {
                 </span>
                 <span style={{ fontSize: 12.5, color: "var(--ink-700)" }}>{order.customer}</span>
                 <span style={{ fontSize: 11.5, color: "var(--ink-500)" }}>· 交付 {order.deliveryDate}</span>
+                {/* iter G9: 行内带 1 行 AI 建议摘要 */}
+                {!isOpen && order.level !== "low" && (
+                  <span
+                    style={{
+                      flex: "1 1 100%",
+                      fontSize: 11.5,
+                      color: "var(--ink-500)",
+                      paddingLeft: 48,
+                      paddingTop: 4,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {order.aiSuggestion.split("。")[0]}。
+                  </span>
+                )}
                 <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--ink-700)", fontWeight: 600 }}>
                   {order.totalValue}
                 </span>

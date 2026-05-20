@@ -41,52 +41,20 @@ const LEVEL_STYLES: Record<
 export function DashboardPanel({ onGoTab }: Props) {
   const isDesktop = useIsDesktop();
 
+  // iter G9: 风险提醒 5 → 3（最严重的）
+  const topAlerts = dashboardAlerts.slice(0, 3);
+  // iter G9: 快捷问题 6 → 4
+  const topQuickAsks = dashboardQuickAsks.slice(0, 4);
+
   return (
     <div>
-      {/* 价值主张 */}
-      <div
-        style={{
-          padding: "14px 18px",
-          background: "linear-gradient(120deg, var(--ai-50) 0%, #F6F0FF 100%)",
-          border: "1px solid var(--ai-100)",
-          borderRadius: 12,
-          marginBottom: 18,
-          fontSize: 13,
-          lineHeight: 1.6,
-          color: "var(--ink-700)",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <span
-          style={{
-            flexShrink: 0,
-            display: "inline-flex",
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            background: "rgba(123,92,250,0.12)",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--ai-purple-deep)",
-          }}
-        >
-          {I.spark(14, "var(--ai-purple-deep)")}
-        </span>
-        <span>
-          <strong style={{ color: "var(--ink-900)" }}>用 AI 把 1,000+ SKU 管清楚</strong>：
-          实时记录出入库，提前 3 天发现缺货风险，让老板不用再靠 Excel 和人工记忆管库存。
-        </span>
-      </div>
-
-      {/* KPI 卡片 - 7 张 */}
+      {/* KPI 卡片 - iter G9 减负到 4 张关键卡 */}
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: isDesktop ? "repeat(7, 1fr)" : "repeat(2, 1fr)",
-          gap: 10,
-          marginBottom: 22,
+          gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)",
+          gap: 14,
+          marginBottom: 24,
         }}
       >
         {kpiCards.map((k) => (
@@ -94,17 +62,17 @@ export function DashboardPanel({ onGoTab }: Props) {
             key={k.label}
             className="card"
             style={{
-              padding: "14px 14px 13px",
+              padding: "18px 18px 16px",
               borderLeft: `3px solid ${k.color}`,
               minWidth: 0,
             }}
           >
             <div
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: "var(--ink-500)",
                 fontWeight: 600,
-                marginBottom: 6,
+                marginBottom: 8,
                 lineHeight: 1.2,
               }}
             >
@@ -112,21 +80,21 @@ export function DashboardPanel({ onGoTab }: Props) {
             </div>
             <div
               style={{
-                fontSize: 22,
+                fontSize: 28,
                 fontWeight: 800,
                 color: "var(--ink-900)",
                 lineHeight: 1.1,
                 fontFamily: "var(--font-display)",
-                letterSpacing: "-0.01em",
+                letterSpacing: "-0.015em",
               }}
             >
               {k.value}
               <span
                 style={{
-                  fontSize: 11.5,
+                  fontSize: 13,
                   fontWeight: 600,
                   color: "var(--ink-400)",
-                  marginLeft: 4,
+                  marginLeft: 5,
                 }}
               >
                 {k.trend}
@@ -134,9 +102,9 @@ export function DashboardPanel({ onGoTab }: Props) {
             </div>
             <div
               style={{
-                fontSize: 10.5,
+                fontSize: 11,
                 color: "var(--ink-400)",
-                marginTop: 5,
+                marginTop: 6,
                 lineHeight: 1.3,
               }}
             >
@@ -151,17 +119,17 @@ export function DashboardPanel({ onGoTab }: Props) {
         style={{
           display: "grid",
           gridTemplateColumns: isDesktop ? "1.65fr 1fr" : "1fr",
-          gap: 16,
+          gap: 20,
         }}
       >
         {/* 风险提醒列表 */}
-        <div className="card" style={{ padding: "16px 18px" }}>
+        <div className="card" style={{ padding: "20px 22px" }}>
           <header
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              marginBottom: 12,
+              marginBottom: 14,
               gap: 8,
             }}
           >
@@ -188,15 +156,15 @@ export function DashboardPanel({ onGoTab }: Props) {
                   color: "var(--ink-900)",
                 }}
               >
-                今日库存风险提醒
+                今日要紧的事
               </h3>
             </div>
             <span style={{ fontSize: 11, color: "var(--ink-400)" }}>
-              共 {dashboardAlerts.length} 条 · 2 红 / 2 黄 / 1 灰
+              Top 3 · 共 {dashboardAlerts.length} 条
             </span>
           </header>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-            {dashboardAlerts.map((a, i) => {
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            {topAlerts.map((a, i) => {
               const s = LEVEL_STYLES[a.level];
               return (
                 <li
@@ -283,7 +251,7 @@ export function DashboardPanel({ onGoTab }: Props) {
         <div
           className="card"
           style={{
-            padding: "16px 18px",
+            padding: "20px 22px",
             background: "linear-gradient(180deg, #FAF8FF 0%, #FFFFFF 60%)",
             borderLeft: "3px solid var(--ai-purple)",
           }}
@@ -318,14 +286,14 @@ export function DashboardPanel({ onGoTab }: Props) {
             老板手机一句话，AI 拿实时库存秒答。
           </p>
 
-          {/* 6 quick asks */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-            {dashboardQuickAsks.map((q) => (
+          {/* iter G9: quick asks 6 → 4 */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
+            {topQuickAsks.map((q) => (
               <button
                 key={q}
                 onClick={() => onGoTab("ask")}
                 style={{
-                  padding: "8px 11px",
+                  padding: "9px 12px",
                   fontSize: 12,
                   fontWeight: 500,
                   textAlign: "left",

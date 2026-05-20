@@ -231,6 +231,7 @@ export function AskInventoryPanel() {
           </div>
         </div>
 
+        {/* iter G9: AI 能干什么精简到 3 行 */}
         <div
           className="card"
           style={{
@@ -242,16 +243,12 @@ export function AskInventoryPanel() {
             lineHeight: 1.65,
           }}
         >
-          <strong style={{ color: "var(--ink-900)" }}>AI 能干什么？</strong>
-          <ul style={{ margin: "5px 0 0", paddingLeft: 18 }}>
-            <li>查库存：任何 SKU 实时数 + 位置 + 历史</li>
-            <li>查订单：本周谁要的多 / 缺什么</li>
-            <li>给建议：补产数量 / 优先级 / 排程</li>
-            <li>找异常：盘点偏差 / 流水跳变 / 呆滞</li>
-            <li>写日报 / 周报 / 月报 一键导出</li>
-          </ul>
-          <div style={{ marginTop: 8, fontSize: 10.5, color: "var(--ink-400)" }}>
-            * AI 不直接修改库存数据，所有变动需仓管 / 老板确认
+          <strong style={{ color: "var(--ink-900)" }}>AI 能查 · 能算 · 能写</strong>
+          <div style={{ marginTop: 5 }}>
+            实时库存 · 缺货风险 · 补产建议 · 异常识别 · 日报周报。
+          </div>
+          <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--ink-400)" }}>
+            * AI 不直接改库存，所有变动需仓管 / 老板确认
           </div>
         </div>
       </div>

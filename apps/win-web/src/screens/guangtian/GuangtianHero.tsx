@@ -41,15 +41,15 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
         }}
       >
         {/* logo + 公司信息 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flex: 1, minWidth: 0 }}>
           <img
             src={logo}
             alt="光天科技"
             style={{
-              width: isDesktop ? 84 : 64,
+              width: isDesktop ? 120 : 84,
               height: "auto",
               flexShrink: 0,
-              filter: "drop-shadow(0 2px 6px rgba(15,35,64,0.10))",
+              filter: "drop-shadow(0 3px 10px rgba(15,35,64,0.12))",
             }}
           />
           <div style={{ minWidth: 0 }}>
@@ -59,7 +59,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                 fontWeight: 700,
                 letterSpacing: "0.18em",
                 color: "var(--guangtian-blue)",
-                marginBottom: 5,
+                marginBottom: 6,
               }}
             >
               YIXING GUANGTIAN REFRACTORY · AI 库存试点
@@ -67,26 +67,25 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
             <h1
               style={{
                 margin: 0,
-                fontSize: isDesktop ? 22 : 19,
+                fontSize: isDesktop ? 30 : 22,
                 fontWeight: 800,
                 color: "var(--ink-900)",
-                lineHeight: 1.25,
-                letterSpacing: "-0.005em",
+                lineHeight: 1.2,
+                letterSpacing: "-0.01em",
               }}
             >
               宜兴光天耐火材料 · <span style={{ color: "var(--guangtian-red)" }}>AI 库存管家</span>
             </h1>
             <p
               style={{
-                margin: "6px 0 0",
-                fontSize: 13,
+                margin: "8px 0 0",
+                fontSize: 13.5,
                 color: "var(--ink-600)",
                 lineHeight: 1.55,
-                maxWidth: 660,
+                maxWidth: 620,
               }}
             >
-              轻量仓库管理 · 生产出入库风险预警 · 用 AI 把 1,000+ SKU 管清楚，
-              告别 Excel 和人工记忆。
+              用 AI 把 1,000+ SKU 管清楚，提前 3 天发现缺货风险。
             </p>
           </div>
         </div>
