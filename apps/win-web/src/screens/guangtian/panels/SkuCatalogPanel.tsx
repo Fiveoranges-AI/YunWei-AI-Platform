@@ -4,16 +4,17 @@ import { I } from "../../../icons";
 import { skuRows, type SkuRow, type StockStatus } from "../data";
 import { useGT } from "../state";
 
-// iter G9: 状态色 5 → 3 档（合并缺货风险+已缺货 → 缺货；呆滞合并到正常显示灰副标）
+// iter G11: 状态 4 主档（正常/低库存/缺货/数据异常）+ 呆滞独立
 const STATUS_COLORS: Record<
   StockStatus,
   { bg: string; color: string; border: string }
 > = {
-  正常:    { bg: "rgba(27,127,58,0.08)",  color: "var(--stock-ok)",   border: "rgba(27,127,58,0.20)" },
-  低库存:  { bg: "rgba(245,158,11,0.10)", color: "var(--stock-low)",  border: "rgba(245,158,11,0.28)" },
-  缺货风险:{ bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",  border: "rgba(195,38,41,0.26)" },
-  已缺货:  { bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",  border: "rgba(195,38,41,0.26)" },
-  呆滞:    { bg: "rgba(107,114,128,0.08)",color: "var(--stock-dead)", border: "rgba(107,114,128,0.20)" },
+  正常:    { bg: "rgba(27,127,58,0.08)",  color: "var(--stock-ok)",     border: "rgba(27,127,58,0.20)" },
+  低库存:  { bg: "rgba(245,158,11,0.10)", color: "var(--stock-low)",    border: "rgba(245,158,11,0.28)" },
+  缺货风险:{ bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",    border: "rgba(195,38,41,0.26)" },
+  已缺货:  { bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",    border: "rgba(195,38,41,0.26)" },
+  呆滞:    { bg: "rgba(107,114,128,0.08)",color: "var(--stock-dead)",   border: "rgba(107,114,128,0.20)" },
+  数据异常: { bg: "rgba(123,92,250,0.10)", color: "var(--ai-purple-deep)", border: "rgba(123,92,250,0.26)" },
 };
 
 const CATEGORIES = ["全部", "高铝砖", "莫来石砖", "浇注料", "刚玉砖"];
@@ -129,7 +130,7 @@ export function SkuCatalogPanel() {
             <span style={{ width: 1, height: 22, background: "var(--ink-100)" }} />
             <FilterGroup
               label="状态"
-              options={["全部", "正常", "低库存", "缺货"]}
+              options={["全部", "正常", "低库存", "缺货", "数据异常"]}
               value={status === "已缺货" || status === "缺货风险" ? "缺货" : status}
               onChange={(v) => setStatus(v === "缺货" ? "已缺货" : v)}
             />
@@ -149,16 +150,17 @@ export function SkuCatalogPanel() {
               minWidth: isDesktop ? 820 : 720,
             }}
           >
-            {/* iter G9: 列数 10 → 8 (合并单位入库存列；去掉单独操作列, 用 row click 触发详情) */}
+            {/* iter G11: 加 材质 + 最近入/出库 列 (9 列) */}
             <thead>
               <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--ink-100)" }}>
                 <Th>SKU 编码</Th>
-                <Th>产品名称</Th>
-                <Th>规格</Th>
-                <Th>类别</Th>
+                <Th>产品名称 / 规格</Th>
+                <Th>材质</Th>
                 <Th>库位</Th>
-                <Th align="right">当前库存</Th>
-                <Th align="right">安全库存</Th>
+                <Th align="right">库存</Th>
+                <Th align="right">安全线</Th>
+                <Th>最近入库</Th>
+                <Th>最近出库</Th>
                 <Th>状态</Th>
               </tr>
             </thead>
@@ -166,7 +168,9 @@ export function SkuCatalogPanel() {
               {filtered.map((r) => {
                 const liveStock = skuStocks[r.code] ?? r.stock;
                 let liveStatus: StockStatus = r.status;
-                if (r.status === "呆滞") liveStatus = "呆滞";
+                // iter G11: "数据异常" / "呆滞" 优先保留（特殊标记不被库存阈值覆盖）
+                if (r.status === "数据异常") liveStatus = "数据异常";
+                else if (r.status === "呆滞") liveStatus = "呆滞";
                 else if (liveStock <= 0) liveStatus = "已缺货";
                 else if (liveStock < r.safety) liveStatus = "低库存";
                 else liveStatus = "正常";
@@ -180,7 +184,7 @@ export function SkuCatalogPanel() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ink-400)", fontSize: 12 }}>
+                  <td colSpan={9} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ink-400)", fontSize: 12 }}>
                     没有匹配的 SKU
                   </td>
                 </tr>
@@ -296,10 +300,18 @@ function Td({
   );
 }
 
+// iter G11: 材质映射（category → 材质名）
+const MATERIAL_MAP: Record<string, string> = {
+  高铝砖: "高铝",
+  莫来石砖: "莫来石",
+  浇注料: "刚玉",
+  刚玉砖: "刚玉",
+};
+
 function SkuTableRow({ row, onClick }: { row: SkuRow; onClick?: () => void }) {
   const s = STATUS_COLORS[row.status];
-  // iter G9: 合并 缺货风险/已缺货 → "缺货" 单一显示
   const displayStatus = row.status === "缺货风险" || row.status === "已缺货" ? "缺货" : row.status;
+  const material = MATERIAL_MAP[row.category] ?? row.category;
   return (
     <tr
       onClick={onClick}
@@ -308,15 +320,19 @@ function SkuTableRow({ row, onClick }: { row: SkuRow; onClick?: () => void }) {
       onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "")}
     >
       <Td mono>{row.code}</Td>
-      <Td>{row.name}</Td>
-      <Td>{row.spec}</Td>
-      <Td>{row.category}</Td>
+      <td style={{ padding: "10px 12px", fontSize: 12, whiteSpace: "nowrap" }}>
+        <div style={{ color: "var(--ink-800)" }}>{row.name}</div>
+        <div style={{ fontSize: 10.5, color: "var(--ink-500)", marginTop: 2 }}>{row.spec}</div>
+      </td>
+      <Td>{material}</Td>
       <Td mono>{row.location}</Td>
       <Td align="right">
         <strong>{row.stock.toLocaleString()}</strong>
         <span style={{ marginLeft: 3, fontSize: 10.5, color: "var(--ink-400)" }}>{row.unit}</span>
       </Td>
       <Td align="right">{row.safety.toLocaleString()}</Td>
+      <Td mono>{row.lastIn ?? "—"}</Td>
+      <Td mono>{row.lastOut ?? "—"}</Td>
       <td style={{ padding: "10px 12px" }}>
         <span
           style={{

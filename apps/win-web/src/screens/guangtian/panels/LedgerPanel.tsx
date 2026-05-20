@@ -15,7 +15,7 @@ const OP_COLORS: Record<string, { color: string; bg: string }> = {
 
 export function LedgerPanel() {
   const isDesktop = useIsDesktop();
-  const { ledgerEntries, showToast } = useGT();
+  const { ledgerEntries, showToast, confirmLedger } = useGT();
   const [opFilter, setOpFilter] = useState<string>("全部");
   const [skuFilter, setSkuFilter] = useState<string>("");
 
@@ -100,10 +100,10 @@ export function LedgerPanel() {
               minWidth: isDesktop ? 1080 : 900,
             }}
           >
-            {/* iter G9: 列 10 → 7（合并操作前后为 "前→后"，合并操作人入备注，去掉单独备注列） */}
+            {/* iter G11: 列 7 → 9（加 AI 置信度 + 已确认状态） */}
             <thead style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--ink-100)" }}>
               <tr>
-                {["时间", "操作", "SKU", "产品", "变动", "前→后", "关联单据 / 操作人"].map((h) => (
+                {["时间", "操作", "SKU", "产品", "变动", "前→后", "关联单据 / 操作人", "AI 置信度", "状态"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -158,6 +158,43 @@ export function LedgerPanel() {
                       {r.ref}
                       <span style={{ color: "var(--ink-400)" }}> · {r.user}</span>
                       {r.note && <div style={{ fontSize: 10.5, color: "var(--ink-400)", marginTop: 2 }}>{r.note}</div>}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <ConfidenceBadge conf={r.confidence ?? 95} />
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      {r.confirmed ? (
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            borderRadius: 4,
+                            background: "rgba(27,127,58,0.10)",
+                            color: "var(--stock-ok)",
+                            border: "1px solid rgba(27,127,58,0.22)",
+                          }}
+                        >
+                          ✓ 已确认
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => confirmLedger(r.time, r.sku)}
+                          style={{
+                            padding: "3px 9px",
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            borderRadius: 4,
+                            border: "1px solid var(--stock-low)",
+                            background: "rgba(245,158,11,0.10)",
+                            color: "var(--stock-low)",
+                            cursor: "pointer",
+                            fontFamily: "var(--font)",
+                          }}
+                        >
+                          ⏳ 待确认 · 点确认
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -256,6 +293,32 @@ export function LedgerPanel() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ConfidenceBadge({ conf }: { conf: number }) {
+  // iter G11: AI 识别置信度 — 绿 ≥90 / 橙 75-89 / 红 < 75
+  const level =
+    conf >= 90 ? { color: "var(--stock-ok)", bg: "rgba(27,127,58,0.10)" } :
+    conf >= 75 ? { color: "var(--stock-low)", bg: "rgba(245,158,11,0.12)" } :
+                 { color: "var(--guangtian-red)", bg: "rgba(217,32,32,0.10)" };
+  return (
+    <span
+      style={{
+        padding: "2px 8px",
+        fontSize: 11,
+        fontWeight: 700,
+        borderRadius: 4,
+        background: level.bg,
+        color: level.color,
+        fontFamily: "var(--font-mono, var(--font))",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      {conf}%
+    </span>
   );
 }
 

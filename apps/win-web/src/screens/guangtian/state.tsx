@@ -52,6 +52,8 @@ export type LedgerEntry = {
   ref: string;
   user: string;
   note: string;
+  confidence?: number; // iter G11: AI 识别置信度 0-100
+  confirmed?: boolean; // iter G11: 是否已确认（true=已确认 / false=待确认）
 };
 
 type AddInboundInput = {
@@ -91,6 +93,8 @@ type GTContextValue = {
 
   addInbound: (entry: AddInboundInput) => void;
   addOutbound: (entry: AddOutboundInput) => boolean; // false 表示库存不足拒绝
+  // iter G11: 流水"待确认 → 已确认"操作
+  confirmLedger: (time: string, sku: string) => void;
 
   // 跨 tab 联动：Dashboard / Shortage 把问题推到 AskInventory
   pendingAsk: string | null;
@@ -136,6 +140,16 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
   const [todayOutboundCount, setTodayOutboundCount] = useState(23);
   const [pendingAsk, setPendingAsk] = useState<string | null>(null);
 
+  const confirmLedger = useCallback(
+    (time: string, sku: string) => {
+      setLedgerEntries((prev) =>
+        prev.map((r) => (r.time === time && r.sku === sku ? { ...r, confirmed: true } : r)),
+      );
+      showToast("✓ 已确认 · 流水状态变为 已确认", "ok");
+    },
+    [showToast],
+  );
+
   const addInbound = useCallback(
     (entry: AddInboundInput) => {
       const time = nowStamp();
@@ -155,6 +169,8 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
             ref: entry.source,
             user: entry.op,
             note: `${entry.batch} 批次`,
+            confidence: 96 + Math.floor(Math.random() * 4), // 96-99 入库手工录入高置信
+            confirmed: true,
           },
           ...rows,
         ]);
@@ -210,6 +226,8 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
             ref: `${entry.order} · ${entry.customer}`,
             user: entry.op,
             note: "",
+            confidence: 96 + Math.floor(Math.random() * 4),
+            confirmed: true,
           },
           ...rows,
         ]);
@@ -251,6 +269,7 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
       todayOutboundCount,
       addInbound,
       addOutbound,
+      confirmLedger,
       pendingAsk,
       setPendingAsk,
     }),
@@ -266,6 +285,7 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
       todayOutboundCount,
       addInbound,
       addOutbound,
+      confirmLedger,
       pendingAsk,
     ],
   );

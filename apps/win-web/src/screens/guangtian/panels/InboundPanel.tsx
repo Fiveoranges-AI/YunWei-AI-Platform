@@ -18,11 +18,48 @@ const SKU_OPTIONS = [
   { code: "JT-GZB-AL90",       name: "高纯刚玉砖 AL90",   unit: "块", loc: "C-02" },
 ];
 
+// iter G11: AI 单据上传识别三段 mock 模板
+type DocIngestState = "idle" | "scanning" | "result";
+const DOC_PRESETS = [
+  {
+    kind: "📄 江苏华峰采购入库单 · 扫描件.pdf",
+    fields: [
+      { key: "SKU 编码", value: "JT-GZB-AL80", conf: 98 },
+      { key: "产品名称", value: "刚玉砖 AL80 等级", conf: 96 },
+      { key: "数量", value: "300", conf: 99 },
+      { key: "批次", value: "P20260520-J3", conf: 94 },
+      { key: "库位", value: "C-01", conf: 92 },
+      { key: "供应商", value: "江苏华峰耐火", conf: 89 },
+      { key: "采购单号", value: "PO-2026-0091", conf: 76 },
+      { key: "送货日期", value: "2026-05-20 11:30", conf: 84 },
+    ],
+    anomalies: [
+      "采购单号 PO-2026-0091 在系统中未找到，疑似遗漏录入或编号笔误",
+      "批次号 P20260520-J3 含字母 J，与近 30 天命名规则不一致（建议 P20260520-03）",
+    ],
+  },
+  {
+    kind: "📷 王主管 5/20 13:42 拍照入库单.jpg",
+    fields: [
+      { key: "SKU 编码", value: "JT-HLZ-230-114-65", conf: 95 },
+      { key: "产品名称", value: "高铝砖（标准型）", conf: 97 },
+      { key: "数量", value: "600", conf: 98 },
+      { key: "批次", value: "P20260520-02", conf: 92 },
+      { key: "库位", value: "A-03", conf: 96 },
+      { key: "操作人", value: "王主管", conf: 88 },
+    ],
+    anomalies: ["照片角度倾斜 12°，AI 已自动校正后识别"],
+  },
+];
+
 export function InboundPanel() {
   const isDesktop = useIsDesktop();
-  const { inboundRecords, addInbound, skuStocks } = useGT();
+  const { inboundRecords, addInbound, skuStocks, showToast } = useGT();
   const [showMore, setShowMore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // iter G11: AI 单据上传
+  const [docState, setDocState] = useState<DocIngestState>("idle");
+  const [docPreset, setDocPreset] = useState(DOC_PRESETS[0]);
 
   // 表单 state — iter G10 全部受控
   const [sku, setSku] = useState(SKU_OPTIONS[0].code);
@@ -65,6 +102,31 @@ export function InboundPanel() {
     }, 700);
   };
 
+  // iter G11: AI 单据上传 → 1.5s 扫描 → 显示识别结果三段
+  const onUploadDoc = (presetIdx: 0 | 1) => {
+    setDocPreset(DOC_PRESETS[presetIdx]);
+    setDocState("scanning");
+    showToast(`✦ AI 正在识别 ${DOC_PRESETS[presetIdx].kind} …`, "ai");
+    window.setTimeout(() => setDocState("result"), 1500);
+  };
+
+  // 把 AI 识别结果填入表单
+  const applyAiResult = () => {
+    const get = (k: string) => docPreset.fields.find((f) => f.key === k)?.value ?? "";
+    const newSku = get("SKU 编码");
+    const newQty = Number(get("数量")) || qty;
+    const newBatch = get("批次");
+    const newLoc = get("库位");
+    if (newSku && SKU_OPTIONS.find((s) => s.code === newSku)) {
+      onSkuChange(newSku);
+    }
+    setQty(newQty);
+    if (newBatch) setBatch(newBatch);
+    if (newLoc) setLoc(newLoc);
+    setDocState("idle");
+    showToast("✓ AI 识别结果已填入表单，请人工复核后提交", "ok");
+  };
+
   return (
     <div
       style={{
@@ -75,6 +137,15 @@ export function InboundPanel() {
     >
       {/* 左：表单 + 最近记录 */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* iter G11: AI 单据上传识别（顶部条 + 展开三段） */}
+        <DocIngestSection
+          state={docState}
+          preset={docPreset}
+          onUpload={onUploadDoc}
+          onApply={applyAiResult}
+          onCancel={() => setDocState("idle")}
+        />
+
         {/* 表单 */}
         <form className="card" style={{ padding: "16px 18px" }} onSubmit={onSubmit}>
           <header style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -476,6 +547,311 @@ function Field({
     <div style={{ display: "flex", flexDirection: "column", gap: 5, gridColumn: full ? "1 / -1" : undefined, marginTop: full ? 10 : 0 }}>
       <label style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-600)" }}>{label}</label>
       {children}
+    </div>
+  );
+}
+
+// iter G11: AI 单据上传识别区
+function DocIngestSection({
+  state,
+  preset,
+  onUpload,
+  onApply,
+  onCancel,
+}: {
+  state: DocIngestState;
+  preset: (typeof DOC_PRESETS)[number];
+  onUpload: (idx: 0 | 1) => void;
+  onApply: () => void;
+  onCancel: () => void;
+}) {
+  if (state === "idle") {
+    return (
+      <div
+        className="card"
+        style={{
+          padding: "14px 18px",
+          background: "linear-gradient(120deg, #FAF8FF 0%, #F4F5FA 80%)",
+          borderLeft: "3px solid var(--ai-purple)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 9,
+            background: "var(--ai-purple)",
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {I.spark(16, "#fff")}
+        </span>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)" }}>
+            AI 单据录入 · 上传扫描件 / 拍照
+          </h3>
+          <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 3 }}>
+            AI 自动识别字段 → 复核 → 入库（90% 字段免手工）
+          </div>
+        </div>
+        <button
+          onClick={() => onUpload(0)}
+          style={{
+            padding: "7px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            borderRadius: 7,
+            border: "none",
+            background: "var(--ai-purple)",
+            color: "#fff",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          📄 上传采购单 PDF
+        </button>
+        <button
+          onClick={() => onUpload(1)}
+          style={{
+            padding: "7px 12px",
+            fontSize: 11.5,
+            fontWeight: 600,
+            borderRadius: 7,
+            border: "1px solid var(--ai-purple)",
+            background: "#fff",
+            color: "var(--ai-purple-deep)",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          📷 王主管拍照入库单
+        </button>
+      </div>
+    );
+  }
+
+  if (state === "scanning") {
+    return (
+      <div
+        className="card"
+        style={{
+          padding: "16px 20px",
+          background: "linear-gradient(120deg, #FAF8FF 0%, #F4F5FA 80%)",
+          borderLeft: "3px solid var(--ai-purple)",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+        }}
+      >
+        <Spinner size={18} color="var(--ai-purple-deep)" />
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ai-purple-deep)" }}>
+            AI 正在识别字段…
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 3 }}>
+            {preset.kind} · OCR + 字段抽取 + 置信度评估
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // result — 三段：识别结果 / 待确认字段 / 异常提示
+  const highConf = preset.fields.filter((f) => f.conf >= 90);
+  const lowConf = preset.fields.filter((f) => f.conf < 90);
+  return (
+    <div className="card" style={{ padding: "16px 20px", borderLeft: "3px solid var(--ai-purple)" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)" }}>
+          ✦ AI 识别完成 · {preset.kind}
+        </span>
+        <span
+          style={{
+            padding: "2px 9px",
+            fontSize: 10.5,
+            fontWeight: 700,
+            borderRadius: 4,
+            background: "rgba(27,127,58,0.10)",
+            color: "var(--stock-ok)",
+          }}
+        >
+          整体置信度 {Math.round(preset.fields.reduce((s, f) => s + f.conf, 0) / preset.fields.length)}%
+        </span>
+        <button
+          onClick={onCancel}
+          style={{
+            marginLeft: "auto",
+            border: "none",
+            background: "transparent",
+            color: "var(--ink-400)",
+            cursor: "pointer",
+            fontSize: 12,
+            padding: 4,
+          }}
+        >
+          取消
+        </button>
+      </header>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 12,
+        }}
+      >
+        {/* 段 1: AI 识别结果（高置信） */}
+        <SectionBlock
+          title="① AI 识别字段"
+          color="var(--stock-ok)"
+          bg="rgba(27,127,58,0.05)"
+          subtitle={`${highConf.length} 个高置信 ≥90%`}
+        >
+          {highConf.map((f) => (
+            <FieldRow key={f.key} field={f} />
+          ))}
+        </SectionBlock>
+
+        {/* 段 2: 待确认字段（低置信） */}
+        <SectionBlock
+          title="② 待确认字段"
+          color="var(--stock-low)"
+          bg="rgba(245,158,11,0.06)"
+          subtitle={`${lowConf.length} 个 < 90% 需复核`}
+        >
+          {lowConf.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: "var(--ink-500)", fontStyle: "italic" }}>无 · 字段全部高置信</div>
+          ) : (
+            lowConf.map((f) => <FieldRow key={f.key} field={f} highlight />)
+          )}
+        </SectionBlock>
+
+        {/* 段 3: 异常提示 */}
+        <SectionBlock
+          title="③ 异常提示"
+          color="var(--guangtian-red)"
+          bg="rgba(217,32,32,0.05)"
+          subtitle={`${preset.anomalies.length} 条 AI 发现的异常`}
+        >
+          {preset.anomalies.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: "var(--ink-500)", fontStyle: "italic" }}>无异常</div>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: "var(--ink-700)", lineHeight: 1.6 }}>
+              {preset.anomalies.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ul>
+          )}
+        </SectionBlock>
+      </div>
+
+      <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+        <button
+          onClick={onApply}
+          style={{
+            padding: "8px 16px",
+            fontSize: 12.5,
+            fontWeight: 700,
+            borderRadius: 8,
+            border: "none",
+            background: "var(--ai-purple)",
+            color: "#fff",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+            boxShadow: "0 3px 10px rgba(123,92,250,0.25)",
+          }}
+        >
+          ✓ 采纳 AI 识别 · 填入下方表单
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: "8px 14px",
+            fontSize: 12.5,
+            fontWeight: 500,
+            borderRadius: 8,
+            border: "1px solid var(--ink-200)",
+            background: "#fff",
+            color: "var(--ink-700)",
+            cursor: "pointer",
+            fontFamily: "var(--font)",
+          }}
+        >
+          手工录入
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SectionBlock({
+  title,
+  color,
+  bg,
+  subtitle,
+  children,
+}: {
+  title: string;
+  color: string;
+  bg: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: bg,
+        borderRadius: 8,
+        border: `1px solid ${color}33`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color }}>{title}</span>
+        <span style={{ fontSize: 10, color: "var(--ink-500)" }}>{subtitle}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{children}</div>
+    </div>
+  );
+}
+
+function FieldRow({
+  field,
+  highlight = false,
+}: {
+  field: { key: string; value: string; conf: number };
+  highlight?: boolean;
+}) {
+  const confColor =
+    field.conf >= 90 ? "var(--stock-ok)" : field.conf >= 75 ? "var(--stock-low)" : "var(--guangtian-red)";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "4px 8px",
+        background: highlight ? "rgba(245,158,11,0.10)" : "#fff",
+        border: highlight ? "1px dashed var(--stock-low)" : "1px solid var(--ink-100)",
+        borderRadius: 5,
+        fontSize: 11,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <span style={{ color: "var(--ink-500)", fontSize: 10 }}>{field.key}</span>
+        <span style={{ color: "var(--ink-900)", fontWeight: 600 }}>{field.value}</span>
+      </div>
+      <span style={{ color: confColor, fontWeight: 700, fontFamily: "var(--font-mono, var(--font))" }}>
+        {field.conf}%
+      </span>
     </div>
   );
 }

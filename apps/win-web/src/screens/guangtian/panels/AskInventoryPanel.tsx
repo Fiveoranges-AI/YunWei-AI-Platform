@@ -7,56 +7,126 @@ import { Spinner } from "../Toast";
 
 type Msg =
   | { role: "user"; text: string }
-  | { role: "ai"; text: string; sources?: { label: string; count: number }[] };
+  | { role: "ai"; text: string; sources?: { label: string; count: number }[] }
+  | { role: "ai-block"; block: AnswerBlock };
 
-// 预设问题 → mock 答案库
-const PRESET_ANSWERS: Record<string, { text: string; sources: { label: string; count: number }[] }> = {
-  "今天哪些订单可能发不出去？": {
-    text:
-      "今天有 3 笔订单存在交付风险，其中 1 笔高风险：\n\n🔴 高风险 1 笔\n• SO-20260519-001 · 江苏宏泰工程 · 5/22 交付 · 缺浇注料 JC-16 200 袋（库存 0）\n\n🟢 关注 2 笔\n• SO-20260517-012 · 常州新材 · M70 部分出库后剩 50 块未补 — 36 小时无动作\n• SO-20260519-003 · 常州新材 · 下周四交付 · 缺 M70 180 + AL90 72\n\n建议优先处理 SO-20260519-001，AI 已草拟 400 袋 JC-16 补产单（B-02 库位）。",
-    sources: [
-      { label: "下游订单表 · 实时拉取", count: 7 },
-      { label: "SKU 库存快照", count: 1286 },
-      { label: "近 7 天出货流水", count: 156 },
+// iter G11: 答案块支持结构化 + 可点击明细链接
+type AnswerBlock = {
+  // 结论
+  conclusion: string;
+  // 数据依据 (chips)
+  evidence: { label: string; count: number }[];
+  // 风险等级
+  risk: "urgent" | "high" | "medium" | "low" | "info";
+  // 建议动作
+  actions: string[];
+  // 可点击明细 — 跳对应 tab
+  links: { label: string; target: "sku" | "shortage" | "ledger" | "replenish" | "report" }[];
+};
+
+const PRESET_ANSWERS: Record<string, AnswerBlock> = {
+  "今天哪些产品库存不够？": {
+    conclusion:
+      "今天 3 个 SKU 低于安全线，其中 1 个已完全缺货：\n• 🔴 JC-16 浇注料 — 库存 0 / 安全 200（缺货 14 天）\n• 🟡 M70 莫来石砖 — 库存 320 / 安全 800（11 天耗尽）\n• 🟡 AL90 高纯刚玉砖 — 库存 78 / 安全 200",
+    evidence: [
+      { label: "SKU 库存快照 · 10:18", count: 1286 },
+      { label: "近 30 天出货流水", count: 1247 },
+    ],
+    risk: "high",
+    actions: [
+      "立即排产 JC-16 浇注料 400 袋（5/22 可出炉）",
+      "M70 莫来石砖 补产 600 块（5/23 出炉）",
+      "AL90 高纯刚玉砖 补产 250 块（5/26 出炉）",
+    ],
+    links: [
+      { label: "查看 SKU 档案 · 低库存筛选", target: "sku" },
+      { label: "去 AI 补产建议 一键挂工艺组", target: "replenish" },
     ],
   },
-  "哪些 SKU 应该补产？": {
-    text:
-      "本周推荐补产 3 个紧迫 SKU，按优先级：\n\n1. 🔴 JC-16 浇注料 · 已缺货 14 天 · 建议补 400 袋（5/22 出炉）\n2. 🔴 M70 莫来石砖 · 库存 320 / 安全 800 · 建议补 600 块（5/23 出炉）\n3. 🟡 AL90 高纯刚玉砖 · 库存 78 / 安全 200 · 建议补 250 块（5/26 出炉）\n\n合计 1,250 单位 · 已为您挂到 AI 补产建议 tab，一键发给工艺组陈工。",
-    sources: [
-      { label: "SKU 库存快照", count: 1286 },
-      { label: "近 30 天出货趋势", count: 1247 },
-      { label: "下游订单需求", count: 7 },
+  "江苏宏泰订单现在能不能发？": {
+    conclusion:
+      "江苏宏泰 2 笔在手订单，1 紧急 + 1 可发：\n• 🚨 SO-20260519-001 · 5/22 交付 · 仅 23% 可发（JC-16 完全缺货 200 袋 / JC18-LR 60 袋齐）\n• 🟢 SO-20260519-002 · 5/25 交付 · 100% 可发（JC18-LR 60 袋齐备）",
+    evidence: [
+      { label: "下游订单表 · 江苏宏泰", count: 2 },
+      { label: "SKU 库存 · 实时", count: 1286 },
+    ],
+    risk: "urgent",
+    actions: [
+      "001 单分批：先发 JC18-LR 60 袋，JC-16 延 3 天",
+      "起草延期通知短信发江苏宏泰李经理",
+      "立即生成 JC-16 400 袋补产单",
+    ],
+    links: [
+      { label: "看 SO-20260519-001 完整明细", target: "shortage" },
+      { label: "去出库登记 操作分批发货", target: "ledger" },
     ],
   },
-  "JC-16 浇注料过去半年的出货趋势？": {
-    text:
-      "JC-16 浇注料 · 近 6 个月趋势分析：\n\n• 月均出货 350 袋（峰值 5 月 480 袋 / 谷值 2 月 220 袋）\n• 主要客户：江苏宏泰工程（占 47%）· 常州新材（占 28%）\n• 季节性：春秋高峰（窑炉检修季）· 冬季低谷\n• 5 月已出 280 袋，预计本月总出货 380 袋\n\nAI 建议：当前安全库存 200 袋偏低，应调整至 400 袋（按月均出货 1.2 倍）。",
-    sources: [
-      { label: "JC-16 出货流水 · 半年", count: 1842 },
-      { label: "客户订单历史", count: 76 },
+  "哪些 SKU 最近出库最快？": {
+    conclusion:
+      "近 7 天出库 TOP 3：\n• #1 JT-HLZ-230-114-65 高铝砖 — 累计出货 4,800 块（占总 35%）\n• #2 JT-JZL-JC18-LR 低水泥浇注料 — 320 袋（占 18%）\n• #3 JT-MLS-M70 莫来石砖 — 280 块（占 15%）\n\n高铝砖出货异常高，疑似单一大客户集中采购（宜兴华能 5/19 一单 1,500 块）。",
+    evidence: [
+      { label: "近 7 天出库流水", count: 156 },
+      { label: "TOP 客户分析", count: 12 },
+    ],
+    risk: "medium",
+    actions: [
+      "对高铝砖供应链做风险评估（单一大客户依赖）",
+      "适当上调高铝砖安全库存到 3,000 块",
+    ],
+    links: [{ label: "去库存流水 看完整出货明细", target: "ledger" }],
+  },
+  "哪些产品可能漏记了？": {
+    conclusion:
+      "AI 流水交叉比对，发现 2 条疑似漏记 / 数据异常：\n• JT-GZB-AL80 刚玉砖 — 5/18 盘点账实差 +12 块（待复核）\n• JT-HLZ-T3-150 高铝砖 — 5/18 调拨方向异常（呆滞区 → 常备区 +1,200，与呆滞标签矛盾）",
+    evidence: [
+      { label: "流水扫描 · 近 7 天", count: 41 },
+      { label: "盘点单 · PD-20260518", count: 1 },
+    ],
+    risk: "medium",
+    actions: [
+      "请张仓管核对 PO-2026-0089 实物清点",
+      "AL80 标记为「数据异常」状态，限制出库直到确认",
+    ],
+    links: [
+      { label: "去库存流水 看 AI 异常识别", target: "ledger" },
+      { label: "去 SKU 档案 看 AL80 状态", target: "sku" },
     ],
   },
-  "给我生成今天的库存日报": {
-    text:
-      "✓ 今日库存日报已生成（5 大块）：\n\n1. 流水：入库 18 / 出库 23 / 净流入 +1,040\n2. 风险：1 红（JC-16 缺货）+ 2 黄（M70 / AL90 低库存）\n3. AI 补产：3 个 SKU 合计 1,250 单位 · 已挂工艺组\n4. 库位：A 区紧张 76% / B 区宽裕 / C 区正常\n5. 操作绩效：王主管 12 入库 100% 合规\n\n→ 切到「AI 库存日报」tab 看完整版，可一键发陈总微信。",
-    sources: [
-      { label: "全天流水", count: 41 },
-      { label: "风险扫描", count: 5 },
-      { label: "补产建议", count: 3 },
+  "明天应该优先生产什么？": {
+    conclusion:
+      "AI 综合 7 个在手订单 + 30 天出货趋势 + 安全库存 + 窑炉空闲 4 天，明日（5/21）排产推荐：\n\n#1 JC-16 浇注料 200 袋（紧急，对应江苏宏泰 SO-20260519-001 + 安全库存补 200）\n#2 M70 莫来石砖 600 块（高，对应常州新材 SO-003）\n\n若产能允许，可同步排产 #3 AL90 250 块（中优，下周四前需用）。",
+    evidence: [
+      { label: "在手订单需求", count: 7 },
+      { label: "近 30 天出货预测", count: 1247 },
+      { label: "工艺组窑炉空闲", count: 4 },
+    ],
+    risk: "high",
+    actions: [
+      "优先 JC-16 200 袋（明日 5/21 排产，5/22 出炉勉强可发 001 单）",
+      "M70 600 块同步排（4 天工期，5/24 入库）",
+      "把补产计划发陈工微信",
+    ],
+    links: [
+      { label: "去 AI 补产建议 一键发陈工", target: "replenish" },
+      { label: "去缺货预警 看订单倒推", target: "shortage" },
     ],
   },
 };
 
-const FALLBACK_ANSWER = (q: string) => ({
-  text: `（演示版本）AI 已收到您的问题："${q}"\n\n上线后 AI 会基于实时库存（1,286 SKU）/ 近 30 天流水（1,247 条）/ 7 个下游订单 综合作答，并附数据来源引用。\n\n建议您试试左侧预设问题，看 AI 真实响应效果。`,
-  sources: [
+const FALLBACK_ANSWER = (q: string): AnswerBlock => ({
+  conclusion: `（演示版本）AI 已收到您的问题："${q}"。上线后 AI 会基于实时库存（1,286 SKU）/ 近 30 天流水（1,247 条）/ 7 个下游订单综合作答，并给出结构化结论 + 数据依据 + 建议动作 + 可点击明细。`,
+  evidence: [
     { label: "本地库存数据", count: 1286 },
     { label: "近 30 天流水", count: 1247 },
   ],
+  risk: "info",
+  actions: ["试试左侧 5 个预设问题，看 AI 真实响应"],
+  links: [],
 });
 
-export function AskInventoryPanel() {
+type AskProps = { onGoTab?: (key: string) => void };
+
+export function AskInventoryPanel({ onGoTab }: AskProps = {}) {
   const isDesktop = useIsDesktop();
   const { showToast, pendingAsk, setPendingAsk } = useGT();
   const [messages, setMessages] = useState<Msg[]>(askSampleConversation as Msg[]);
@@ -72,8 +142,8 @@ export function AskInventoryPanel() {
     setThinking(true);
     window.setTimeout(() => {
       const preset = PRESET_ANSWERS[txt];
-      const answer = preset ?? FALLBACK_ANSWER(txt);
-      setMessages((prev) => [...prev, { role: "ai", text: answer.text, sources: answer.sources }]);
+      const block = preset ?? FALLBACK_ANSWER(txt);
+      setMessages((prev) => [...prev, { role: "ai-block", block }]);
       setThinking(false);
     }, 1000);
   };
@@ -178,7 +248,7 @@ export function AskInventoryPanel() {
           }}
         >
           {messages.map((m, i) => (
-            <MessageBubble key={i} msg={m} />
+            <MessageBubble key={i} msg={m} onGoTab={onGoTab} onLinkToast={(label) => showToast(`已跳转 · ${label}`, "info")} />
           ))}
           {thinking && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: 36 }}>
@@ -340,7 +410,26 @@ export function AskInventoryPanel() {
   );
 }
 
-function MessageBubble({ msg }: { msg: Msg }) {
+const RISK_META: Record<
+  AnswerBlock["risk"],
+  { label: string; color: string; bg: string; border: string }
+> = {
+  urgent: { label: "🚨 紧急", color: "#fff",                       bg: "var(--stock-out)",          border: "var(--stock-out)" },
+  high:   { label: "🔴 高风险", color: "var(--guangtian-red)",      bg: "rgba(217,32,32,0.08)",     border: "rgba(217,32,32,0.30)" },
+  medium: { label: "🟡 中风险", color: "var(--stock-low)",          bg: "rgba(245,158,11,0.08)",    border: "rgba(245,158,11,0.30)" },
+  low:    { label: "🟢 可控",   color: "var(--stock-ok)",           bg: "rgba(27,127,58,0.08)",     border: "rgba(27,127,58,0.30)" },
+  info:   { label: "ℹ 信息",    color: "var(--brand-700)",          bg: "rgba(31,95,163,0.08)",     border: "rgba(31,95,163,0.22)" },
+};
+
+function MessageBubble({
+  msg,
+  onGoTab,
+  onLinkToast,
+}: {
+  msg: Msg;
+  onGoTab?: (key: string) => void;
+  onLinkToast?: (label: string) => void;
+}) {
   if (msg.role === "user") {
     return (
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -393,29 +482,143 @@ function MessageBubble({ msg }: { msg: Msg }) {
           boxShadow: "var(--shadow-card-soft)",
         }}
       >
-        {msg.text}
-        {msg.sources && msg.sources.length > 0 && (
-          <div
-            style={{
-              marginTop: 10,
-              paddingTop: 9,
-              borderTop: "1px dashed var(--ink-100)",
-              fontSize: 10.5,
-              color: "var(--ai-700)",
-            }}
-          >
-            <strong style={{ fontWeight: 700, color: "var(--ai-900)" }}>数据来源：</strong>
-            <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-              {msg.sources.map((s, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <span>• {s.label}</span>
-                  <span style={{ fontFamily: "var(--font-mono, var(--font))" }}>{s.count.toLocaleString()} 条</span>
+        {msg.role === "ai-block" ? (
+          <BlockAnswer block={msg.block} onGoTab={onGoTab} onLinkToast={onLinkToast} />
+        ) : (
+          <>
+            {msg.text}
+            {msg.sources && msg.sources.length > 0 && (
+              <div
+                style={{
+                  marginTop: 10,
+                  paddingTop: 9,
+                  borderTop: "1px dashed var(--ink-100)",
+                  fontSize: 10.5,
+                  color: "var(--ai-700)",
+                }}
+              >
+                <strong style={{ fontWeight: 700, color: "var(--ai-900)" }}>数据来源：</strong>
+                <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+                  {msg.sources.map((s, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span>• {s.label}</span>
+                      <span style={{ fontFamily: "var(--font-mono, var(--font))" }}>{s.count.toLocaleString()} 条</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+// iter G11: 结构化答案块（结论 / 数据依据 / 风险等级 / 建议动作 / 可点击明细）
+function BlockAnswer({
+  block,
+  onGoTab,
+  onLinkToast,
+}: {
+  block: AnswerBlock;
+  onGoTab?: (key: string) => void;
+  onLinkToast?: (label: string) => void;
+}) {
+  const r = RISK_META[block.risk];
+  return (
+    <div>
+      {/* 结论 */}
+      <div style={{ fontSize: 12.5, lineHeight: 1.65, color: "var(--ink-800)", whiteSpace: "pre-line" }}>
+        {block.conclusion}
+      </div>
+
+      {/* 风险等级 + 数据依据 */}
+      <div
+        style={{
+          marginTop: 10,
+          paddingTop: 9,
+          borderTop: "1px dashed var(--ink-100)",
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 8,
+          fontSize: 10.5,
+          color: "var(--ai-700)",
+        }}
+      >
+        <span
+          style={{
+            padding: "2px 9px",
+            fontSize: 10.5,
+            fontWeight: 700,
+            borderRadius: 5,
+            background: r.bg,
+            color: r.color,
+            border: `1px solid ${r.border}`,
+          }}
+        >
+          风险 · {r.label}
+        </span>
+        <span style={{ color: "var(--ink-500)" }}>数据依据</span>
+        {block.evidence.map((e, i) => (
+          <span
+            key={i}
+            style={{
+              padding: "2px 8px",
+              borderRadius: 4,
+              background: "var(--surface-2)",
+              color: "var(--ink-700)",
+              fontSize: 10.5,
+              border: "1px solid var(--ink-100)",
+            }}
+          >
+            {e.label} · {e.count.toLocaleString()} 条
+          </span>
+        ))}
+      </div>
+
+      {/* 建议动作 */}
+      {block.actions.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ai-900)", marginBottom: 4 }}>
+            建议动作
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: "var(--ink-700)", lineHeight: 1.65 }}>
+            {block.actions.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* 可点击明细 */}
+      {block.links.length > 0 && (
+        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {block.links.map((l, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                onGoTab?.(l.target);
+                onLinkToast?.(l.label);
+              }}
+              style={{
+                padding: "5px 11px",
+                fontSize: 11.5,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: "1px solid var(--ai-200)",
+                background: "var(--ai-50)",
+                color: "var(--ai-700)",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+              }}
+            >
+              {l.label} →
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

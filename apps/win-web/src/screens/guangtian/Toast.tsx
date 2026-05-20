@@ -82,6 +82,10 @@ export function ToastContainer() {
           from { transform: rotate(0); }
           to { transform: rotate(360deg); }
         }
+        @keyframes gt-pulse-urgent {
+          0%, 100% { box-shadow: 0 0 0 2px rgba(195,38,41,0.18), 0 1px 2px rgba(11, 34, 50, 0.04), 0 4px 14px rgba(11, 34, 50, 0.05); }
+          50%      { box-shadow: 0 0 0 4px rgba(195,38,41,0.30), 0 1px 2px rgba(11, 34, 50, 0.04), 0 4px 14px rgba(11, 34, 50, 0.05); }
+        }
       `}</style>
     </div>
   );

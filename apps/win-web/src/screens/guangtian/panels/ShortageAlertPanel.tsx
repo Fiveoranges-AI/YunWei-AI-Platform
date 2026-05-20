@@ -5,9 +5,10 @@ import { shortageOrders } from "../data";
 import { useGT } from "../state";
 
 const LEVEL_META: Record<
-  "high" | "medium" | "low",
-  { label: string; bg: string; color: string; border: string; emoji: string }
+  "urgent" | "high" | "medium" | "low",
+  { label: string; bg: string; color: string; border: string; emoji: string; pulse?: boolean }
 > = {
+  urgent: { label: "紧急", bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",      border: "rgba(195,38,41,0.50)", emoji: "🚨", pulse: true },
   high:   { label: "高风险", bg: "rgba(217,32,32,0.06)",  color: "var(--guangtian-red)", border: "rgba(217,32,32,0.30)", emoji: "🔴" },
   medium: { label: "中风险", bg: "rgba(245,158,11,0.06)", color: "var(--stock-low)",      border: "rgba(245,158,11,0.30)", emoji: "🟡" },
   low:    { label: "可发", bg: "rgba(27,127,58,0.06)",  color: "var(--stock-ok)",       border: "rgba(27,127,58,0.30)", emoji: "🟢" },
@@ -28,6 +29,7 @@ export function ShortageAlertPanel() {
     });
   };
 
+  const urg = shortageOrders.filter((o) => o.level === "urgent").length;
   const hi = shortageOrders.filter((o) => o.level === "high").length;
   const mid = shortageOrders.filter((o) => o.level === "medium").length;
   const lo = shortageOrders.filter((o) => o.level === "low").length;
@@ -49,8 +51,9 @@ export function ShortageAlertPanel() {
         <span style={{ fontSize: 12.5, color: "var(--ink-700)", fontWeight: 600 }}>
           📊 本周（5/19 – 5/25）<strong>{shortageOrders.length}</strong> 笔订单已过 AI 缺货核对：
         </span>
-        <Pill color="var(--guangtian-red)" bg="rgba(217,32,32,0.10)">🔴 高风险 {hi}</Pill>
-        <Pill color="var(--stock-low)" bg="rgba(245,158,11,0.10)">🟡 中风险 {mid}</Pill>
+        <Pill color="#fff" bg="var(--stock-out)">🚨 紧急 {urg}</Pill>
+        <Pill color="var(--guangtian-red)" bg="rgba(217,32,32,0.10)">🔴 高 {hi}</Pill>
+        <Pill color="var(--stock-low)" bg="rgba(245,158,11,0.10)">🟡 中 {mid}</Pill>
         <Pill color="var(--stock-ok)" bg="rgba(27,127,58,0.10)">🟢 可发 {lo}</Pill>
         <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--ink-400)" }}>
           AI 已于 10:18 完成最新核对
@@ -68,8 +71,10 @@ export function ShortageAlertPanel() {
               className="card"
               style={{
                 padding: 0,
-                borderLeft: `3px solid ${meta.color}`,
+                borderLeft: `${meta.pulse ? 4 : 3}px solid ${meta.color}`,
                 overflow: "hidden",
+                boxShadow: meta.pulse ? "0 0 0 2px rgba(195,38,41,0.18), var(--shadow-card)" : undefined,
+                animation: meta.pulse ? "gt-pulse-urgent 1.8s ease-in-out infinite" : undefined,
               }}
             >
               {/* 订单标题行 */}
@@ -106,6 +111,8 @@ export function ShortageAlertPanel() {
                 </span>
                 <span style={{ fontSize: 12.5, color: "var(--ink-700)" }}>{order.customer}</span>
                 <span style={{ fontSize: 11.5, color: "var(--ink-500)" }}>· 交付 {order.deliveryDate}</span>
+                {/* iter G11: 行内"预计可发货状态" + 进度条 */}
+                <FulfillmentPill order={order} meta={meta} />
                 {/* iter G9: 行内带 1 行 AI 建议摘要 */}
                 {!isOpen && order.level !== "low" && (
                   <span
@@ -225,6 +232,44 @@ export function ShortageAlertPanel() {
         })}
       </div>
     </div>
+  );
+}
+
+function FulfillmentPill({
+  order,
+  meta,
+}: {
+  order: typeof shortageOrders[number];
+  meta: typeof LEVEL_META["urgent"];
+}) {
+  const pct = order.fulfillmentPct;
+  const barColor =
+    pct >= 100 ? "var(--stock-ok)" :
+    pct >= 50 ? "var(--stock-low)" :
+                meta.color;
+  return (
+    <span
+      style={{
+        marginLeft: 6,
+        padding: "3px 9px",
+        fontSize: 10.5,
+        fontWeight: 700,
+        borderRadius: 5,
+        background: "rgba(255,255,255,0.7)",
+        color: barColor,
+        border: `1px solid ${barColor}`,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        whiteSpace: "nowrap",
+      }}
+      title="AI 预计可发货状态"
+    >
+      <span style={{ width: 36, height: 4, background: "var(--ink-100)", borderRadius: 2, overflow: "hidden", display: "inline-block" }}>
+        <span style={{ display: "block", height: "100%", width: `${pct}%`, background: barColor }} />
+      </span>
+      {order.fulfillment}
+    </span>
   );
 }
 

@@ -316,7 +316,7 @@ function GuangtianDemoInner() {
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "ask"}>
-          <AskInventoryPanel />
+          <AskInventoryPanel onGoTab={(t) => switchTab(t as TabKey)} />
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "report"}>
