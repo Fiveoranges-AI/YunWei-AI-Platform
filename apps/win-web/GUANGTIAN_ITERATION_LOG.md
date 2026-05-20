@@ -309,3 +309,63 @@
 
 ### Bug 修复
 - SKU 状态阈值：原逻辑 `< safety * 0.5 → 已缺货` 误判 M70 320/800 为缺货。修正为 0 → 已缺货 / 0<stock<safety → 低库存。
+
+## Iter G11 — 对齐光天新 spec
+**Commit:** 5d7c1d0
+
+### 用户反馈
+新 spec 详细要求列举到字段级，找 G1-G10 已实现的 gap 并精确补缺。
+
+### Gap 清单 → 补齐 8 项
+
+#### 1. SKU 台账列扩展（SkuCatalogPanel）
+- 列 8 → 9（产品名+规格合并 / 加 **材质** / 加 **最近入库** / 加 **最近出库**）
+- 材质映射：高铝砖→高铝 / 莫来石砖→莫来石 / 浇注料→刚玉 / 刚玉砖→刚玉
+- 状态枚举加 **"数据异常"**（紫色 ai-purple-deep）
+- AL80 由"缺货风险"→"数据异常"（反映盘点偏差 +12）
+- 状态优先级修：数据异常 / 呆滞标签不被库存阈值覆盖
+
+#### 2. 库存流水 AI 置信度 + 已确认（LedgerPanel）
+- 列 7 → 9（加 **AI 识别置信度** + **已确认状态**）
+- ConfidenceBadge：≥90 绿 / 75-89 橙 / <75 红
+- 已确认绿 badge / 待确认橙按钮（点击 `confirmLedger` → toast + 状态变绿）
+- `state.tsx` 新增 `confirmLedger(time, sku)` 函数
+- 新增入/出库 auto-confirm 96-99%
+
+#### 3. 订单缺货预警 4 级 + 预计可发货状态（ShortageAlertPanel）
+- 风险等级 3 → 4 级（加 **"紧急" urgent** 深红 + pulse 动画）
+- `gt-pulse-urgent` 1.8s 循环阴影脉冲
+- 每订单加 FulfillmentPill：迷你进度条 + "**可全发 / 可部分发 X% / 需补产**"
+- SO-20260519-001 由 high → urgent（5/22 仅 2 天后）
+
+#### 4. AI 单据录入三段（InboundPanel）
+- 顶部新增 "AI 单据录入 · 上传扫描件 / 拍照" 区
+- 2 mock 单据（📄 江苏华峰 PDF / 📷 王主管拍照），1.5s spinner
+- 识别后三段网格：
+  - **① AI 识别字段**（绿，≥90% 高置信）
+  - **② 待确认字段**（橙虚线框，<90% 需复核）
+  - **③ 异常提示**（红，AI 发现的逻辑异常如"采购单号系统未找到 / 批次号命名不一致"）
+- "采纳 AI 识别" → 一键回填表单 + toast
+
+#### 5. 问问 AI 结构化答案 + 可点击链接（AskInventoryPanel）
+- 预设 4 → **5 spec 问题**：库存不够 / 江苏宏泰能发 / 出库最快 / 可能漏记 / 明天优先生产
+- AI 答案从纯文本 → **结构化 AnswerBlock**：
+  - 结论（whiteSpace pre-line 多段）
+  - 风险等级 badge（5 级 urgent/high/medium/low/info）
+  - 数据依据（chip 行 + 来源数据条数）
+  - 建议动作（有序列表）
+  - **可点击明细**按钮（跳 sku/shortage/ledger/replenish/report tab + info toast）
+- 旧 sample 走 role: "ai" 保留兼容，新答案走 role: "ai-block"
+- GuangtianDemoPage 传 onGoTab prop 给 Ask panel
+
+### 没补的（已经有了或低优）
+- SKU 批次列 — 批次是 per-入库非 per-SKU，逻辑上不合适放 SKU 表（保留在流水中）
+- 材质 rename — 已通过派生映射展示，无需改 data.ts category 字段
+- ❌ 新建 "AI 收件箱" tab — 按红线"不重复造 tab"，融进 InboundPanel 顶部
+
+### 验证截图
+- SKU 9 列 + 材质 + 数据异常紫 badge：`ss_5633rljdg`
+- 缺货 4 级 + 紧急 pulse + FulfillmentPill：`ss_2621lyo47`
+- Ledger 9 列 + AI 置信度 + 已确认/待确认：`ss_2749045qp`
+- AI 单据上传三段：`ss_4649rwgop`
+- AI 结构化答案 + 跳转按钮：`ss_1237llez5`
