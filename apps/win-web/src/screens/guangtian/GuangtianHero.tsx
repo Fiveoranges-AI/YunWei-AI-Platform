@@ -34,25 +34,38 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
       />
       <div
         style={{
-          padding: isDesktop ? "24px 28px 26px" : "18px 18px 20px",
+          padding: isDesktop ? "32px 36px 34px" : "20px 18px 22px",
           display: "flex",
           flexDirection: isDesktop ? "row" : "column",
           alignItems: isDesktop ? "center" : "flex-start",
-          gap: isDesktop ? 24 : 14,
+          gap: isDesktop ? 28 : 16,
         }}
       >
-        {/* logo + 公司信息 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 18, flex: 1, minWidth: 0 }}>
-          <img
-            src={logo}
-            alt="光天科技"
+        {/* logo + 公司信息 — iter G16: logo 等比放大 + 圆角呼吸卡 */}
+        <div style={{ display: "flex", alignItems: "center", gap: 22, flex: 1, minWidth: 0 }}>
+          <div
             style={{
-              width: isDesktop ? 120 : 84,
-              height: "auto",
               flexShrink: 0,
-              filter: "drop-shadow(0 3px 10px rgba(15,35,64,0.12))",
+              padding: isDesktop ? "16px 18px" : "10px 12px",
+              borderRadius: 14,
+              background: "linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)",
+              border: "1px solid var(--ink-100)",
+              boxShadow: "0 1px 2px rgba(15,35,64,0.04), 0 4px 14px rgba(15,35,64,0.06)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-          />
+          >
+            <img
+              src={logo}
+              alt="光天科技"
+              style={{
+                width: isDesktop ? 156 : 104,
+                height: "auto",
+                display: "block",
+              }}
+            />
+          </div>
           <div style={{ minWidth: 0 }}>
             <div
               style={{
