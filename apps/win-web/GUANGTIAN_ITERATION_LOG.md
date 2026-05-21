@@ -474,3 +474,23 @@
 - Demo step 1 入库（tab 3 高亮）：`ss_1975kj7cw`
 - Demo step 2 流水（tab 5）：`ss_5106k02wd`
 - Demo step 3 缺货（tab 6）：`ss_8222wlpgg`
+
+## Iter G14 — 标题字号对调 + 环形图 legend 修
+**Commit:** 94d7ff1
+
+G13 误把产品名做成主标（大），用户希望公司名是主角。同时 SKU 状态分布的 legend label + 数字挤一行，中文 "正常 / 低库存 / 数据异常" 被换行强制拆字。
+
+### Hero 标题字号对调
+- 「宜兴光天耐火材料」20px/600 → **32px/800 ink-900** （主标）
+- 「AI 库存管家」34px/800 → **19px/600 guangtian-red** （副标 tagline）
+
+### Donut Legend 每项两行
+- 旧：`flex row + justify-between` → 中文 label 被换行拆字
+- 新：每项 `flex column` 两行
+  - 第 1 行：状态名 13px medium ink-800 + `white-space: nowrap`
+  - 第 2 行：数量·百分比 11px 等宽 ink-500 灰
+- 色块 dot 与第 1 行对齐
+- 5 项：正常 1,167·90.7% / 低库存 46·3.6% / 缺货 7·0.5% / 数据异常 12·0.9% / 呆滞 54·4.2%
+
+### 验证截图
+- 标题对调 + Donut legend 两行：`ss_96994of8g`
