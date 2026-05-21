@@ -1,4 +1,5 @@
 import { useIsDesktop } from "../../lib/breakpoints";
+import { DemoStartButton } from "./GuangtianDemoTour";
 
 type Props = {
   onGoSku: () => void;
@@ -96,8 +97,13 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
             gap: 8,
             flexWrap: "wrap",
             flexShrink: 0,
+            justifyContent: "flex-end",
           }}
         >
+          {/* iter G12-B: 一键演示按钮（最醒目，紫红渐变） */}
+          <div style={{ flexBasis: "100%", display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
+            <DemoStartButton />
+          </div>
           <button onClick={onGoInbound} style={ctaPrimary}>
             ⬇ 模拟入库登记
           </button>

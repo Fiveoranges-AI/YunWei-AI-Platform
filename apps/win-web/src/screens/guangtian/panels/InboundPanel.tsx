@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { inboundAiChecks } from "../data";
@@ -50,11 +50,24 @@ const DOC_PRESETS = [
     ],
     anomalies: ["照片角度倾斜 12°，AI 已自动校正后识别"],
   },
+  // iter G12-B: 演示模式专用 — 常州新材出库单（AL90 × 150）
+  {
+    kind: "📷 出货单_常州新材_20260520.jpg",
+    fields: [
+      { key: "SKU 编码", value: "JT-GZB-AL90", conf: 98 },
+      { key: "产品名称", value: "高纯刚玉砖 AL90", conf: 97 },
+      { key: "数量", value: "150", conf: 99 },
+      { key: "关联订单", value: "SO-20260519-003", conf: 96 },
+      { key: "客户", value: "常州新材科技", conf: 94 },
+      { key: "送货日期", value: "2026-05-28", conf: 88 },
+    ],
+    anomalies: ["AL90 当前库存仅 78 件，需求 150 件，缺口 72 件 — 触发缺货预警"],
+  },
 ];
 
 export function InboundPanel() {
   const isDesktop = useIsDesktop();
-  const { inboundRecords, addInbound, skuStocks, showToast } = useGT();
+  const { inboundRecords, addInbound, skuStocks, showToast, demoStep } = useGT();
   const [showMore, setShowMore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // iter G11: AI 单据上传
@@ -103,12 +116,25 @@ export function InboundPanel() {
   };
 
   // iter G11: AI 单据上传 → 1.5s 扫描 → 显示识别结果三段
-  const onUploadDoc = (presetIdx: 0 | 1) => {
+  const onUploadDoc = (presetIdx: 0 | 1 | 2) => {
     setDocPreset(DOC_PRESETS[presetIdx]);
     setDocState("scanning");
     showToast(`✦ AI 正在识别 ${DOC_PRESETS[presetIdx].kind} …`, "ai");
     window.setTimeout(() => setDocState("result"), 1500);
   };
+
+  // iter G12-B: 演示模式步 1 → 展示常州新材出库单上传卡 / 步 2 → scanning → result
+  useEffect(() => {
+    if (demoStep === 1) {
+      setDocPreset(DOC_PRESETS[2]); // 常州新材出库单
+      setDocState("scanning"); // 显示扫描中
+    } else if (demoStep === 2) {
+      setDocState("result");
+    } else if (demoStep === 0) {
+      setDocState("idle");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoStep]);
 
   // 把 AI 识别结果填入表单
   const applyAiResult = () => {

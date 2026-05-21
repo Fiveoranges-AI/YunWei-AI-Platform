@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { replenishmentItems } from "../data";
@@ -18,7 +18,7 @@ const PRIORITY_META: Record<
 
 export function ReplenishmentPanel(_props: Props) {
   const isDesktop = useIsDesktop();
-  const { showToast } = useGT();
+  const { showToast, highlightSku, demoStep } = useGT();
   const [showSummary, setShowSummary] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [assigned, setAssigned] = useState<Set<string>>(new Set());
@@ -35,6 +35,18 @@ export function ReplenishmentPanel(_props: Props) {
     setAssigned((s) => new Set(s).add(sku));
     showToast(`✓ ${name} 已挂到工艺组 · 工单号 SC-2026-${(Math.floor(Math.random() * 900) + 100).toString()}`, "ok");
   };
+
+  // iter G12-B: demo 步 6 自动把高亮 SKU 加入计划
+  useEffect(() => {
+    if (demoStep === 6 && highlightSku) {
+      const item = replenishmentItems.find((i) => i.sku === highlightSku);
+      if (item && !assigned.has(highlightSku)) {
+        setAssigned((s) => new Set(s).add(highlightSku));
+        showToast(`✓ ${item.name} 已加入本周生产计划 · 高优先`, "ok");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoStep, highlightSku]);
 
   return (
     <div>
@@ -112,6 +124,7 @@ export function ReplenishmentPanel(_props: Props) {
         {replenishmentItems.map((item, i) => {
           const p = PRIORITY_META[item.priority];
           const stockRatio = Math.round((item.currentStock / item.safety) * 100) || 0;
+          const isHL = highlightSku === item.sku;
           return (
             <div
               key={item.sku}
@@ -122,7 +135,9 @@ export function ReplenishmentPanel(_props: Props) {
                 gridTemplateColumns: isDesktop ? "60px 1.5fr 1fr 1fr 1.2fr" : "1fr",
                 gap: 14,
                 alignItems: "center",
-                borderLeft: `3px solid ${p.color}`,
+                borderLeft: `${isHL ? 4 : 3}px solid ${isHL ? "var(--guangtian-red)" : p.color}`,
+                boxShadow: isHL ? "0 0 0 2px rgba(195,38,41,0.22), var(--shadow-card)" : undefined,
+                animation: isHL ? "gt-pulse-urgent 1.8s ease-in-out infinite" : undefined,
               }}
             >
               {/* 优先级标记 + 排序 */}

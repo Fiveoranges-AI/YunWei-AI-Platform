@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { GuangtianHero } from "./GuangtianHero";
-import { GuangtianProvider } from "./state";
+import { GuangtianProvider, useGT } from "./state";
 import { ToastContainer } from "./Toast";
+import { GuangtianDemoTour, tabForDemoStep } from "./GuangtianDemoTour";
 import { DashboardPanel } from "./panels/DashboardPanel";
 import { SkuCatalogPanel } from "./panels/SkuCatalogPanel";
 import { InboundPanel } from "./panels/InboundPanel";
@@ -106,6 +107,7 @@ export function GuangtianDemoPage() {
   return (
     <GuangtianProvider>
       <GuangtianDemoInner />
+      <GuangtianDemoTour />
       <ToastContainer />
     </GuangtianProvider>
   );
@@ -113,10 +115,25 @@ export function GuangtianDemoPage() {
 
 function GuangtianDemoInner() {
   const isDesktop = useIsDesktop();
+  const { demoStep } = useGT();
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     if (typeof window === "undefined") return "dashboard";
     return tabFromHash(window.location.hash) ?? "dashboard";
   });
+
+  // iter G12-B: demo step 推进时自动切对应 tab
+  useEffect(() => {
+    const target = tabForDemoStep(demoStep);
+    if (target && target !== activeTab) {
+      setActiveTab(target as TabKey);
+      if (typeof window !== "undefined") {
+        const next = `#${target}`;
+        if (window.location.hash !== next) history.pushState(null, "", next);
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoStep]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -140,6 +157,7 @@ function GuangtianDemoInner() {
   };
 
   const head = TAB_HEAD[activeTab];
+  const demoActive = demoStep > 0 && demoStep <= 6;
 
   return (
     <div className="scroll" style={{ flex: 1, background: "var(--bg)" }}>
@@ -147,7 +165,10 @@ function GuangtianDemoInner() {
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          padding: isDesktop ? "20px 32px 64px" : "12px 16px 80px",
+          padding: isDesktop
+            ? `${demoActive ? 80 : 20}px 32px 64px`
+            : `${demoActive ? 70 : 12}px 16px 80px`,
+          transition: "padding-top 0.25s ease",
         }}
       >
         {/* Tab navigation */}

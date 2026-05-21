@@ -21,7 +21,7 @@ const CATEGORIES = ["全部", "高铝砖", "莫来石砖", "浇注料", "刚玉�
 
 export function SkuCatalogPanel() {
   const isDesktop = useIsDesktop();
-  const { skuStocks, showToast } = useGT();
+  const { skuStocks, showToast, highlightSku } = useGT();
   const [cat, setCat] = useState<string>("全部");
   const [status, setStatus] = useState<string>("全部");
   const [query, setQuery] = useState<string>("");
@@ -179,6 +179,7 @@ export function SkuCatalogPanel() {
                     key={r.code}
                     row={{ ...r, stock: liveStock, status: liveStatus }}
                     onClick={() => showToast(`${r.code} · ${r.name} · 当前库存 ${liveStock.toLocaleString()} ${r.unit}`, "info")}
+                    highlight={highlightSku === r.code}
                   />
                 );
               })}
@@ -308,16 +309,35 @@ const MATERIAL_MAP: Record<string, string> = {
   刚玉砖: "刚玉",
 };
 
-function SkuTableRow({ row, onClick }: { row: SkuRow; onClick?: () => void }) {
+function SkuTableRow({
+  row,
+  onClick,
+  highlight = false,
+}: {
+  row: SkuRow;
+  onClick?: () => void;
+  highlight?: boolean;
+}) {
   const s = STATUS_COLORS[row.status];
   const displayStatus = row.status === "缺货风险" || row.status === "已缺货" ? "缺货" : row.status;
   const material = MATERIAL_MAP[row.category] ?? row.category;
   return (
     <tr
       onClick={onClick}
-      style={{ borderBottom: "1px solid var(--ink-50)", cursor: onClick ? "pointer" : "default", transition: "background 0.12s ease" }}
-      onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)")}
-      onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "")}
+      style={{
+        borderBottom: "1px solid var(--ink-50)",
+        cursor: onClick ? "pointer" : "default",
+        transition: "background 0.12s ease, box-shadow 0.2s ease",
+        background: highlight ? "rgba(195,38,41,0.06)" : undefined,
+        boxShadow: highlight ? "inset 4px 0 0 var(--guangtian-red), 0 0 0 2px rgba(195,38,41,0.18)" : undefined,
+        animation: highlight ? "gt-pulse-urgent 1.6s ease-in-out infinite" : undefined,
+      }}
+      onMouseEnter={(e) => {
+        if (!highlight) (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)";
+      }}
+      onMouseLeave={(e) => {
+        if (!highlight) (e.currentTarget as HTMLTableRowElement).style.background = "";
+      }}
     >
       <Td mono>{row.code}</Td>
       <td style={{ padding: "10px 12px", fontSize: 12, whiteSpace: "nowrap" }}>

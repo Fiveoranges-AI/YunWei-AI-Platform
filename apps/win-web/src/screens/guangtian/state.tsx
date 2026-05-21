@@ -2,7 +2,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -99,6 +101,17 @@ type GTContextValue = {
   // 跨 tab 联动：Dashboard / Shortage 把问题推到 AskInventory
   pendingAsk: string | null;
   setPendingAsk: (q: string | null) => void;
+
+  // iter G12-B: 一键演示模式
+  demoStep: number; // 0 = 未启动 / 1-6 = 步骤中 / 7 = 总结
+  demoPlaying: boolean; // 自动播放中
+  startDemo: () => void;
+  pauseDemo: () => void;
+  resumeDemo: () => void;
+  exitDemo: () => void;
+  nextDemoStep: () => void;
+  highlightSku: string | null; // demo 时高亮某个 SKU
+  highlightOrder: string | null; // demo 时高亮某个订单
 };
 
 const GuangtianContext = createContext<GTContextValue | null>(null);
@@ -139,6 +152,64 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
   const [todayInboundCount, setTodayInboundCount] = useState(18);
   const [todayOutboundCount, setTodayOutboundCount] = useState(23);
   const [pendingAsk, setPendingAsk] = useState<string | null>(null);
+
+  // iter G12-B: 演示模式
+  const [demoStep, setDemoStep] = useState(0);
+  const [demoPlaying, setDemoPlaying] = useState(false);
+  const [highlightSku, setHighlightSku] = useState<string | null>(null);
+  const [highlightOrder, setHighlightOrder] = useState<string | null>(null);
+  const demoTimerRef = useRef<number | null>(null);
+
+  // 每步的高亮目标（步号 → SKU / 订单）
+  useEffect(() => {
+    if (demoStep === 3) {
+      setHighlightSku("JT-GZB-AL90"); // SKU 台账高亮 AL90
+      setHighlightOrder(null);
+    } else if (demoStep === 4) {
+      setHighlightSku(null);
+      setHighlightOrder("SO-20260519-003"); // 缺货预警高亮 003
+    } else if (demoStep === 6) {
+      setHighlightSku("JT-GZB-AL90"); // 补产建议高亮 AL90 行
+      setHighlightOrder(null);
+    } else if (demoStep === 0) {
+      setHighlightSku(null);
+      setHighlightOrder(null);
+    }
+  }, [demoStep]);
+
+  // 自动播放推进：每步 2800ms
+  useEffect(() => {
+    if (!demoPlaying || demoStep === 0 || demoStep >= 7) return;
+    demoTimerRef.current = window.setTimeout(() => {
+      setDemoStep((s) => s + 1);
+    }, 2800);
+    return () => {
+      if (demoTimerRef.current) {
+        window.clearTimeout(demoTimerRef.current);
+        demoTimerRef.current = null;
+      }
+    };
+  }, [demoPlaying, demoStep]);
+
+  const startDemo = useCallback(() => {
+    setDemoStep(1);
+    setDemoPlaying(true);
+  }, []);
+  const pauseDemo = useCallback(() => setDemoPlaying(false), []);
+  const resumeDemo = useCallback(() => setDemoPlaying(true), []);
+  const exitDemo = useCallback(() => {
+    setDemoStep(0);
+    setDemoPlaying(false);
+    setHighlightSku(null);
+    setHighlightOrder(null);
+    if (demoTimerRef.current) {
+      window.clearTimeout(demoTimerRef.current);
+      demoTimerRef.current = null;
+    }
+  }, []);
+  const nextDemoStep = useCallback(() => {
+    setDemoStep((s) => (s >= 7 ? s : s + 1));
+  }, []);
 
   const confirmLedger = useCallback(
     (time: string, sku: string) => {
@@ -272,6 +343,15 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
       confirmLedger,
       pendingAsk,
       setPendingAsk,
+      demoStep,
+      demoPlaying,
+      startDemo,
+      pauseDemo,
+      resumeDemo,
+      exitDemo,
+      nextDemoStep,
+      highlightSku,
+      highlightOrder,
     }),
     [
       toasts,
@@ -287,6 +367,15 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
       addOutbound,
       confirmLedger,
       pendingAsk,
+      demoStep,
+      demoPlaying,
+      startDemo,
+      pauseDemo,
+      resumeDemo,
+      exitDemo,
+      nextDemoStep,
+      highlightSku,
+      highlightOrder,
     ],
   );
 

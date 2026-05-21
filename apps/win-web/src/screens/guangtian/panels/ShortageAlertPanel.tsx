@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useIsDesktop } from "../../../lib/breakpoints";
 import { I } from "../../../icons";
 import { shortageOrders } from "../data";
@@ -16,9 +16,14 @@ const LEVEL_META: Record<
 
 export function ShortageAlertPanel() {
   const isDesktop = useIsDesktop();
-  const { showToast } = useGT();
+  const { showToast, highlightOrder } = useGT();
   // iter G9: 默认全部折叠（行内已显示风险 + 客户 + 金额），点击展开详情
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+
+  // iter G12-B: demo 模式高亮订单时自动展开
+  useEffect(() => {
+    if (highlightOrder) setOpenIds((prev) => new Set(prev).add(highlightOrder));
+  }, [highlightOrder]);
 
   const toggle = (id: string) => {
     setOpenIds((prev) => {
@@ -65,16 +70,17 @@ export function ShortageAlertPanel() {
         {shortageOrders.map((order) => {
           const meta = LEVEL_META[order.level];
           const isOpen = openIds.has(order.id);
+          const isHL = highlightOrder === order.id;
           return (
             <div
               key={order.id}
               className="card"
               style={{
                 padding: 0,
-                borderLeft: `${meta.pulse ? 4 : 3}px solid ${meta.color}`,
+                borderLeft: `${meta.pulse || isHL ? 4 : 3}px solid ${meta.color}`,
                 overflow: "hidden",
-                boxShadow: meta.pulse ? "0 0 0 2px rgba(195,38,41,0.18), var(--shadow-card)" : undefined,
-                animation: meta.pulse ? "gt-pulse-urgent 1.8s ease-in-out infinite" : undefined,
+                boxShadow: (meta.pulse || isHL) ? "0 0 0 2px rgba(195,38,41,0.22), var(--shadow-card)" : undefined,
+                animation: (meta.pulse || isHL) ? "gt-pulse-urgent 1.8s ease-in-out infinite" : undefined,
               }}
             >
               {/* 订单标题行 */}

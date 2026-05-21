@@ -128,7 +128,7 @@ type AskProps = { onGoTab?: (key: string) => void };
 
 export function AskInventoryPanel({ onGoTab }: AskProps = {}) {
   const isDesktop = useIsDesktop();
-  const { showToast, pendingAsk, setPendingAsk } = useGT();
+  const { showToast, pendingAsk, setPendingAsk, demoStep } = useGT();
   const [messages, setMessages] = useState<Msg[]>(askSampleConversation as Msg[]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -156,6 +156,18 @@ export function AskInventoryPanel({ onGoTab }: AskProps = {}) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAsk]);
+
+  // iter G12-B: demo 步 5 自动 send
+  useEffect(() => {
+    if (demoStep === 5) {
+      // 避免重复 send（demo 内可能重新进入 step 5）
+      const last = messages[messages.length - 1];
+      if (!last || last.role !== "user" || (last.role === "user" && last.text !== "明天应该优先生产什么？")) {
+        send("明天应该优先生产什么？");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoStep]);
 
   // 滚到底部（双重 rAF 确保 DOM 已 paint）
   useEffect(() => {
