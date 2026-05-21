@@ -369,3 +369,60 @@
 - Ledger 9 列 + AI 置信度 + 已确认/待确认：`ss_2749045qp`
 - AI 单据上传三段：`ss_4649rwgop`
 - AI 结构化答案 + 跳转按钮：`ss_1237llez5`
+
+## Iter G12 — 数据可视化 + 魔法时刻
+**Commits:** 855f6ee (G12-A 图表) + b10745b (G12-B 演示模式)
+
+### G12-A · 3 个手写 SVG 图表
+
+**新文件** `panels/DashboardCharts.tsx`，0 新依赖：
+
+1. **StockTrendChart 折线图** — 高铝砖 + 莫来石 30 天双折线
+   - SVG path + 渐变填充 (linearGradient stop-opacity)
+   - 安全线虚线参考 (高铝 2000 / 莫来石 800)
+   - Y 网格 + X 标签 5/01-5/30 + 末端 dot
+
+2. **StockDistributionDonut 环形图** — 5 段
+   - SVG circle stroke-dasharray 实现 donut
+   - 中心 1,286 SKU 大字 + 右侧 legend 含百分比
+   - 正常 1167 / 低库 46 / 缺货 7 / 数据异常 12 / 呆滞 54
+
+3. **TopOutboundBars 水平柱状图** — 近 7 天 TOP 5
+   - div width% + linearGradient 渐变
+   - #1 红色 rank 高亮 (高铝砖 4,800 块)
+
+整合：`DashboardChartsGrid` (3 列 desktop / 1 列 mobile) 嵌入 KPI 卡片下方。
+
+### G12-B · 一键演示模式 — 90 秒端到端魔法
+
+**新文件** `GuangtianDemoTour.tsx`，0 新依赖：
+
+**6 步剧本**（用 AL90 高纯刚玉砖串完整故事）：
+| # | Tab | 标题 | Badge | 高亮 |
+|---|---|---|---|---|
+| 1 | 入库 | 上传出库单照片 | 📷 出货单_常州新材_20260520.jpg | scanning 卡 |
+| 2 | 入库 | AI 自动识别字段 | ✦ AI 识别中 | 三段结果 |
+| 3 | SKU 台账 | 系统检查库存 | 🔴 AL90 库存不足 | AL90 行 pulse |
+| 4 | 缺货预警 | 触发缺货预警 | ⚠ SO-003 高风险 | 订单展开 + pulse |
+| 5 | 问问 AI | AI 给建议 | ✦ AI 综合答案 | auto send |
+| 6 | 补产建议 | 加入计划 | ✓ AL90 已入计划 | row pulse + auto-assign |
+
+**总结卡**（step 7）：
+"全程 90 秒：**一张照片** → AI 识别 → 库存更新 → **风险预警** → 补产决策" + "再看一遍 / 退出"
+
+**实现亮点**：
+- state.tsx 扩 demoStep / demoPlaying / highlight\* / 5 控制函数
+- useEffect 自动推进 2.8s/步 + 按 step 设 highlightSku/Order
+- GuangtianDemoPage useEffect watch demoStep → switchTab
+- 各 panel useEffect watch demoStep 触发内部交互（scanning / send / assign）
+- 顶部紫红渐变控制条 zIndex 9999 + ⏸/▶/⏭/✕ 控制
+- 高亮用统一 `gt-pulse-urgent` 1.8s 动画
+
+### 验证截图
+- 工作台带 3 图表：`ss_58338g768`
+- Demo step 1 入库 scanning：`ss_2150yqsbj`
+- Demo step 3 SKU AL90 红色 pulse 高亮：`ss_8847zjqpd`
+- Demo step 7 总结卡 + 背景 AL90 已挂工艺组：`ss_2054rowb5`
+
+### 最值得演示瞬间
+点 "▶ 一键演示" 后**完全不用碰键盘**，90 秒自动完成：上传 → AI 识别 → 库存检查 → 风险预警 → AI 建议 → 补产计划，最后弹出 "这就是 AI 库存管家" 总结卡。客户老板看到一定会问：刚才那是真的还是演示？— 这就是 demo 要的"魔法时刻"。
