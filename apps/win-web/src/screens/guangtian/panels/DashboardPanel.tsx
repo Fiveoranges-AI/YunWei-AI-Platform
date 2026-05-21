@@ -7,6 +7,7 @@ import {
   dashboardAiSample,
   skuRows,
 } from "../data";
+import { DashboardChartsGrid } from "./DashboardCharts";
 
 type TabKey = "sku" | "inbound" | "outbound" | "ledger" | "shortage" | "replenish" | "ask" | "report" | "dashboard";
 
@@ -166,6 +167,9 @@ export function DashboardPanel({ onGoTab }: Props) {
           </button>
         ))}
       </section>
+
+      {/* iter G12-A: 3 SVG 图表 */}
+      <DashboardChartsGrid />
 
       {/* 风险提醒 + AI 助手 — 双栏 */}
       <section
