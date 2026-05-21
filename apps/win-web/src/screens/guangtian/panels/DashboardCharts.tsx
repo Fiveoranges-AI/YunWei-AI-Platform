@@ -123,12 +123,12 @@ export function StockTrendChart() {
 // ============================================================================
 // 2. 库存状态分布环形图
 // ============================================================================
+// iter G15: 4 段分布（合并历史归类为"正常"）
 const DIST = [
-  { label: "正常",     value: 1167, color: "var(--stock-ok)"          },
+  { label: "正常",     value: 1221, color: "var(--stock-ok)"          },
   { label: "低库存",   value: 46,   color: "var(--stock-low)"         },
   { label: "缺货",     value: 7,    color: "var(--stock-out)"         },
   { label: "数据异常", value: 12,   color: "var(--ai-purple-deep)"    },
-  { label: "呆滞",     value: 54,   color: "var(--stock-dead)"        },
 ];
 
 export function StockDistributionDonut() {

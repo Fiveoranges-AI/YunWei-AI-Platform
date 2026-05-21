@@ -4,7 +4,7 @@ import { I } from "../../../icons";
 import { skuRows, type SkuRow, type StockStatus } from "../data";
 import { useGT } from "../state";
 
-// iter G11: 状态 4 主档（正常/低库存/缺货/数据异常）+ 呆滞独立
+// iter G15: 状态 4 档（正常/低库存/缺货/数据异常）
 const STATUS_COLORS: Record<
   StockStatus,
   { bg: string; color: string; border: string }
@@ -13,7 +13,6 @@ const STATUS_COLORS: Record<
   低库存:  { bg: "rgba(245,158,11,0.10)", color: "var(--stock-low)",    border: "rgba(245,158,11,0.28)" },
   缺货风险:{ bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",    border: "rgba(195,38,41,0.26)" },
   已缺货:  { bg: "rgba(195,38,41,0.10)",  color: "var(--stock-out)",    border: "rgba(195,38,41,0.26)" },
-  呆滞:    { bg: "rgba(107,114,128,0.08)",color: "var(--stock-dead)",   border: "rgba(107,114,128,0.20)" },
   数据异常: { bg: "rgba(123,92,250,0.10)", color: "var(--ai-purple-deep)", border: "rgba(123,92,250,0.26)" },
 };
 
@@ -32,7 +31,7 @@ export function SkuCatalogPanel() {
     return skuRows.filter((r) => {
       if (cat !== "全部" && r.category !== cat) return false;
       if (status !== "全部") {
-        // iter G9: 合并 缺货风险 / 已缺货 / 呆滞 都按 "缺货" 处理
+        // iter G9: 合并 缺货风险 / 已缺货 都按 "缺货" 处理
         if (status === "缺货" && r.status !== "缺货风险" && r.status !== "已缺货") return false;
         if (status !== "缺货" && r.status !== status) return false;
       }
@@ -168,9 +167,8 @@ export function SkuCatalogPanel() {
               {filtered.map((r) => {
                 const liveStock = skuStocks[r.code] ?? r.stock;
                 let liveStatus: StockStatus = r.status;
-                // iter G11: "数据异常" / "呆滞" 优先保留（特殊标记不被库存阈值覆盖）
+                // iter G15: 仅 "数据异常" 状态不被库存阈值覆盖
                 if (r.status === "数据异常") liveStatus = "数据异常";
-                else if (r.status === "呆滞") liveStatus = "呆滞";
                 else if (liveStock <= 0) liveStatus = "已缺货";
                 else if (liveStock < r.safety) liveStatus = "低库存";
                 else liveStatus = "正常";

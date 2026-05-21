@@ -3,7 +3,7 @@
 // 客户：江苏 / 浙江 长三角钢厂 + 玻璃厂 + 水泥厂下游
 // 时间：2026-05-19 (今日)
 
-export type StockStatus = "正常" | "低库存" | "缺货风险" | "已缺货" | "呆滞" | "数据异常";
+export type StockStatus = "正常" | "低库存" | "缺货风险" | "已缺货" | "数据异常";
 
 export type SkuRow = {
   code: string;
@@ -94,7 +94,7 @@ export const skuRows: SkuRow[] = [
     location: "A-06",
     stock: 95,
     safety: 0,
-    status: "呆滞",
+    status: "正常",
     lastIn: "2025-11-20",
     lastOut: "2025-12-15",
   },
@@ -159,8 +159,8 @@ export const dashboardAlerts: RiskAlert[] = [
   },
   {
     level: "low",
-    title: "31 个 SKU 90 天无动销（呆滞）",
-    body: "占总 SKU 2.4%，合计占用库位 8 个 · AI 建议下次盘点时归集 B-05 呆滞专区。",
+    title: "今日 12 条流水标记数据异常",
+    body: "其中 3 条置信度 < 80%，已自动挂复核队列 · 王主管 / 张仓管手机收到企业微信提醒。",
   },
 ];
 
@@ -242,7 +242,7 @@ export const ledgerRows = [
   { time: "2026-05-19 09:42", op: "入库", sku: "JT-HLZ-230-114-65", name: "高铝砖", delta: "+800", before: 4980, after: 5780, ref: "SC-2026-0521 · 生产", user: "王主管", note: "P20260519-01 批次", confidence: 95, confirmed: true },
   { time: "2026-05-19 08:50", op: "出库", sku: "JT-JZL-JC18-LR", name: "低水泥浇注料", delta: "-80", before: 620, after: 540, ref: "SO-20260519-002 · 江苏宏泰", user: "张仓管", note: "", confidence: 97, confirmed: true },
   { time: "2026-05-19 08:15", op: "入库", sku: "JT-JZL-JC18-LR", name: "低水泥浇注料", delta: "+120", before: 500, after: 620, ref: "SC-2026-0520 · 生产", user: "李师傅", note: "", confidence: 92, confirmed: true },
-  { time: "2026-05-18 16:30", op: "调拨", sku: "JT-HLZ-T3-150", name: "高铝砖 T3", delta: "—", before: 5600, after: 6800, ref: "B-05 → A-04", user: "张仓管", note: "从呆滞区移回常备区 +1,200", confidence: 62, confirmed: false },
+  { time: "2026-05-18 16:30", op: "调拨", sku: "JT-HLZ-T3-150", name: "高铝砖 T3", delta: "—", before: 5600, after: 6800, ref: "B-05 → A-04", user: "张仓管", note: "从备货区移回常备区 +1,200", confidence: 62, confirmed: false },
   { time: "2026-05-18 14:20", op: "盘点", sku: "JT-GZB-AL80", name: "刚玉砖", delta: "+12", before: 1838, after: 1850, ref: "盘点单 PD-20260518", user: "张仓管", note: "盘点偏差 · 待复核", confidence: 70, confirmed: false },
   { time: "2026-05-18 11:05", op: "入库", sku: "JT-GZB-AL80", name: "刚玉砖", delta: "+300", before: 1538, after: 1838, ref: "PO-2026-0089 · 江苏华峰", user: "张仓管", note: "采购入库", confidence: 94, confirmed: true },
 ];
@@ -254,7 +254,7 @@ export const ledgerAiAnomalies = [
   },
   {
     title: "调拨方向异常（JT-HLZ-T3-150）",
-    body: "本品从 B-05 呆滞区调回 A-04 常备区 1,200 块 · 与 90 天无动销标签矛盾 · AI 建议核对此批是否为新采购错放入呆滞区。",
+    body: "本品从 B-05 备货区调回 A-04 常备区 1,200 块 · 与 90 天无动销标签矛盾 · AI 建议核对此批是否为新采购错放入备货区。",
   },
   {
     title: "JT-MLS-M70 部分出库未跟进",
@@ -400,7 +400,7 @@ export const dailyReport = {
   weekday: "周二",
   generatedAt: "2026-05-19 18:30",
   summary: "今日入库 18 笔，出库 23 笔，净流入 +1,040 单位。1 笔订单延期发货（缺 JC-16），46 个 SKU 低于安全线，AI 建议本周补产 3 个紧迫 SKU。",
-  // iter G9: 8 块 → 5 块（合并入出库为流水；合并缺货+异常为风险；合并呆滞+库位为库位概况）
+  // iter G9: 8 块 → 5 块（合并入出库为流水；合并缺货+异常为风险；合并库位概况）
   sections: [
     {
       title: "1. 今日流水",
@@ -428,7 +428,7 @@ export const dailyReport = {
       title: "4. 库位概况",
       items: [
         "A 区高铝砖 76% 紧张 / B 区浇注料 42% 宽裕 / C 区刚玉砖 58% 正常",
-        "31 个呆滞 SKU 占用 8 库位 · 建议归集 B-05 专区",
+        "12 条数据异常已挂复核队列 · 王主管 / 张仓管处理中",
       ],
     },
     {
