@@ -32,6 +32,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from yunwei_win.db import Base
 from yunwei_win.models._base import TimestampMixin
+from yunwei_win.models._mixins import (
+    HumanVerificationMixin,
+    OwnershipMixin,
+    RowAuditMixin,
+    RowSourceMixin,
+    SoftDeleteMixin,
+)
 
 if TYPE_CHECKING:
     pass
@@ -271,9 +278,24 @@ class CustomerTask(Base, TimestampMixin):
     raw_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class CustomerRiskSignal(Base, TimestampMixin):
+class CustomerRiskSignal(
+    Base,
+    TimestampMixin,
+    RowSourceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     """A flag that something might go wrong: late payment pattern, quality
-    complaint, decision-maker churn, etc."""
+    complaint, decision-maker churn, etc.
+
+    The existing ``confidence`` column on this table doubles as the
+    row-seed confidence — that's why ``RowConfidenceMixin`` is skipped
+    while ``RowSourceMixin`` is still applied (so source_type /
+    source_ref / source_span / extracted_by stay uniform across the
+    ontology).
+    """
 
     __tablename__ = "customer_risk_signals"
 
@@ -296,6 +318,18 @@ class CustomerRiskSignal(Base, TimestampMixin):
     )
     kind: Mapped[RiskKind] = mapped_column(
         SQLEnum(RiskKind, name="risk_kind"), nullable=False
+    )
+    # 风险分 0-100. NULL = severity-only signal (no numeric scoring).
+    # Coarse severity (low/medium/high) stays the headline; risk_score
+    # is the fine-grained number a future ranking model can emit.
+    risk_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # 风险关联对象 — risk can attach to a customer (default), but also
+    # to a specific order / invoice / contract for narrower flagging.
+    target_entity_type: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    target_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, nullable=True, index=True
     )
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

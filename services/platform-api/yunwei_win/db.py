@@ -207,6 +207,13 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
     )
     from yunwei_win.models.document_extraction import DocumentExtraction
     from yunwei_win.models.document_parse import DocumentParse
+    from yunwei_win.models.operations import (
+        ActionLog,
+        Delivery,
+        InvoicePaymentAllocation,
+        NextAction,
+        OrderItem,
+    )
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -223,6 +230,12 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         CustomerJournalItem.__table__,
         DocumentParse.__table__,
         DocumentExtraction.__table__,
+        # Customer-operations ontology (P0 task ①)
+        OrderItem.__table__,
+        Delivery.__table__,
+        InvoicePaymentAllocation.__table__,
+        NextAction.__table__,
+        ActionLog.__table__,
     ]
 
     async with engine.begin() as conn:
@@ -259,6 +272,34 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
     idempotent column migration before ORM queries touch those mappers.
     """
 
+    # Cross-cutting columns added by the customer-operations ontology (P0
+    # task ①). The same shape lands on every "core business" table: row-level
+    # provenance / human verification / audit / ownership / soft delete.
+    # ``RowProvenanceMixin.confidence`` is omitted from tables that already
+    # have their own ``confidence`` column (e.g. customer_risk_signals).
+    ONTOLOGY_FULL_MIXINS: dict[str, str] = {
+        "source_type": "VARCHAR(32)",
+        "source_ref": "VARCHAR(255)",
+        "source_span": "JSON",
+        "confidence": "NUMERIC(3, 2)",
+        "extracted_by": "VARCHAR(64)",
+        "human_verified": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "verified_by": "VARCHAR(128)",
+        "verified_at": "TIMESTAMP WITH TIME ZONE",
+        "created_by": "VARCHAR(128)",
+        "updated_by": "VARCHAR(128)",
+        "owner_user_id": "VARCHAR(128)",
+        "team_id": "VARCHAR(128)",
+        "is_deleted": "BOOLEAN NOT NULL DEFAULT FALSE",
+    }
+    # Same set with ``confidence`` stripped — for tables that already have a
+    # ``confidence`` column (e.g. customer_risk_signals) we keep the existing
+    # column and add only the source / verification / audit / ownership /
+    # soft-delete columns. See ``yunwei_win/models/_mixins.py``.
+    ONTOLOGY_MIXINS_NO_CONFIDENCE: dict[str, str] = {
+        k: v for k, v in ONTOLOGY_FULL_MIXINS.items() if k != "confidence"
+    }
+
     migrations: dict[str, dict[str, str]] = {
         "company_schema_fields": {
             "field_role": "VARCHAR(32) NOT NULL DEFAULT 'extractable'",
@@ -267,6 +308,7 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
         "customers": {
             "industry": "VARCHAR",
             "notes": "TEXT",
+            **ONTOLOGY_FULL_MIXINS,
         },
         "contacts": {
             "title": "VARCHAR",
@@ -274,6 +316,8 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
             "address": "VARCHAR",
             "wechat_id": "VARCHAR",
             "needs_review": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "is_key_decision_maker": "BOOLEAN NOT NULL DEFAULT FALSE",
+            **ONTOLOGY_FULL_MIXINS,
         },
         "contracts": {
             "customer_id": "UUID",
@@ -281,6 +325,46 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
             "amount_currency": "VARCHAR(8)",
             "delivery_terms": "TEXT",
             "penalty_terms": "TEXT",
+            "payment_terms": "TEXT",
+            "status": "VARCHAR(32)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "orders": {
+            "order_no": "VARCHAR(128)",
+            "contract_id": "UUID",
+            "order_date": "DATE",
+            "status": "VARCHAR(32)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "products": {
+            "reference_unit_price": "NUMERIC(18, 4)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "invoices": {
+            "buyer_tax_id": "VARCHAR(32)",
+            "contract_id": "UUID",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "invoice_items": {
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "payments": {
+            "amount_due": "NUMERIC(18, 4)",
+            "due_date": "DATE",
+            "status": "VARCHAR(32)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "shipments": {
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "shipment_items": {
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "customer_risk_signals": {
+            "risk_score": "NUMERIC(5, 2)",
+            "target_entity_type": "VARCHAR(32)",
+            "target_entity_id": "UUID",
+            **ONTOLOGY_MIXINS_NO_CONFIDENCE,
         },
         "customer_tasks": {
             "document_id": "UUID",
