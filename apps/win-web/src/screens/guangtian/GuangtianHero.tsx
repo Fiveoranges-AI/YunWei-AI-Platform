@@ -119,7 +119,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                 maxWidth: 620,
               }}
             >
-              用 AI 把 1,000+ SKU 管清楚，提前 3 天发现缺货风险。
+              知道有多少 · 每笔可查 · 缺货提前知道 · 老板直接问 — AI 替您管 1,000+ SKU。
             </p>
           </div>
         </div>

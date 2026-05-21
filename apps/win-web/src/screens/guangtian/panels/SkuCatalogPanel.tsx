@@ -149,17 +149,15 @@ export function SkuCatalogPanel() {
               minWidth: isDesktop ? 820 : 720,
             }}
           >
-            {/* iter G11: 加 材质 + 最近入/出库 列 (9 列) */}
+            {/* iter G17 第一性原理：删材质列(冗余)，最近入/出库合并为"最近动销" — 7 列 */}
             <thead>
               <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--ink-100)" }}>
                 <Th>SKU 编码</Th>
                 <Th>产品名称 / 规格</Th>
-                <Th>材质</Th>
                 <Th>库位</Th>
                 <Th align="right">库存</Th>
                 <Th align="right">安全线</Th>
-                <Th>最近入库</Th>
-                <Th>最近出库</Th>
+                <Th>最近动销</Th>
                 <Th>状态</Th>
               </tr>
             </thead>
@@ -183,7 +181,7 @@ export function SkuCatalogPanel() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ink-400)", fontSize: 12 }}>
+                  <td colSpan={7} style={{ padding: "24px 16px", textAlign: "center", color: "var(--ink-400)", fontSize: 12 }}>
                     没有匹配的 SKU
                   </td>
                 </tr>
@@ -299,14 +297,6 @@ function Td({
   );
 }
 
-// iter G11: 材质映射（category → 材质名）
-const MATERIAL_MAP: Record<string, string> = {
-  高铝砖: "高铝",
-  莫来石砖: "莫来石",
-  浇注料: "刚玉",
-  刚玉砖: "刚玉",
-};
-
 function SkuTableRow({
   row,
   onClick,
@@ -318,7 +308,6 @@ function SkuTableRow({
 }) {
   const s = STATUS_COLORS[row.status];
   const displayStatus = row.status === "缺货风险" || row.status === "已缺货" ? "缺货" : row.status;
-  const material = MATERIAL_MAP[row.category] ?? row.category;
   return (
     <tr
       onClick={onClick}
@@ -342,15 +331,16 @@ function SkuTableRow({
         <div style={{ color: "var(--ink-800)" }}>{row.name}</div>
         <div style={{ fontSize: 10.5, color: "var(--ink-500)", marginTop: 2 }}>{row.spec}</div>
       </td>
-      <Td>{material}</Td>
       <Td mono>{row.location}</Td>
       <Td align="right">
         <strong>{row.stock.toLocaleString()}</strong>
         <span style={{ marginLeft: 3, fontSize: 10.5, color: "var(--ink-400)" }}>{row.unit}</span>
       </Td>
       <Td align="right">{row.safety.toLocaleString()}</Td>
-      <Td mono>{row.lastIn ?? "—"}</Td>
-      <Td mono>{row.lastOut ?? "—"}</Td>
+      <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontSize: 11, color: "var(--ink-600)", fontFamily: "var(--font-mono, var(--font))" }}>
+        <div>入 {row.lastIn ?? "—"}</div>
+        <div style={{ color: "var(--ink-400)", marginTop: 2 }}>出 {row.lastOut ?? "—"}</div>
+      </td>
       <td style={{ padding: "10px 12px" }}>
         <span
           style={{
