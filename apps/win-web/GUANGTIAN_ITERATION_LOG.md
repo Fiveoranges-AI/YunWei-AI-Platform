@@ -426,3 +426,51 @@
 
 ### 最值得演示瞬间
 点 "▶ 一键演示" 后**完全不用碰键盘**，90 秒自动完成：上传 → AI 识别 → 库存检查 → 风险预警 → AI 建议 → 补产计划，最后弹出 "这就是 AI 库存管家" 总结卡。客户老板看到一定会问：刚才那是真的还是演示？— 这就是 demo 要的"魔法时刻"。
+
+## Iter G13 — 标题两行 + 演示动线单向
+**Commit:** 4e5865d
+
+### 用户反馈
+1. Hero "宜兴光天耐火材料·AI 库存管家" 单行窄窗时折断难看；
+2. 一键演示在 tab 之间左右跳来跳去（旧序：inbound→inbound→**sku回跳**→shortage→ask→**replenish回跳**）。
+
+### Hero 两行布局
+`<h1>` 拆 flex column：
+- 第 1 行「宜兴光天耐火材料」20px / weight 600 / ink-700
+- 第 2 行「AI 库存管家」34px / weight 800 / 光天红 accent
+- 去掉中间「·」分隔，产品名成视觉焦点
+
+### Tab 顺序检查
+现有顺序 dashboard/sku/inbound/outbound/ledger/shortage/replenish/ask/report
+已是业务流逻辑序，**无需重排**。
+
+### Demo 6 步单向重排（核心）
+| # | 旧 tab | 新 tab | 单向？ |
+|---|---|---|---|
+| 1 | inbound (3) | inbound (3) | ✓ |
+| 2 | inbound (3) | ledger (5) | ↗ +2 |
+| 3 | sku (2) ⚠回跳 | shortage (6) | ↗ +1 |
+| 4 | shortage (6) | replenish (7) | ↗ +1 |
+| 5 | ask (8) | ask (8) | ↗ +1 |
+| 6 | replenish (7) ⚠回跳 | report (9) | ↗ +1 |
+
+新流：3 → 5 → 6 → 7 → 8 → 9 **完全单向向右**。
+
+旁白重写（仍 AL90 主角全程）：
+1. AI 单据录入·识别出货单
+2. 写入库存流水·AI 置信度
+3. 扣减后触发缺货预警
+4. 加入本周补产计划
+5. 老板问 AI · 明天优先排产什么
+6. 今日库存日报自动收录
+
+### 联动调整
+- state.tsx highlight: step 3 → SO-003 / step 4 → AL90 + auto assign
+- InboundPanel: step 1 内 1.2s 自动 scanning→result（不依赖 step 2）
+- ReplenishmentPanel auto-assign: step 6 → 4
+
+### 验证截图
+- Hero 两行：`ss_3223w1eix`
+- Demo step 1 入库（tab 3 高亮）：`ss_1975kj7cw`
+- Demo step 2 流水（tab 5）：`ss_5106k02wd`
+- Demo step 3 缺货（tab 6）：`ss_8222wlpgg`
