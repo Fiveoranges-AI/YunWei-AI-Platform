@@ -178,18 +178,38 @@ export function StockDistributionDonut() {
             SKU
           </text>
         </svg>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+        {/* iter G14: 每项两行 — 状态名 nowrap 不折断 + 第 2 行小灰字 数量·百分比 */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 9 }}>
           {DIST.map((d) => {
             const pct = ((d.value / total) * 100).toFixed(1);
             return (
-              <div key={d.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 2, background: d.color, flexShrink: 0 }} />
-                  <span style={{ color: "var(--ink-700)" }}>{d.label}</span>
+              <div key={d.label} style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 2,
+                    background: d.color,
+                    flexShrink: 0,
+                    marginTop: 5,
+                  }}
+                />
+                <div style={{ display: "flex", flexDirection: "column", minWidth: 0, lineHeight: 1.25 }}>
+                  <span style={{ fontSize: 13, color: "var(--ink-800)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {d.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "var(--ink-500)",
+                      fontFamily: "var(--font-mono, var(--font))",
+                      marginTop: 2,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.value.toLocaleString()} · {pct}%
+                  </span>
                 </div>
-                <span style={{ color: "var(--ink-900)", fontWeight: 700, fontFamily: "var(--font-mono, var(--font))" }}>
-                  {d.value} <span style={{ color: "var(--ink-400)", fontWeight: 400 }}>· {pct}%</span>
-                </span>
               </div>
             );
           })}
