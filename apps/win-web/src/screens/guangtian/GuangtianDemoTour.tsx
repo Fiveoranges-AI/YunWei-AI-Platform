@@ -1,6 +1,7 @@
 // iter G12-B: 一键演示模式 — 顶部固定控制条 + 6 步剧本 + 总结
 import { useGT } from "./state";
 
+// iter G13: 单向 6 步从左到右 — inbound → ledger → shortage → replenish → ask → report
 export const DEMO_STEPS: {
   id: number;
   tab: string;
@@ -11,44 +12,44 @@ export const DEMO_STEPS: {
   {
     id: 1,
     tab: "inbound",
-    title: "上传出库单照片",
-    narration: "销售刚发来「常州新材出库单」拍照，王主管打开 AI 库存管家。",
+    title: "AI 单据录入 · 识别出货单",
+    narration: "销售刚发来「常州新材出货单」拍照。AI 识别：刚玉砖 AL90 × 150 件 / 关联 SO-20260519-003，整体置信度 96%。",
     badge: "📷 出货单_常州新材_20260520.jpg",
   },
   {
     id: 2,
-    tab: "inbound",
-    title: "AI 自动识别字段",
-    narration: "AI 识别到「刚玉砖 AL90 × 150 件 / 关联订单 SO-20260519-003」，整体置信度 96%。",
-    badge: "✦ AI 识别中…",
+    tab: "ledger",
+    title: "写入库存流水 · AI 置信度",
+    narration: "AL90 出库 -150 件写入流水（置信度 96% 已确认）。AI 同时标记 3 条历史流水待王主管复核（含 1 条置信度仅 62%）。",
+    badge: "⏳ 3 条待确认",
   },
   {
     id: 3,
-    tab: "sku",
-    title: "系统检查 SKU 库存",
-    narration: "系统对 AL90 当前库存 78 块 vs 出库需求 150 块比对 — 缺口 72 块。",
-    badge: "🔴 AL90 库存不足",
+    tab: "shortage",
+    title: "扣减后触发缺货预警",
+    narration: "AL90 库存扣减后剩余不足，AI 立刻把 SO-20260519-003 标为高风险，预计可发货 72%、缺 72 件。",
+    badge: "⚠ SO-20260519-003 高风险",
   },
   {
     id: 4,
-    tab: "shortage",
-    title: "自动触发缺货预警",
-    narration: "常州新材订单 SO-003 被标记为「高风险」，AI 计算可发货比例 72%。",
-    badge: "⚠ SO-20260519-003 高风险",
+    tab: "replenish",
+    title: "加入本周补产计划",
+    narration: "AI 把 AL90 列为本周补产，建议补 250 件（5/26 出炉）。一键挂工艺组陈工，绿色徽章亮起。",
+    badge: "✓ AL90 已入计划",
   },
   {
     id: 5,
     tab: "ask",
-    title: "AI 库存管家给建议",
-    narration: "AI 建议立即排产 AL90 250 块（5/26 出炉），先发 72% 库存 + 5/28 补 72 件。",
+    title: "老板问 AI · 明天优先排产什么",
+    narration: "陈总微信问一句：「明天应该优先生产什么？」AI 立刻拿订单+库存+生产周期算出答案，附数据来源。",
     badge: "✦ AI 综合答案",
   },
   {
     id: 6,
-    tab: "replenish",
-    title: "生成补产计划",
-    narration: "AL90 列为「中优先」加入本周补产，一键发给工艺组陈工。",
-    badge: "✓ AL90 已入计划",
+    tab: "report",
+    title: "今日库存日报自动收录",
+    narration: "18:30 自动生成日报：今日新增 AL90 出货、新缺货预警 1 条、补产 3 SKU 已挂工艺组。一键发陈总微信。",
+    badge: "📅 日报已就绪",
   },
 ];
 

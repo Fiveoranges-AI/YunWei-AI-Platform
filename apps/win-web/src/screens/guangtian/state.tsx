@@ -160,18 +160,20 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
   const [highlightOrder, setHighlightOrder] = useState<string | null>(null);
   const demoTimerRef = useRef<number | null>(null);
 
-  // 每步的高亮目标（步号 → SKU / 订单）
+  // iter G13: 单向 6 步高亮映射
+  // step 1 inbound · 2 ledger · 3 shortage(SO-003) · 4 replenish(AL90) · 5 ask · 6 report
   useEffect(() => {
     if (demoStep === 3) {
-      setHighlightSku("JT-GZB-AL90"); // SKU 台账高亮 AL90
-      setHighlightOrder(null);
-    } else if (demoStep === 4) {
       setHighlightSku(null);
       setHighlightOrder("SO-20260519-003"); // 缺货预警高亮 003
-    } else if (demoStep === 6) {
-      setHighlightSku("JT-GZB-AL90"); // 补产建议高亮 AL90 行
+    } else if (demoStep === 4) {
+      setHighlightSku("JT-GZB-AL90"); // 补产建议高亮 AL90 行 + auto assign
       setHighlightOrder(null);
     } else if (demoStep === 0) {
+      setHighlightSku(null);
+      setHighlightOrder(null);
+    } else {
+      // step 1 / 2 / 5 / 6 不需要 highlight，clear 掉避免遗留
       setHighlightSku(null);
       setHighlightOrder(null);
     }

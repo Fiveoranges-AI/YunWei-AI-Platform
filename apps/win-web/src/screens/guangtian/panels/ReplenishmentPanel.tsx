@@ -36,9 +36,9 @@ export function ReplenishmentPanel(_props: Props) {
     showToast(`✓ ${name} 已挂到工艺组 · 工单号 SC-2026-${(Math.floor(Math.random() * 900) + 100).toString()}`, "ok");
   };
 
-  // iter G12-B: demo 步 6 自动把高亮 SKU 加入计划
+  // iter G13: demo 步 4 (改) 自动把高亮 SKU 加入计划
   useEffect(() => {
-    if (demoStep === 6 && highlightSku) {
+    if (demoStep === 4 && highlightSku) {
       const item = replenishmentItems.find((i) => i.sku === highlightSku);
       if (item && !assigned.has(highlightSku)) {
         setAssigned((s) => new Set(s).add(highlightSku));

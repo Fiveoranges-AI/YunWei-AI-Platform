@@ -123,16 +123,18 @@ export function InboundPanel() {
     window.setTimeout(() => setDocState("result"), 1500);
   };
 
-  // iter G12-B: 演示模式步 1 → 展示常州新材出库单上传卡 / 步 2 → scanning → result
+  // iter G13: demo step 1 内完成完整识别流程（scanning 1.2s → result）。
+  // 步 1 单独占一个 tab 时间，不再依赖步 2（步 2 已切到流水 tab）。
   useEffect(() => {
     if (demoStep === 1) {
       setDocPreset(DOC_PRESETS[2]); // 常州新材出库单
-      setDocState("scanning"); // 显示扫描中
-    } else if (demoStep === 2) {
-      setDocState("result");
+      setDocState("scanning");
+      const t = window.setTimeout(() => setDocState("result"), 1200);
+      return () => window.clearTimeout(t);
     } else if (demoStep === 0) {
       setDocState("idle");
     }
+    // 注：step 2-6 不重置 docState — 用户切回 inbound tab 仍能看到识别结果
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoStep]);
 

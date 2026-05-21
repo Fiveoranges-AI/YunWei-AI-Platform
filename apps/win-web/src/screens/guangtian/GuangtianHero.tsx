@@ -65,17 +65,37 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
             >
               YIXING GUANGTIAN REFRACTORY · AI 库存试点
             </div>
+            {/* iter G13: 两行标题 — 公司名常规 + 产品名大字红色 */}
             <h1
               style={{
                 margin: 0,
-                fontSize: isDesktop ? 30 : 22,
-                fontWeight: 800,
-                color: "var(--ink-900)",
-                lineHeight: 1.2,
+                lineHeight: 1.15,
                 letterSpacing: "-0.01em",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
               }}
             >
-              宜兴光天耐火材料 · <span style={{ color: "var(--guangtian-red)" }}>AI 库存管家</span>
+              <span
+                style={{
+                  fontSize: isDesktop ? 20 : 16,
+                  fontWeight: 600,
+                  color: "var(--ink-700)",
+                  letterSpacing: 0,
+                }}
+              >
+                宜兴光天耐火材料
+              </span>
+              <span
+                style={{
+                  fontSize: isDesktop ? 34 : 25,
+                  fontWeight: 800,
+                  color: "var(--guangtian-red)",
+                  letterSpacing: "-0.015em",
+                }}
+              >
+                AI 库存管家
+              </span>
             </h1>
             <p
               style={{
