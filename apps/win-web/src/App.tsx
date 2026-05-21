@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { CustomerListScreen } from "./screens/CustomerList";
 import { CustomerDetailScreen } from "./screens/CustomerDetail";
@@ -8,6 +8,7 @@ import { ReviewScreen } from "./screens/Review";
 import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
 import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
+import { ConfirmDemoScreen } from "./screens/ConfirmDemo";
 
 export type ScreenName =
   | "list"
@@ -17,7 +18,8 @@ export type ScreenName =
   | "review"
   | "ask"
   | "profile"
-  | "jintai";
+  | "jintai"
+  | "confirmDemo";
 export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
 
 export type ScreenStackEntry = {
@@ -36,6 +38,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
   ask: "ask",
   profile: "profile",
   jintai: "jintai",
+  confirmDemo: undefined,
 };
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
@@ -47,9 +50,33 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
   jintai: "jintai",
 };
 
+function readInitialScreen(): ScreenStackEntry {
+  // Allow `?screen=confirmDemo` for the P0 task ③ demo page so it can be
+  // exercised without adding a permanent tab. Anything else falls back to
+  // the customer list.
+  if (typeof window === "undefined") return { name: "list" };
+  const params = new URLSearchParams(window.location.search);
+  const name = params.get("screen");
+  if (name === "confirmDemo") return { name: "confirmDemo" };
+  return { name: "list" };
+}
+
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabName>("customers");
-  const [stack, setStack] = useState<ScreenStackEntry[]>([{ name: "list" }]);
+  const initial = readInitialScreen();
+  const [activeTab, setActiveTab] = useState<TabName>(
+    SCREEN_TO_TAB[initial.name] ?? "customers",
+  );
+  const [stack, setStack] = useState<ScreenStackEntry[]>([initial]);
+
+  useEffect(() => {
+    function onPop() {
+      const next = readInitialScreen();
+      setStack([next]);
+      setActiveTab(SCREEN_TO_TAB[next.name] ?? "customers");
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const go: GoFn = (name, params = {}) => {
     const tab = SCREEN_TO_TAB[name];
@@ -93,5 +120,7 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
       return <ProfileScreen go={go} />;
     case "jintai":
       return <JintaiDemoPage />;
+    case "confirmDemo":
+      return <ConfirmDemoScreen go={go} />;
   }
 }
