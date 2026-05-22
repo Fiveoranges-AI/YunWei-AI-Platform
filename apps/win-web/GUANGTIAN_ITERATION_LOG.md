@@ -581,3 +581,48 @@ G14 标题对调后，120px 光天 logo 显得偏小。
 | SKU 表列数 | 9 | **7** (-22%) |
 
 Chrome MCP 验证因页面持续 rAF 动画阻塞 document_idle，回退 tsc 验证。
+
+## Iter G18 — 跨屏数据自洽 + 动画收敛 + 响应式审查
+**Commit:** 9d8a219
+
+### 数据自洽审计 — 修 3 处不一致
+
+| 项 | Before（不一致） | After（一致） |
+|---|---|---|
+| Dashboard KPI 低库存 | **40** | **46** ← 与 Donut 46 + 日报 46 对齐 |
+| Dashboard KPI 订单缺货 | **7** | **3** ← 与 shortageOrders.length 对齐 |
+| dashboardAlerts low item | "3 条置信度 <80%" | "2 条 (T3 62% · AL80 70%)" ← 与 ledger 实际数对齐 |
+
+**演示防露馅**：客户点 KPI 跳过去看到的数字 = KPI 显示数字。
+
+### 自洽 OK 不需改的（审计验证）
+- 魔法时刻 AL90 全链路：SKU 档案 78 库存 → 缺货预警 SO-003 缺 72 → 补产 AL90 250 块 → AI 答案提 AL90 ✓
+- Donut 4 段合计 1,221 + 46 + 7 + 12 = 1,286 ✓
+- 缺货 SKU (JC-16/M70/AL90) ↔ 补产建议 SKU 完全对应 ✓
+- AI 答案中订单号 SO-20260519-001/002/003 ↔ shortageOrders ✓
+
+### 动画收敛 — infinite → 限次
+| 位置 | Before | After |
+|---|---|---|
+| SkuCatalogPanel 高亮 pulse | `1.6s ease-in-out infinite` | `1.6s ease-in-out 6` |
+| ReplenishmentPanel 高亮 | `1.8s ease-in-out infinite` | `1.8s ease-in-out 6` |
+| ShortageAlertPanel urgent/HL | `1.8s ease-in-out infinite` | `1.8s ease-in-out 8` |
+
+过期后 box-shadow 静态保留，视觉强调不丢；CPU 静止 ≈ 0。
+
+**效果验证**：Chrome MCP 截图成功 `ss_6475lk69u` — 之前 document_idle 永远 timeout，现在动画结束后页面静止 ≤ 4s 截图通过。
+
+### 响应式 CSS 审查（代码层 grep）
+| 项 | 状态 |
+|---|---|
+| `isDesktop` 断点使用 | 38 处 · 覆盖充分 |
+| 表格容器 `overflowX: auto` | 5 / 5（SKU/流水/入库/出库/缺货 全有）|
+| 9 tab horizontal nav 横滚 | ✓ `overflowX: auto` |
+| Hero row → column 切换 | ✓ `flexDirection: isDesktop ? "row" : "column"` |
+| Logo / 标题 / padding mobile 路径 | ✓ 全覆盖 |
+| 固定 minWidth 用法 | 均为容器最小宽度，OK |
+
+**结论**：响应式断点合理，窄屏可优雅降级，无破坏性 fixed px。
+
+### 验证截图
+- Dashboard 数据自洽 + 动画收敛后截图通过：`ss_6475lk69u`
