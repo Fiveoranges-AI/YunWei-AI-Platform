@@ -137,7 +137,7 @@ export function ReplenishmentPanel(_props: Props) {
                 alignItems: "center",
                 borderLeft: `${isHL ? 4 : 3}px solid ${isHL ? "var(--guangtian-red)" : p.color}`,
                 boxShadow: isHL ? "0 0 0 2px rgba(195,38,41,0.22), var(--shadow-card)" : undefined,
-                animation: isHL ? "gt-pulse-urgent 1.8s ease-in-out infinite" : undefined,
+                animation: isHL ? "gt-pulse-urgent 1.8s ease-in-out 6" : undefined,
               }}
             >
               {/* 优先级标记 + 排序 */}

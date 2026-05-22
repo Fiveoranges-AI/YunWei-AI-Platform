@@ -80,7 +80,8 @@ export function ShortageAlertPanel() {
                 borderLeft: `${meta.pulse || isHL ? 4 : 3}px solid ${meta.color}`,
                 overflow: "hidden",
                 boxShadow: (meta.pulse || isHL) ? "0 0 0 2px rgba(195,38,41,0.22), var(--shadow-card)" : undefined,
-                animation: (meta.pulse || isHL) ? "gt-pulse-urgent 1.8s ease-in-out infinite" : undefined,
+                // iter G18: 限次（紧急 8 cycles ≈ 14s；demo 高亮 6 cycles ≈ 11s）后保持静态强阴影
+                animation: (meta.pulse || isHL) ? "gt-pulse-urgent 1.8s ease-in-out 8" : undefined,
               }}
             >
               {/* 订单标题行 */}

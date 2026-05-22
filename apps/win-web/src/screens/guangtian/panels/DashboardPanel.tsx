@@ -44,12 +44,14 @@ export function DashboardPanel({ onGoTab }: Props) {
   const isDesktop = useIsDesktop();
   const { skuStocks, setPendingAsk, showToast, todayInboundCount, todayOutboundCount } = useGT();
 
-  // iter G10: KPI 数值从联动 state 派生
+  // iter G18: KPI 数字与 Donut + 日报对齐
+  // 低库存 46 = filter(2 条演示) + 44 模拟（与 DIST 中 46 / dailyReport "46 个 SKU" 一致）
+  // 订单缺货 = shortageOrders.length 实际值，避免点 KPI 跳过去发现卡数不符
   const lowStockCount = skuRows.filter((r) => {
     const s = skuStocks[r.code] ?? r.stock;
     return s > 0 && s < r.safety;
-  }).length + 38; // 演示用 +38 模拟 1,286 全量低库存
-  const outOfStockOrders = 7;
+  }).length + 44;
+  const outOfStockOrders = 3;
   const totalSku = 1286;
 
   type Kpi = {
@@ -67,7 +69,7 @@ export function DashboardPanel({ onGoTab }: Props) {
   const kpis: Kpi[] = [
     { label: "SKU 总数",     value: totalSku.toLocaleString(), trend: "+12", trendLabel: "本月新增", color: "var(--brand-500)", target: "sku" },
     { label: "低库存预警",   value: String(lowStockCount),     trend: "SKU", trendLabel: "点击查看 →", color: "var(--stock-low)", target: "sku" },
-    { label: "订单缺货风险", value: String(outOfStockOrders),  trend: "单",  trendLabel: "本周交付 · 点击 →", color: "var(--guangtian-red)", target: "shortage" },
+    { label: "订单缺货风险", value: String(outOfStockOrders),  trend: "单",  trendLabel: "含紧急 1 · 点击 →", color: "var(--guangtian-red)", target: "shortage" },
     { label: "今日出入库",   value: `${todayInboundCount}/${todayOutboundCount}`, trend: "笔", trendLabel: "入 / 出 · 点击 →", color: "var(--guangtian-blue)", target: "ledger" },
   ];
 

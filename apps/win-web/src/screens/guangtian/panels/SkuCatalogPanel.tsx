@@ -317,7 +317,7 @@ function SkuTableRow({
         transition: "background 0.12s ease, box-shadow 0.2s ease",
         background: highlight ? "rgba(195,38,41,0.06)" : undefined,
         boxShadow: highlight ? "inset 4px 0 0 var(--guangtian-red), 0 0 0 2px rgba(195,38,41,0.18)" : undefined,
-        animation: highlight ? "gt-pulse-urgent 1.6s ease-in-out infinite" : undefined,
+        animation: highlight ? "gt-pulse-urgent 1.6s ease-in-out 6" : undefined,
       }}
       onMouseEnter={(e) => {
         if (!highlight) (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)";
