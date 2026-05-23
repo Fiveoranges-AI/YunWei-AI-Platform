@@ -67,6 +67,10 @@ const NEW_PR_NO = "PR-2026-017";
 const NEW_PO_NO = "PO-2026-009";
 const NEW_INBOX_ID = "demo-line-issue-001";
 
+/* ---------- 引导式 Tour 状态 (iter 23) ---------- */
+export type ProductionSubtab = "A" | "D" | "B" | "C";
+/** tourStep: 0 = 未启动 / 1-N = 步骤中 / N+1 = 总结 */
+
 /* ---------- State ---------- */
 export type JintaiState = {
   stockLedgers: StockLedger[];
@@ -77,6 +81,13 @@ export type JintaiState = {
   toasts: Toast[];
   flash: FlashMap;
   step: DemoStep;
+  /** iter 23: 引导式演示 */
+  tourStep: number;
+  tourPlaying: boolean;
+  /** iter 23: 受 tour 控制的子 tab (生产 D/A/B/C) */
+  productionSubtab: ProductionSubtab;
+  /** iter 23: tour 滚动锚点 (panel 监听后 scrollIntoView) */
+  scrollAnchor: string | null;
 };
 
 const initialState: JintaiState = {
@@ -88,6 +99,10 @@ const initialState: JintaiState = {
   toasts: [],
   flash: {},
   step: "idle",
+  tourStep: 0,
+  tourPlaying: false,
+  productionSubtab: "A",
+  scrollAnchor: null,
 };
 
 /* ---------- Actions ---------- */
@@ -100,7 +115,143 @@ type Action =
   | { type: "RECEIVE_PO"; poNo: string }
   | { type: "DISMISS_TOAST"; id: string }
   | { type: "CLEAR_FLASH"; key: string }
+  | { type: "FLASH_KEYS"; keys: string[] }
+  | { type: "SET_PRODUCTION_SUBTAB"; subtab: ProductionSubtab }
+  | { type: "SET_SCROLL_ANCHOR"; anchor: string | null }
+  | { type: "TOUR_START" }
+  | { type: "TOUR_SET_STEP"; step: number }
+  | { type: "TOUR_PAUSE" }
+  | { type: "TOUR_RESUME" }
+  | { type: "TOUR_EXIT" }
   | { type: "RESET" };
+
+/* ---------- 引导式 Tour 剧本 (10 步 + 总结) ---------- */
+
+export type TourStep = {
+  id: number;
+  tab: "briefing" | "inbox" | "purchase" | "production" | "finance" | "ask" | "trust";
+  subtab?: ProductionSubtab;
+  scrollAnchor?: string;
+  title: string;
+  narration: string;
+  badge?: string;
+  /** 进入此步触发的 action (副作用动作: 模拟领料 / 确认 / 批准 / 入库) */
+  action?: Exclude<Action, { type: "DISMISS_TOAST" } | { type: "CLEAR_FLASH" } | { type: "FLASH_KEYS" } | { type: "SET_PRODUCTION_SUBTAB" } | { type: "SET_SCROLL_ANCHOR" } | { type: "TOUR_START" } | { type: "TOUR_SET_STEP" } | { type: "TOUR_PAUSE" } | { type: "TOUR_RESUME" } | { type: "TOUR_EXIT" } | { type: "RESET" }>;
+  /** 重新激活的 flash 高亮 key (让 4s 之后切回来还能看到飘黄) */
+  flashKeys?: string[];
+  /** 本步停留时长 (ms) */
+  durationMs: number;
+};
+
+export const TOUR_STEPS: TourStep[] = [
+  {
+    id: 1,
+    tab: "briefing",
+    title: "陈总打开经营日报",
+    narration:
+      "早上 7:55 · AI 7 大 KPI 已就绪。今日要事 6 条跨 5 模块,陈总醒后 5 分钟扫一眼最该关注的事:容百烧结晚 2 天 / 5 月三表已生成 / α 氧化铝粉涨价。",
+    badge: "📅 经营日报 · 老板视角",
+    durationMs: 6000,
+  },
+  {
+    id: 2,
+    tab: "inbox",
+    title: "AI 收到 1 张车间领料单",
+    narration:
+      "9:18 成型车间张师傅扫码领 α 氧化铝粉 800 kg 投料 BL-2026-018。手写单子拍照传上来,AI 立即识别 7 个字段(车间/领用人/物料/数量/用途/日期),整体置信度 91%。",
+    badge: "✨ AI 抽取 · 待王仓管确认",
+    action: { type: "SIMULATE_RAW_ISSUE" },
+    flashKeys: ["inbox:demo-line-issue-001"],
+    durationMs: 8000,
+  },
+  {
+    id: 3,
+    tab: "inbox",
+    title: "王仓管 ✓ 确认入账",
+    narration:
+      'AI 不直接动库存 — 王仓管点这一下确认才算数。这是"AI 先填、人确认"的核心:AI 把字段填好,人最终拍板。',
+    badge: "✓ 王仓管 已确认",
+    action: { type: "CONFIRM_INBOX", cardId: "demo-line-issue-001" },
+    durationMs: 8000,
+  },
+  {
+    id: 4,
+    tab: "purchase",
+    scrollAnchor: "stock-ledger",
+    title: "库存台账 α 氧化铝粉 自动扣减",
+    narration:
+      "跨模块联动:α 氧化铝粉 期末 1,880 → 1,080 kg,跌破安全线 1,500,余量条立即飘红 ⚠ 低库存。整笔扣减来自王仓管刚才那一下确认,不是 AI 直接动。",
+    badge: "⚠ 1,880 → 1,080 kg",
+    flashKeys: ["stock:α 氧化铝粉"],
+    durationMs: 8000,
+  },
+  {
+    id: 5,
+    tab: "production",
+    subtab: "D",
+    title: "配料单 D · 缺料预警",
+    narration:
+      "另一边:配料单 BL-2026-015 容百锂电承烧板 本批需 α 氧化铝粉 4,000 kg vs 现存 1,080 kg,缺 2,920 kg 自动飘红。AI 警告生产组别开新批次。",
+    badge: "⚠ 配料缺 2,920 kg",
+    durationMs: 7000,
+  },
+  {
+    id: 6,
+    tab: "purchase",
+    scrollAnchor: "requisition",
+    title: "AI 自动生成申购草稿 PR-2026-017",
+    narration:
+      "同步:AI 检测到 α 氧化铝粉 跌破安全线,按近 3 月平均用量自动出申购草稿。山东中铝 / 4,000 kg / 单价 ¥24.00 / 总价 ¥96,000。AI 先填、张主管确认。",
+    badge: "✨ PR-2026-017 · 张主管待审批",
+    flashKeys: ["pr:PR-2026-017"],
+    durationMs: 8000,
+  },
+  {
+    id: 7,
+    tab: "purchase",
+    scrollAnchor: "requisition",
+    title: "张主管 批准 → 转采购订单",
+    narration:
+      "采购张主管复核后批准。系统自动:① 申购单 待审批 → 已转订单;② 采购订单顶部新增 PO-2026-009 山东中铝 ¥96,000。",
+    badge: "✓ PR → PO-2026-009",
+    action: { type: "APPROVE_PR", prNo: "PR-2026-017" },
+    flashKeys: ["po:PO-2026-009", "pr:PR-2026-017"],
+    durationMs: 8000,
+  },
+  {
+    id: 8,
+    tab: "purchase",
+    scrollAnchor: "purchase-orders",
+    title: "4 天后山东中铝送到 · 仓管入库 +4,000 kg",
+    narration:
+      "货到厂区,仓管确认入库。系统联动:库存 α 氧化铝粉 1,080 → 5,080 kg 回到健康,余量条变绿;应付台账自动新增一笔 ¥96,000,60 天账期到期 2026-07-24。",
+    badge: "✓ PO-2026-009 已入库 · 应付 +¥96,000",
+    action: { type: "RECEIVE_PO", poNo: "PO-2026-009" },
+    flashKeys: ["stock:α 氧化铝粉", "po:PO-2026-009"],
+    durationMs: 9000,
+  },
+  {
+    id: 9,
+    tab: "purchase",
+    scrollAnchor: "payable",
+    title: "应付台账 KPI 联动",
+    narration:
+      "本月应付从 ¥327,000 → ¥423,000(主线新增 ¥96,000 · 共 7 笔)。3 段彩色账龄条立即重新分布:已超期 / 30 天内 / 未到期 三段比例随新笔即时刷新。",
+    badge: "¥327,000 → ¥423,000",
+    durationMs: 7000,
+  },
+  {
+    id: 10,
+    tab: "briefing",
+    title: "陈总扫一眼:本月应付 KPI 实时反映",
+    narration:
+      "回到经营日报。本月应付 KPI 从 ¥327,000 涨到 ¥423,000,副标 \"主线新增 +¥96,000 · 共 7 笔\"。全链 AI识别→王仓管→库存预警→AI草稿→张主管→入库→应付,90 秒走完,每步都签过字。",
+    badge: "✓ 全程闭环",
+    durationMs: 8000,
+  },
+];
+
+export const TOUR_TOTAL = TOUR_STEPS.length;
 
 /* ---------- helpers ---------- */
 function withToast(state: JintaiState, t: Omit<Toast, "id">): JintaiState {
@@ -394,6 +545,34 @@ function reducer(state: JintaiState, action: Action): JintaiState {
       return { ...state, flash: next };
     }
 
+    case "FLASH_KEYS":
+      return flashKeys(state, action.keys);
+
+    case "SET_PRODUCTION_SUBTAB":
+      return { ...state, productionSubtab: action.subtab };
+
+    case "SET_SCROLL_ANCHOR":
+      return { ...state, scrollAnchor: action.anchor };
+
+    case "TOUR_START":
+      return {
+        ...initialState,
+        tourStep: 1,
+        tourPlaying: true,
+      };
+
+    case "TOUR_SET_STEP":
+      return { ...state, tourStep: action.step };
+
+    case "TOUR_PAUSE":
+      return { ...state, tourPlaying: false };
+
+    case "TOUR_RESUME":
+      return { ...state, tourPlaying: true };
+
+    case "TOUR_EXIT":
+      return { ...state, tourStep: 0, tourPlaying: false, scrollAnchor: null };
+
     case "RESET":
       return { ...initialState, toasts: [{ id: "reset", level: "info", title: "已重置到 demo 初始状态" }] };
 
@@ -406,8 +585,14 @@ function reducer(state: JintaiState, action: Action): JintaiState {
 type Ctx = {
   state: JintaiState;
   dispatch: React.Dispatch<Action>;
-  /** 一键演示主线 — 1.5s 间隔顺序触发 5 步 */
-  playAll: () => void;
+  /** iter 23: 引导式 90 秒演示 */
+  startTour: () => void;
+  pauseTour: () => void;
+  resumeTour: () => void;
+  exitTour: () => void;
+  nextTourStep: () => void;
+  /** 当前步配置(便于 Tour bar 显示) */
+  currentTourStep: TourStep | null;
   /** 高亮判断 */
   isFlashing: (key: string) => boolean;
   /** Demo 锁定常量, 给按钮显示用 */
@@ -426,7 +611,8 @@ const JintaiContext = createContext<Ctx | null>(null);
 
 export function JintaiProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const playingRef = useRef(false);
+  const tourTimerRef = useRef<number | null>(null);
+  const tourEnteredRef = useRef<number>(0);
 
   // 自动 dismiss toast (3s)
   useEffect(() => {
@@ -457,25 +643,69 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
     [state.flash],
   );
 
-  const playAll = useCallback(() => {
-    if (playingRef.current) return;
-    playingRef.current = true;
-    dispatch({ type: "RESET" });
-    const steps: Array<() => void> = [
-      () => dispatch({ type: "SIMULATE_RAW_ISSUE" }),
-      () => dispatch({ type: "CONFIRM_INBOX", cardId: NEW_INBOX_ID }),
-      () => dispatch({ type: "APPROVE_PR", prNo: NEW_PR_NO }),
-      () => dispatch({ type: "RECEIVE_PO", poNo: NEW_PO_NO }),
-    ];
-    steps.forEach((s, i) => window.setTimeout(s, 600 + i * 1800));
-    window.setTimeout(() => (playingRef.current = false), 600 + steps.length * 1800);
+  /* ---------- iter 23: 引导式 Tour 引擎 ---------- */
+  // 进入每一步:① 派发 step.action ② 重新激活 flashKeys ③ 设置子 tab + scroll
+  useEffect(() => {
+    if (state.tourStep === 0 || state.tourStep > TOUR_TOTAL) return;
+    // 防止 React StrictMode 二次触发同一 step 的副作用
+    if (tourEnteredRef.current === state.tourStep) return;
+    tourEnteredRef.current = state.tourStep;
+    const step = TOUR_STEPS[state.tourStep - 1];
+    if (step.action) dispatch(step.action);
+    if (step.flashKeys && step.flashKeys.length > 0) {
+      // 延迟 200ms 给 action 落地后再 flash (action 自己也会 flash 一次)
+      window.setTimeout(() => dispatch({ type: "FLASH_KEYS", keys: step.flashKeys! }), 200);
+    }
+    if (step.subtab) dispatch({ type: "SET_PRODUCTION_SUBTAB", subtab: step.subtab });
+    if (step.scrollAnchor !== undefined) {
+      dispatch({ type: "SET_SCROLL_ANCHOR", anchor: step.scrollAnchor ?? null });
+    } else {
+      dispatch({ type: "SET_SCROLL_ANCHOR", anchor: null });
+    }
+  }, [state.tourStep]);
+
+  // 自动推进: 当前步停留 durationMs 后切下一步
+  useEffect(() => {
+    if (!state.tourPlaying || state.tourStep === 0 || state.tourStep > TOUR_TOTAL) return;
+    const step = TOUR_STEPS[state.tourStep - 1];
+    tourTimerRef.current = window.setTimeout(() => {
+      dispatch({ type: "TOUR_SET_STEP", step: state.tourStep + 1 });
+    }, step.durationMs);
+    return () => {
+      if (tourTimerRef.current) {
+        window.clearTimeout(tourTimerRef.current);
+        tourTimerRef.current = null;
+      }
+    };
+  }, [state.tourPlaying, state.tourStep]);
+
+  const startTour = useCallback(() => {
+    tourEnteredRef.current = 0;
+    dispatch({ type: "TOUR_START" });
   }, []);
+  const pauseTour = useCallback(() => dispatch({ type: "TOUR_PAUSE" }), []);
+  const resumeTour = useCallback(() => dispatch({ type: "TOUR_RESUME" }), []);
+  const exitTour = useCallback(() => {
+    tourEnteredRef.current = 0;
+    dispatch({ type: "TOUR_EXIT" });
+  }, []);
+  const nextTourStep = useCallback(() => {
+    dispatch({ type: "TOUR_SET_STEP", step: Math.min(state.tourStep + 1, TOUR_TOTAL + 1) });
+  }, [state.tourStep]);
+
+  const currentTourStep =
+    state.tourStep >= 1 && state.tourStep <= TOUR_TOTAL ? TOUR_STEPS[state.tourStep - 1] : null;
 
   const value = useMemo<Ctx>(
     () => ({
       state,
       dispatch,
-      playAll,
+      startTour,
+      pauseTour,
+      resumeTour,
+      exitTour,
+      nextTourStep,
+      currentTourStep,
       isFlashing,
       consts: {
         pivotMaterial: PIVOT_MATERIAL,
@@ -487,7 +717,7 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
         prReorderQty: PR_REORDER_QTY,
       },
     }),
-    [state, playAll, isFlashing],
+    [state, startTour, pauseTour, resumeTour, exitTour, nextTourStep, currentTourStep, isFlashing],
   );
 
   return (
