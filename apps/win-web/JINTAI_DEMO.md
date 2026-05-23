@@ -1,12 +1,12 @@
 # 锦泰耐火材料 · AI 生产流转试点 Demo
 
-客户演示用的纯前端 wireframe / clickable demo，基于现有 `apps/win-web`（智通客户 / `/win/`）UI 延展。
+客户演示用的 clickable demo，基于现有 `apps/win-web`（智通客户 / `/win/`）UI 延展。
 
-> ⚠️ **当前版本为前端 demo · 纯 mock 数据 · 不接任何后端。** 仅用于客户演示与方案对齐。
+> ⚠️ **当前版本默认可离线演示，并可选连接锦泰 MVP 后端。** 后端不可用时自动降级到 mock 数据；AI 抽取结果只进入待确认队列，不直接写入正式业务数据。
 
 ## Demo 入口
 
-- 路径：在 `/win/` 应用中切到左侧导航「锦泰试点」标签（`jintai` tab）。
+- 路径：在 `/win/` 应用中切到左侧导航「锦泰试点」标签（`jintai` tab），或直接打开 `/win/?tab=jintai`。
 - 代码入口：`src/screens/jintai/JintaiDemoPage.tsx`
 - 路由注入：`src/App.tsx` 增加了 `"jintai"` 屏幕和同名 tab，复用现有 `AppShell` + `URail`。
 
@@ -16,8 +16,14 @@
 cd apps/win-web
 npm install
 npm run dev
-# 浏览器打开 http://localhost:5173（或 vite 输出端口）
+# 浏览器打开 http://localhost:5175（或 vite 输出端口）
 # 点击左侧栏「锦泰试点」进入 demo
+```
+
+如需连接本地锦泰 MVP 后端，先在 `services/platform-api` 启动 FastAPI（默认 `http://127.0.0.1:8000`）。Vite 开发服务器会把 `/api/*` 代理到本地后端；后端端口不是 8000 时可设置：
+
+```bash
+JINTAI_API_PROXY_TARGET=http://127.0.0.1:8001 npm run dev -- --host 127.0.0.1 --port 5176
 ```
 
 类型与构建：
@@ -61,21 +67,21 @@ npm run build    # tsc + vite build
 
 | 操作 | 结果（state 内） |
 | --- | --- |
-| 点 Hero「模拟上传合同」/ 模块 2 同名按钮 | 在 AI 收件箱顶部插入一张新合同识别卡 |
-| 点「模拟上传生产流转单」 | 插入纸质流转单识别卡 |
-| 点「模拟上传出货单」 | 插入出货单识别卡 |
-| 点识别卡上的「确认生成订单 / 流转单 / 入库」 | 该卡片状态切换为「订单已生成 / 流转单已生成 / 出货已记录」 |
+| 点 Hero「模拟上传合同」/ 模块 2 同名按钮 | 创建待确认抽取卡；后端可用时写入 `ai_extraction_queue` |
+| 点「模拟上传生产流转单」 | 创建纸质流转单待确认卡；后端可用时写入 `ai_extraction_queue` |
+| 点「模拟上传出货单」 | 创建出货单待确认卡；后端可用时写入 `ai_extraction_queue` |
+| 点识别卡上的「确认订单草稿 / 流转单草稿 / 出货草稿」 | 前端演示状态切换；后端队列项只标记确认，不生成正式业务记录 |
 | 点 Hero「询问 AI 助手」 | 滚动到模块 5 |
 | 模块 4 A/B/C tab 切换 | 切换显示流转单 / 工艺单 / 出货入库 |
-| 模块 5 预设问题点击 | 显示对应 AI 回答 + 数据明细 + 来源引用 |
+| 模块 5 预设问题点击 | 后端可用时查询 `/api/jintai/ask`，否则显示预设回答 + 数据明细 + 来源引用 |
 
 刷新页面会重置全部状态。
 
-## 接真实后端时的 7 个挂接点
+## MVP 后端挂接点
 
 | # | 当前 mock 位置 | 真实后端 endpoint（建议） |
 | --- | --- | --- |
-| 1 | 上传按钮 / `makeSimulatedCard` | `POST /api/jintai/ingest` 文件上传 + OCR |
+| 1 | 上传按钮 / `makeSimulatedCard` | `POST /api/jintai/ingest` 占位入队；真实 OCR 后续接入 |
 | 2 | `JintaiUploadInbox` 卡片 | `GET /api/jintai/extractions?status=pending` AI 待确认收件箱 |
 | 3 | `data.orders` / `JintaiWorkflowTimeline` | `GET /api/jintai/orders` 订单表 |
 | 4 | `data.flowCards` / `JintaiProductionTabs` Tab A | `GET /api/jintai/flow-cards/{no}` 生产流转单表 |
@@ -83,14 +89,14 @@ npm run build    # tsc + vite build
 | 6 | `data.presetQuestions` / `JintaiAIQueryPanel` | `POST /api/jintai/ask` AI 查询 API（含来源引用） |
 | 7 | `JintaiDailyBriefing` | `GET /api/jintai/briefing?date=YYYY-MM-DD` 每日简报 |
 
-确认草稿入库走 `POST /api/jintai/extractions/{id}/confirm`，由后端生成对应订单 / 流转单 / 出货单实体并返回新业务编号。
+确认草稿走 `POST /api/jintai/extractions/{id}/confirm`。当前 MVP 只把队列项标记为已确认，后续阶段再设计“人工审核后生成草稿业务记录”的显式流程。
 
 ## 不要做的事（本 demo 范围之外）
 
-- 不做真实登录、真实 DB、真实文件上传、真实 OCR / AI 调用
+- 不做真实文件上传、真实 OCR / AI 调用
 - 不做完整 ERP / 库存 / 排产 / 支付
-- 不做多租户配置或权限管理
-- 不动 `services/platform-api`、不动 migration、不动 V2 安全栈
+- 不做用友替换，不连接客户 on-premise 数据库
+- 不让 AI 直接修改正式业务数据
 
 ## 验收脚本（演示讲法）
 

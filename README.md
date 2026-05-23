@@ -112,10 +112,11 @@ npm run build                        # writes dist/ that /win/ reads
 `/win/` returns the SPA if `apps/win-web/dist` exists, otherwise
 a `503 win_not_built` for clearer dev feedback.
 
-> **🏭 锦泰耐火材料 demo:** A frontend-only customer-pitch demo lives inside the same SPA at the
-> `锦泰试点 / jintai` tab. Pure mock data, no backend wiring. See
+> **🏭 锦泰耐火材料 MVP:** A customer-pitch demo lives inside the same SPA at the
+> `锦泰试点 / jintai` tab. It can run with mock fallback or connect to `/api/jintai/*`
+> after the platform API is started and seeded. See
 > [`apps/win-web/JINTAI_DEMO.md`](apps/win-web/JINTAI_DEMO.md) for scope, scripted walkthrough, and the
-> 7 hook points needed for a real backend.
+> current backend hook points.
 
 The marketing site lives at `apps/marketing-web/` and deploys
 independently to Vercel — see `apps/marketing-web/` for its own README

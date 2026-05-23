@@ -24,7 +24,14 @@ def _clean_state():
     # Truncate (PostgreSQL CASCADE handles FK chain)
     with _db.main()._get().cursor() as cur:
         cur.execute(
-            "TRUNCATE api_keys, platform_sessions, agent_grants, "
+            "TRUNCATE jintai_mvp.production_step_records, "
+            "jintai_mvp.ai_query_logs, jintai_mvp.ai_extraction_queue, "
+            "jintai_mvp.attachments, jintai_mvp.document_templates, "
+            "jintai_mvp.production_flow_cards, jintai_mvp.process_steps, "
+            "jintai_mvp.process_routes, jintai_mvp.sales_orders, "
+            "jintai_mvp.products, jintai_mvp.customers, jintai_mvp.profiles, "
+            "jintai_mvp.external_source_mappings, jintai_mvp.tenants, "
+            "api_keys, platform_sessions, agent_grants, "
             "enterprise_members, runtime_bindings, runtimes, "
             "enterprise_integrations, "
             "tenants, enterprises, users, "

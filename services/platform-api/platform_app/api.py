@@ -88,6 +88,40 @@ def me(request: Request):
     }
 
 
+@router.get("/api/agents")
+def agents(request: Request):
+    user = _user_from_request(request)
+    rows = db.main().execute(
+        "SELECT t.client_id, t.agent_id, t.display_name, t.icon_url, "
+        "       t.description, t.health "
+        "FROM tenants t "
+        "WHERE t.active=1 AND ("
+        "  t.client_id IN ("
+        "    SELECT enterprise_id FROM enterprise_members WHERE user_id=%s"
+        "  ) "
+        "  OR (t.client_id, t.agent_id) IN ("
+        "    SELECT client_id, agent_id FROM agent_grants WHERE user_id=%s"
+        "  )"
+        ") "
+        "ORDER BY t.display_name",
+        (user["id"], user["id"]),
+    ).fetchall()
+    return {
+        "agents": [
+            {
+                "client": r["client_id"],
+                "agent": r["agent_id"],
+                "display_name": r["display_name"],
+                "icon": r["icon_url"],
+                "description": r["description"],
+                "health": r["health"],
+                "url": f"/{r['client_id']}/{r['agent_id']}/",
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.post("/api/auth/login")
 async def login(request: Request, response: Response):
     form = await request.form()
@@ -108,7 +142,7 @@ async def login(request: Request, response: Response):
                        max_age=settings.session_lifetime_seconds, path="/")
     response.set_cookie("app_csrf", csrf, httponly=False, secure=True, samesite="strict",
                        max_age=settings.csrf_lifetime_seconds, path="/")
-    return {"ok": True}
+    return {"ok": True, "redirect": "/dashboard"}
 
 
 @router.get("/api/invite/{code}")
@@ -186,7 +220,7 @@ def register(request: Request, response: Response, body: dict = Body(...)):
                        samesite="lax", max_age=settings.session_lifetime_seconds, path="/")
     response.set_cookie("app_csrf", csrf, httponly=False, secure=True,
                        samesite="strict", max_age=settings.csrf_lifetime_seconds, path="/")
-    return {"ok": True, "redirect": "/win/", "user_id": user_id}
+    return {"ok": True, "redirect": "/dashboard", "user_id": user_id}
 
 
 @router.post("/api/auth/logout")

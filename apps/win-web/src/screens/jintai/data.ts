@@ -781,176 +781,301 @@ export const traceExamples: Array<{
 ];
 
 /* ===========================================================================
- *  财务模块 (Iter 8)
+ *  财务三表 (iter 19 — 按锦泰真实模版 + 会企小企业准则重做)
  *
- *  设计原则：
- * - 数字单位统一元 (¥)，演示时显示完整千位分隔金额
- *  - 资产负债表 + 损益表 + 现金流量表 内部数字呼应：
- *      · 资产负债表 货币资金 8,200  ↔ 现金流量表 期末余额 8,200
- *      · 损益表 销售收入 6,800     ↔ 现金流量表 销售商品收到现金 5,500（差额计入应收）
- *      · 损益表 净利润 1,189       ↔ 资产负债表 留存收益本期增加
- *  - 月份口径：2026-05；资产负债表为 2026-05-31 时点
+ *  对齐 客户提供的"财务报表模板.xls"(2026-01 锦泰)，三张表分别为：
+ *    · 会企01表 资产负债表    (左右两栏 · 行次 + 年初数 + 期末数)
+ *    · 会企02表 利润及利润分配表 (单栏 · 行次 + 本年累计数 + 本期数 · 含利润分配段)
+ *    · 会企03表 现金流量表      (单栏 · 行次 + 累计金额 + 本期金额 · 右侧补充资料)
+ *
+ *  金额单位：元 (¥)，全部显示真实数字 + 千位分隔，不再 ×1000 简写。
+ *
+ *  三表数字自洽：
+ *    · 资产负债表 期末 货币资金   8,200,000 ↔ 现金流量表 现金期末余额 8,200,000
+ *    · 资产负债表 期末 未分配利润 19,300,000 ↔ 利润分配表 八、未分配利润 19,300,000
+ *    · 利润分配表 五、净利润 1,189,000     ↔ 现金流量表 补充资料 净利润 1,189,000
+ *    · 资产总计 = 负债 + 所有者权益 (期末双方平 47,000,000 元)
+ *    · 期初 货币资金 8,030,000 + 本期净增加 170,000 = 期末 8,200,000
+ *
+ *  口径：编制单位 宜兴市锦泰耐火材料有限公司 · 2026-05 期间。
  * ========================================================================= */
 
+/** 三表通用一行：行次 + 科目名 + 两列数值。 */
+export type ReportLine = {
+  lineNo?: number; // 行次 (xls 上的 1, 2, ... 121, 135) — 顶层合计可省
+  name: string; // 科目 / 项目
+  col1: string; // 资产负债表 = 年初数；利润表 = 本年累计；现金流量表 = 累计金额
+  col2: string; // 资产负债表 = 期末数；利润表 = 本期数；现金流量表 = 本期金额
+  bold?: boolean; // 小计 / 合计加粗
+  indent?: 0 | 1 | 2; // 缩进层级 (0 大段标题 / 1 普通科目 / 2 减项类如"减：累计折旧")
+  underline?: boolean; // 小计上画一根细线
+};
+
+/** 资产负债表两侧并列：左 资产 / 右 负债+所有者权益。 */
+export type BalanceSheet = {
+  id: "balance";
+  label: string;
+  sub: string;
+  period: string;
+  unit: string;
+  aiDraft: string;
+  confirmedBy: string;
+  assets: ReportLine[];
+  liabEquity: ReportLine[];
+  totalAssets: ReportLine; // 资产总计 (行次 67)
+  totalLiabEquity: ReportLine; // 负债和所有者权益总计 (行次 135)
+};
+
+/** 利润及利润分配表 (单栏 · 行次 + 本年累计 + 本期)。 */
+export type IncomeStatement = {
+  id: "income";
+  label: string;
+  sub: string;
+  period: string;
+  unit: string;
+  aiDraft: string;
+  confirmedBy: string;
+  /** 利润形成段：主营收入 → 主营利润 → 营业利润 → 利润总额 → 净利润 (行 1-17) */
+  formation: ReportLine[];
+  /** 利润分配段：净利润 → 加年初未分配 → 可供分配 → 减提取盈余公积 → 末未分配 (行 18-32) */
+  distribution: ReportLine[];
+  /** 末未分配利润 (行 32) — 与资产负债表期末未分配利润互相印证 */
+  endingRetained: ReportLine;
+};
+
+/** 现金流量表 (单栏 · 累计 + 本期) + 右侧补充资料。 */
+export type CashFlowStatement = {
+  id: "cashflow";
+  label: string;
+  sub: string;
+  period: string;
+  unit: string;
+  aiDraft: string;
+  confirmedBy: string;
+  /** 经营 / 投资 / 筹资 / 汇率 / 净增加 — xls 左半 (行 1-56) */
+  mainFlow: ReportLine[];
+  /** 补充资料：净利润调节经营现金流 + 现金等价物 — xls 右半 (行 57-83) */
+  supplement: ReportLine[];
+  /** 五、现金及现金等价物净增加额 (行 56) — 与左半呼应 */
+  netIncrease: ReportLine;
+};
+
+export type FinanceReport = BalanceSheet | IncomeStatement | CashFlowStatement;
+
+/* —— 兼容旧 FinanceRow 类型（其他模块如 AI 洞察/Hint 还在引用，留作过渡）—— */
 export type FinanceRow = {
   key: string;
   value: string;
-  bold?: boolean; // 小计 / 合计加粗
-  indent?: number; // 0 = 顶级科目，1 = 子科目
+  bold?: boolean;
+  indent?: number;
 };
 
-export type FinanceReport = {
-  id: "balance" | "income" | "cashflow";
-  label: string;
-  sub: string;
-  period: string; // 报表期间文字
-  aiDraft: string; // 顶部 "AI 已自动生成" 草稿提示
-  confirmedBy: string; // 人工确认锚点
-  sections: { title: string; rows: FinanceRow[]; subtotal?: FinanceRow }[];
-  bottomLine: FinanceRow; // 资产合计 / 净利润 / 现金净增加
+/* ---------- 资产负债表 (会企01) ---------- */
+const balanceSheet: BalanceSheet = {
+  id: "balance",
+  label: "资产负债表",
+  sub: "会企01表 · 2026-05-31",
+  period: "2026年5月份",
+  unit: "单位：元 (¥)",
+  aiDraft:
+    "智通 AI 已根据本月 12 张凭证、5 张采购入库单、3 张销售出库单自动汇总科目余额，按会企01表行次排版。",
+  confirmedBy: "财务 · 王会计 · 2026-05-17 09:24 复核确认",
+  // 左侧：资产
+  assets: [
+    { name: "流动资产：", col1: "", col2: "", bold: true },
+    { lineNo: 1, name: "货币资金", col1: "8,030,000", col2: "8,200,000", indent: 1 },
+    { lineNo: 2, name: "短期投资", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 3, name: "应收票据", col1: "1,200,000", col2: "1,500,000", indent: 1 },
+    { lineNo: 6, name: "应收帐款", col1: "11,800,000", col2: "12,500,000", indent: 1 },
+    { lineNo: 7, name: "其他应收款", col1: "320,000", col2: "280,000", indent: 1 },
+    { lineNo: 8, name: "预付帐款", col1: "1,650,000", col2: "1,500,000", indent: 1 },
+    { lineNo: 10, name: "存货", col1: "6,420,000", col2: "6,800,000", indent: 1 },
+    { lineNo: 11, name: "待摊费用", col1: "80,000", col2: "60,000", indent: 1 },
+    { lineNo: 31, name: "流动资产合计", col1: "29,500,000", col2: "30,840,000", bold: true, underline: true },
+
+    { name: "长期投资：", col1: "", col2: "", bold: true },
+    { lineNo: 32, name: "长期股权投资", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 38, name: "长期投资合计", col1: "—", col2: "—", bold: true, underline: true },
+
+    { name: "固定资产：", col1: "", col2: "", bold: true },
+    { lineNo: 39, name: "固定资产原价", col1: "26,800,000", col2: "26,800,000", indent: 1 },
+    { lineNo: 40, name: "减：累计折旧", col1: "8,540,000", col2: "8,800,000", indent: 2 },
+    { lineNo: 41, name: "固定资产净值", col1: "18,260,000", col2: "18,000,000", indent: 1 },
+    { lineNo: 42, name: "减：固定资产减值准备", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 43, name: "固定资产净额", col1: "18,260,000", col2: "18,000,000", indent: 1 },
+    { lineNo: 45, name: "在建工程", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 50, name: "固定资产合计", col1: "18,260,000", col2: "18,000,000", bold: true, underline: true },
+
+    { name: "无形资产及其他资产：", col1: "", col2: "", bold: true },
+    { lineNo: 51, name: "无形资产", col1: "180,000", col2: "160,000", indent: 1 },
+    { lineNo: 52, name: "长期待摊费用", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 60, name: "无形资产及其他资产合计", col1: "180,000", col2: "160,000", bold: true, underline: true },
+  ],
+  // 右侧：负债 + 所有者权益
+  liabEquity: [
+    { name: "流动负债：", col1: "", col2: "", bold: true },
+    { lineNo: 68, name: "短期借款", col1: "5,500,000", col2: "5,000,000", indent: 1 },
+    { lineNo: 69, name: "应付票据", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 70, name: "应付帐款", col1: "7,300,000", col2: "7,800,000", indent: 1 },
+    { lineNo: 71, name: "预收帐款", col1: "950,000", col2: "1,180,000", indent: 1 },
+    { lineNo: 72, name: "应付职工薪酬", col1: "620,000", col2: "650,000", indent: 1 },
+    { lineNo: 75, name: "应交税金", col1: "1,140,000", col2: "1,200,000", indent: 1 },
+    { lineNo: 81, name: "其他应付款", col1: "180,000", col2: "150,000", indent: 1 },
+    { lineNo: 100, name: "流动负债合计", col1: "15,690,000", col2: "15,980,000", bold: true, underline: true },
+
+    { name: "长期负债：", col1: "", col2: "", bold: true },
+    { lineNo: 101, name: "长期借款", col1: "3,500,000", col2: "3,000,000", indent: 1 },
+    { lineNo: 103, name: "长期应付款", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 110, name: "长期负债合计", col1: "3,500,000", col2: "3,000,000", bold: true, underline: true },
+
+    { lineNo: 114, name: "负债总计", col1: "19,190,000", col2: "18,980,000", bold: true, underline: true },
+
+    { name: "所有者权益（或股东权益）：", col1: "", col2: "", bold: true },
+    { lineNo: 115, name: "实收资本（或股本）", col1: "10,000,000", col2: "10,000,000", indent: 1 },
+    { lineNo: 118, name: "资本公积", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 119, name: "盈余公积", col1: "750,000", col2: "720,000", indent: 1 },
+    { lineNo: 121, name: "未分配利润", col1: "18,000,000", col2: "19,300,000", indent: 1, bold: true },
+    { lineNo: 122, name: "所有者权益合计", col1: "28,750,000", col2: "30,020,000", bold: true, underline: true },
+  ],
+  totalAssets: { lineNo: 67, name: "资产总计", col1: "47,940,000", col2: "49,000,000", bold: true },
+  totalLiabEquity: { lineNo: 135, name: "负债和所有者权益总计", col1: "47,940,000", col2: "49,000,000", bold: true },
 };
 
-export const financeReports: FinanceReport[] = [
-  {
-    id: "balance",
-    label: "资产负债表",
-    sub: "Balance Sheet · 2026-05-31",
-    period: "2026-05-31 月末",
-    aiDraft:
-      "智通 AI 已根据本月 12 张凭证、5 张采购入库单、3 张销售出库单自动汇总科目余额，生成草稿。",
-    confirmedBy: "财务 · 王会计 · 2026-05-17 09:24 复核确认",
-    sections: [
-      {
-        title: "流动资产",
-        rows: [
-          { key: "货币资金", value: "8,200" },
-          { key: "应收账款", value: "12,500" },
-          { key: "存货", value: "6,800" },
-          { key: "预付账款", value: "1,500" },
-        ],
-        subtotal: { key: "流动资产小计", value: "29,000", bold: true },
-      },
-      {
-        title: "非流动资产",
-        rows: [
-          { key: "固定资产 (账面净额)", value: "18,000" },
-          { key: "长期股权投资", value: "0" },
-        ],
-        subtotal: { key: "非流动资产小计", value: "18,000", bold: true },
-      },
-      {
-        title: "流动负债",
-        rows: [
-          { key: "短期借款", value: "5,000" },
-          { key: "应付账款", value: "7,800" },
-          { key: "应交税费", value: "1,200" },
-        ],
-        subtotal: { key: "流动负债小计", value: "14,000", bold: true },
-      },
-      {
-        title: "非流动负债 + 所有者权益",
-        rows: [
-          { key: "长期借款", value: "3,000" },
-          { key: "实收资本", value: "10,000" },
-          { key: "留存收益", value: "19,300", indent: 0 },
-          { key: "  本期净利润已结转 +1,189", value: "—", indent: 1 },
-        ],
-        subtotal: { key: "权益 + 长借小计", value: "32,300", bold: true },
-      },
-    ],
-    bottomLine: { key: "资产总计 = 负债 + 所有者权益", value: "47,000", bold: true },
+/* ---------- 利润及利润分配表 (会企02) ---------- */
+const incomeStatement: IncomeStatement = {
+  id: "income",
+  label: "利润及利润分配表",
+  sub: "会企02表 · 2026-05",
+  period: "2026年5月份",
+  unit: "单位：元 (¥)",
+  aiDraft:
+    "智通 AI 已根据本月 3 张销售出库单、5 张采购入库单、12 张费用凭证自动归集收入与成本，按会企02表行次排版（含利润分配段）。",
+  confirmedBy: "财务 · 王会计 · 2026-05-17 09:31 复核确认",
+  // —— 利润形成段 (行 1-17) ——
+  formation: [
+    { lineNo: 1, name: "一、主营业务收入", col1: "32,400,000", col2: "6,800,000", bold: true },
+    { lineNo: 2, name: "减：主营业务成本", col1: "21,060,000", col2: "4,420,000", indent: 2 },
+    { lineNo: 3, name: "    主营业务税金及附加", col1: "172,800", col2: "36,000", indent: 2 },
+    { lineNo: 4, name: "二、主营业务利润", col1: "11,167,200", col2: "2,344,000", bold: true },
+    { lineNo: 5, name: "加：其他业务利润", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 6, name: "减：营业费用", col1: "1,340,000", col2: "280,000", indent: 2 },
+    { lineNo: 7, name: "    管理费用", col1: "1,680,000", col2: "470,000", indent: 2 },
+    { lineNo: 8, name: "    财务费用", col1: "215,000", col2: "45,000", indent: 2 },
+    { lineNo: 9, name: "三、营业利润", col1: "7,932,200", col2: "1,549,000", bold: true },
+    { lineNo: 10, name: "加：投资收益", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 11, name: "    补贴收入", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 12, name: "    营业外收入", col1: "180,000", col2: "60,000", indent: 1 },
+    { lineNo: 13, name: "减：营业外支出", col1: "92,000", col2: "24,000", indent: 2 },
+    { lineNo: 14, name: "四、利润总额", col1: "8,020,200", col2: "1,585,000", bold: true },
+    { lineNo: 15, name: "减：所得税", col1: "2,005,050", col2: "396,000", indent: 2 },
+    { lineNo: 16, name: "    少数股东权益", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 17, name: "五、净利润（亏损以「−」号填列）", col1: "6,015,150", col2: "1,189,000", bold: true },
+  ],
+  // —— 利润分配段 (行 18-32) ——
+  distribution: [
+    { lineNo: 18, name: "加：年初未分配利润", col1: "13,284,850", col2: "18,111,000", indent: 1 },
+    { lineNo: 19, name: "    以前年度损益调整", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 20, name: "六、可供分配的利润", col1: "19,300,000", col2: "19,300,000", bold: true },
+    { lineNo: 21, name: "减：提取法定盈余公积", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 22, name: "    提取法定公益金", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 23, name: "    提取职工奖励及福利基金", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 24, name: "    提取储备基金", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 25, name: "    提取企业发展基金", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 26, name: "    利润归还投资", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 27, name: "七、可供投资者分配的利润", col1: "19,300,000", col2: "19,300,000", bold: true },
+    { lineNo: 28, name: "减：应付优先股股利", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 29, name: "    提取任意盈余公积", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 30, name: "    应付普通股股利", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 31, name: '    转作资本的普通股股利', col1: "—", col2: "—", indent: 2 },
+  ],
+  endingRetained: {
+    lineNo: 32,
+    name: "八、未分配利润",
+    col1: "19,300,000",
+    col2: "19,300,000",
+    bold: true,
   },
-  {
-    id: "income",
-    label: "损益表",
-    sub: "Income Statement · 2026-05",
-    period: "2026-05-01 ~ 05-31",
-    aiDraft:
-      "智通 AI 已根据本月 3 张销售出库单、5 张采购入库单、12 张费用凭证自动归集收入与成本，生成草稿。",
-    confirmedBy: "财务 · 王会计 · 2026-05-17 09:31 复核确认",
-    sections: [
-      {
-        title: "营业收入",
-        rows: [
-          { key: "容百锂电 · 承烧板", value: "3,200", indent: 1 },
-          { key: "横店东磁 · 匣钵", value: "1,800", indent: 1 },
-          { key: "风华高科 · MLCC 承烧板", value: "950", indent: 1 },
-          { key: "其他客户合计", value: "850", indent: 1 },
-        ],
-        subtotal: { key: "营业收入合计", value: "6,800", bold: true },
-      },
-      {
-        title: "营业成本与毛利",
-        rows: [
-          { key: "营业成本", value: "4,420" },
-          { key: "毛利 (毛利率 35.0%)", value: "2,380", bold: true },
-        ],
-      },
-      {
-        title: "期间费用",
-        rows: [
-          { key: "销售费用", value: "280" },
-          { key: "管理费用", value: "350" },
-          { key: "财务费用", value: "45" },
-          { key: "研发费用", value: "120" },
-        ],
-        subtotal: { key: "期间费用合计", value: "795", bold: true },
-      },
-      {
-        title: "利润与所得税",
-        rows: [
-          { key: "营业利润", value: "1,585" },
-          { key: "利润总额", value: "1,585" },
-          { key: "所得税 (25%)", value: "396" },
-        ],
-      },
-    ],
-    bottomLine: { key: "本月净利润", value: "1,189", bold: true },
+};
+
+/* ---------- 现金流量表 (会企03) ---------- */
+const cashFlowStatement: CashFlowStatement = {
+  id: "cashflow",
+  label: "现金流量表",
+  sub: "会企03表 · 2026-05",
+  period: "2026年5月份",
+  unit: "单位：元 (¥)",
+  aiDraft:
+    "智通 AI 已根据本月 8 张银行流水、支付宝入账、5 张采购付款单自动归集三类现金流，按会企03表行次 + 补充资料排版。",
+  confirmedBy: "财务 · 王会计 · 2026-05-17 09:38 复核确认",
+  // —— 左半：主表 (行 1-56) ——
+  mainFlow: [
+    { name: "一、经营活动产生的现金流量：", col1: "", col2: "", bold: true },
+    { lineNo: 1, name: "销售商品、提供劳务收到的现金", col1: "26,800,000", col2: "5,500,000", indent: 1 },
+    { lineNo: 3, name: "收到的税费返还", col1: "60,000", col2: "—", indent: 1 },
+    { lineNo: 8, name: "收到的其他与经营活动有关的现金", col1: "120,000", col2: "20,000", indent: 1 },
+    { lineNo: 9, name: "现金流入小计", col1: "26,980,000", col2: "5,520,000", bold: true, underline: true },
+    { lineNo: 10, name: "购买商品、接受劳务支付的现金", col1: "−18,200,000", col2: "−3,800,000", indent: 1 },
+    { lineNo: 12, name: "支付给职工以及为职工支付的现金", col1: "−3,120,000", col2: "−650,000", indent: 1 },
+    { lineNo: 13, name: "支付的各项税费", col1: "−860,000", col2: "−180,000", indent: 1 },
+    { lineNo: 18, name: "支付的其他与经营活动有关的现金", col1: "−480,000", col2: "−20,000", indent: 1 },
+    { lineNo: 20, name: "现金流出小计", col1: "−22,660,000", col2: "−4,650,000", bold: true, underline: true },
+    { lineNo: 21, name: "经营活动产生的现金流量净额", col1: "4,320,000", col2: "+870,000", bold: true },
+
+    { name: "二、投资活动产生的现金流量：", col1: "", col2: "", bold: true },
+    { lineNo: 22, name: "收回投资所收到的现金", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 23, name: "取得投资收益所收到的现金", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 29, name: "现金流入小计", col1: "—", col2: "—", bold: true, underline: true },
+    { lineNo: 30, name: "购建固定资产、无形资产和其他长期资产所支付的现金", col1: "−950,000", col2: "−200,000", indent: 1 },
+    { lineNo: 31, name: "投资所支付的现金", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 36, name: "现金流出小计", col1: "−950,000", col2: "−200,000", bold: true, underline: true },
+    { lineNo: 37, name: "投资活动产生的现金流量净额", col1: "−950,000", col2: "−200,000", bold: true },
+
+    { name: "三、筹资活动产生的现金流量：", col1: "", col2: "", bold: true },
+    { lineNo: 38, name: "吸收投资所收到的现金", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 40, name: "借款所收到的现金", col1: "1,500,000", col2: "—", indent: 1 },
+    { lineNo: 44, name: "现金流入小计", col1: "1,500,000", col2: "—", bold: true, underline: true },
+    { lineNo: 45, name: "偿还债务所支付的现金", col1: "−2,800,000", col2: "−500,000", indent: 1 },
+    { lineNo: 46, name: "分配股利、利润或偿付利息所支付的现金", col1: "−240,000", col2: "—", indent: 1 },
+    { lineNo: 53, name: "现金流出小计", col1: "−3,040,000", col2: "−500,000", bold: true, underline: true },
+    { lineNo: 54, name: "筹资活动产生的现金流量净额", col1: "−1,540,000", col2: "−500,000", bold: true },
+
+    { lineNo: 55, name: "四、汇率变动对现金的影响", col1: "—", col2: "—", indent: 0 },
+  ],
+  // —— 右半：补充资料 (行 57-83) ——
+  supplement: [
+    { name: "1、将净利润调节为经营活动现金流量：", col1: "", col2: "", bold: true },
+    { lineNo: 57, name: "净利润", col1: "6,015,150", col2: "1,189,000", indent: 1, bold: true },
+    { lineNo: 58, name: "加：计提的资产减值准备", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 59, name: "    固定资产折旧", col1: "1,300,000", col2: "260,000", indent: 1 },
+    { lineNo: 60, name: "    无形资产摊销", col1: "100,000", col2: "20,000", indent: 1 },
+    { lineNo: 64, name: "    待摊费用减少", col1: "100,000", col2: "20,000", indent: 1 },
+    { lineNo: 68, name: "    财务费用", col1: "215,000", col2: "45,000", indent: 1 },
+    { lineNo: 71, name: "    存货的减少（减：增加）", col1: "−380,000", col2: "−380,000", indent: 1 },
+    { lineNo: 72, name: "    经营性应收项目的减少（减：增加）", col1: "−2,400,000", col2: "−700,000", indent: 1 },
+    { lineNo: 73, name: "    经营性应付项目的增加（减：减少）", col1: "−630,000", col2: "+416,000", indent: 1 },
+    { lineNo: 75, name: "经营活动产生的现金流量净额", col1: "4,320,000", col2: "+870,000", bold: true, underline: true },
+
+    { name: "2、不涉及现金收支的投资和筹资活动：", col1: "", col2: "", bold: true },
+    { lineNo: 76, name: "债务转为资本", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 78, name: "融资租入固定资产", col1: "—", col2: "—", indent: 1 },
+
+    { name: "3、现金及现金等价物净增加情况：", col1: "", col2: "", bold: true },
+    { lineNo: 79, name: "现金的期末余额", col1: "8,200,000", col2: "8,200,000", indent: 1 },
+    { lineNo: 80, name: "减：现金的期初余额", col1: "6,370,000", col2: "8,030,000", indent: 2 },
+    { lineNo: 81, name: "加：现金等价物的期末余额", col1: "—", col2: "—", indent: 1 },
+    { lineNo: 82, name: "减：现金等价物的期初余额", col1: "—", col2: "—", indent: 2 },
+    { lineNo: 83, name: "现金及现金等价物净增加额", col1: "1,830,000", col2: "+170,000", bold: true, underline: true },
+  ],
+  netIncrease: {
+    lineNo: 56,
+    name: "五、现金及现金等价物净增加额",
+    col1: "1,830,000",
+    col2: "+170,000",
+    bold: true,
   },
-  {
-    id: "cashflow",
-    label: "现金流量表",
-    sub: "Cash Flow · 2026-05",
-    period: "2026-05-01 ~ 05-31",
-    aiDraft:
-      "智通 AI 已根据本月 8 张银行流水、支付宝 入账、5 张采购付款单自动归集三类现金流，生成草稿。",
-    confirmedBy: "财务 · 王会计 · 2026-05-17 09:38 复核确认",
-    sections: [
-      {
-        title: "经营活动现金流",
-        rows: [
-          { key: "销售商品收到现金", value: "5,500", indent: 1 },
-          { key: "购买商品支付现金", value: "−3,800", indent: 1 },
-          { key: "支付职工工资", value: "−650", indent: 1 },
-          { key: "支付各项税费", value: "−180", indent: 1 },
-        ],
-        subtotal: { key: "经营活动净现金流", value: "+870", bold: true },
-      },
-      {
-        title: "投资活动现金流",
-        rows: [
-          { key: "购置生产设备 (等静压辅机)", value: "−200", indent: 1 },
-        ],
-        subtotal: { key: "投资活动净现金流", value: "−200", bold: true },
-      },
-      {
-        title: "筹资活动现金流",
-        rows: [
-          { key: "偿还短期借款本金", value: "−500", indent: 1 },
-        ],
-        subtotal: { key: "筹资活动净现金流", value: "−500", bold: true },
-      },
-      {
-        title: "现金余额",
-        rows: [
-          { key: "期初货币资金余额", value: "8,030" },
-          { key: "本期现金净增加", value: "+170", bold: true },
-        ],
-      },
-    ],
-    bottomLine: { key: "期末货币资金余额 (与资产负债表一致)", value: "8,200", bold: true },
-  },
-];
+};
+
+export const financeReports: FinanceReport[] = [balanceSheet, incomeStatement, cashFlowStatement];
 
 /* ===========================================================================
  *  采购模块 (Iter 9)

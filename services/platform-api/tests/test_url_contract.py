@@ -6,10 +6,13 @@ by the ``feat/api-url-canonicalize`` work: ``/api/win/*`` for the 智通
 ``/api/auth/*`` for login / logout / register, and ``/api/me`` for the
 chrome.
 
-Legacy URLs that used to exist (``/win/api/*``, the ``/<client>/<agent>``
-HMAC reverse-proxy entrypoint, ``/data``, ``/enterprise/<id>`` page route,
-``/api/agents``, ``/auth/login``, ``/auth/logout``, ``/api/register``)
+Legacy URLs that used to exist (``/win/api/*``, ``/data``,
+``/enterprise/<id>`` page route, ``/auth/login``, ``/auth/logout``,
+``/api/register``)
 MUST 404 outright — no aliases, no redirects, no compatibility rewrites.
+
+The agent dashboard surface intentionally remains live: ``/api/agents``
+lists visible tenant agents and ``/<client>/<agent>/...`` proxies to them.
 """
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from fastapi.responses import JSONResponse
 
 from platform_app import auth, db
 
@@ -65,6 +69,48 @@ def logged_in_with_enterprise() -> str:
         ("u_url", "e_url", "owner", now, "test"),
     )
     sid, _ = auth.create_session("u_url", "127.0.0.1", "test")
+    return sid
+
+
+@pytest.fixture
+def logged_in_with_agent() -> str:
+    db.init()
+    now = int(time.time())
+    db.main().execute(
+        "INSERT INTO users (id, username, password_hash, display_name, created_at) "
+        "VALUES (%s,%s,%s,%s,%s)",
+        ("u_agent", "agentuser", auth.hash_password("p"), "Agent User", now),
+    )
+    db.main().execute(
+        "INSERT INTO enterprises (id, legal_name, display_name, plan, "
+        "onboarding_stage, created_at) VALUES (%s,%s,%s,%s,%s,%s)",
+        ("yinhu", "Yinhu", "yinhu", "enterprise", "active", now),
+    )
+    db.main().execute(
+        "INSERT INTO tenants (client_id, agent_id, display_name, container_url, "
+        "hmac_secret_current, hmac_key_id_current, agent_version, health, "
+        "description, active, tenant_uid, created_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s,%s)",
+        (
+            "yinhu",
+            "super-xiaochen",
+            "银湖石墨 – 超级小陈",
+            "http://agent-yinhu-super-xiaochen:8000",
+            "secret",
+            "k1",
+            "test",
+            "healthy",
+            "yinhu · super-xiaochen",
+            "tenant-yinhu-super-xiaochen",
+            now,
+        ),
+    )
+    db.main().execute(
+        "INSERT INTO enterprise_members (user_id, enterprise_id, role, "
+        "granted_at, granted_by) VALUES (%s,%s,%s,%s,%s)",
+        ("u_agent", "yinhu", "owner", now, "test"),
+    )
+    sid, _ = auth.create_session("u_agent", "127.0.0.1", "test")
     return sid
 
 
@@ -131,7 +177,62 @@ def test_assistant_chat_authed_with_stub_returns_200(
         db.main().execute(f'DROP DATABASE IF EXISTS "{name}"', ())
 
 
-# ─── legacy URLs must be gone ───────────────────────────────────────
+# ─── dashboard / legacy agent entrypoints ───────────────────────────
+
+
+def test_api_agents_returns_visible_tenant_agents(
+    client: TestClient, logged_in_with_agent: str
+) -> None:
+    r = client.get("/api/agents", cookies={"app_session": logged_in_with_agent})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["agents"] == [
+        {
+            "client": "yinhu",
+            "agent": "super-xiaochen",
+            "display_name": "银湖石墨 – 超级小陈",
+            "icon": None,
+            "description": "yinhu · super-xiaochen",
+            "health": "healthy",
+            "url": "/yinhu/super-xiaochen/",
+        }
+    ]
+
+
+def test_client_agent_proxy_routes_to_tenant_agent(
+    client: TestClient, logged_in_with_agent: str, monkeypatch
+) -> None:
+    captured: dict = {}
+
+    async def fake_reverse_proxy(request, *, client_id, agent_id, user, subpath):
+        captured.update(
+            {
+                "client_id": client_id,
+                "agent_id": agent_id,
+                "user_id": user["id"],
+                "subpath": subpath,
+            }
+        )
+        return JSONResponse({"ok": True})
+
+    monkeypatch.setattr("platform_app.proxy.reverse_proxy", fake_reverse_proxy)
+
+    r = client.get(
+        "/yinhu/super-xiaochen/foo?x=1",
+        cookies={"app_session": logged_in_with_agent},
+        headers={"sec-fetch-mode": "navigate"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+    assert captured == {
+        "client_id": "yinhu",
+        "agent_id": "super-xiaochen",
+        "user_id": "u_agent",
+        "subpath": "/foo",
+    }
+
+
+# ─── deleted legacy URLs must stay gone ──────────────────────────────
 
 
 def test_legacy_win_api_assistant_chat_is_404(client: TestClient) -> None:
@@ -145,15 +246,6 @@ def test_legacy_win_api_assistant_chat_is_404(client: TestClient) -> None:
     assert r2.status_code == 404
 
 
-def test_legacy_client_agent_proxy_is_404(client: TestClient) -> None:
-    """The HMAC reverse-proxy catch-all at ``/<client>/<agent>/...`` has
-    been removed entirely — no Auth, no ACL, just a flat 404."""
-    r = client.get("/yinhu/super-xiaochen/foo")
-    assert r.status_code == 404
-    r2 = client.get("/some-client/some-agent/")
-    assert r2.status_code == 404
-
-
 def test_legacy_data_page_is_404(client: TestClient) -> None:
     """``/data`` (the old data-console HTML page) is gone."""
     r = client.get("/data")
@@ -164,13 +256,6 @@ def test_legacy_enterprise_page_is_404(client: TestClient) -> None:
     """``/enterprise/<id>`` page route is gone (the API still lives at
     ``/api/enterprise/<id>``)."""
     r = client.get("/enterprise/yinhu")
-    assert r.status_code == 404
-
-
-def test_legacy_api_agents_is_404(client: TestClient) -> None:
-    """``/api/agents`` is the old agent-dashboard endpoint; admin no
-    longer uses this surface, so it must be gone."""
-    r = client.get("/api/agents")
     assert r.status_code == 404
 
 
@@ -203,6 +288,22 @@ def test_api_auth_login_is_wired(client: TestClient) -> None:
     )
     assert r.status_code != 404
     assert r.status_code == 401
+
+
+def test_api_auth_login_success_redirects_to_dashboard(client: TestClient) -> None:
+    now = int(time.time())
+    db.main().execute(
+        "INSERT INTO users (id, username, password_hash, display_name, created_at) "
+        "VALUES (%s,%s,%s,%s,%s)",
+        ("u_login", "loginuser", auth.hash_password("secret123"), "Login User", now),
+    )
+    r = client.post(
+        "/api/auth/login",
+        data={"username": "loginuser", "password": "secret123"},
+    )
+    assert r.status_code == 200
+    assert r.json()["redirect"] == "/dashboard"
+    assert "app_session" in r.cookies
 
 
 def test_api_auth_logout_is_wired(client: TestClient) -> None:

@@ -1,0 +1,62 @@
+{
+  "sourceSystem": "yonyou_placeholder",
+  "sourceKind": "unknown",
+  "mode": "offline_export_only",
+  "tables": {
+    "customers": {
+      "sourceTable": "Customer",
+      "primaryKey": "cCusCode",
+      "fields": {
+        "customer_code": "cCusCode",
+        "full_name": "cCusName",
+        "short_name": "cCusAbbName",
+        "address": "cCusAddress",
+        "phone": "cCusPhone",
+        "credit_level": "cCusDefine1"
+      }
+    },
+    "sales_orders": {
+      "sourceTable": "SO_SOMain",
+      "detailTable": "SO_SODetails",
+      "primaryKey": "cSOCode",
+      "fields": {
+        "order_no": "cSOCode",
+        "order_date": "dDate",
+        "promised_delivery_date": "dPreDate",
+        "customer_source_record_id": "cCusCode",
+        "product_source_record_id": "cInvCode",
+        "quantity": "iQuantity",
+        "unit_price": "iTaxUnitPrice",
+        "amount_total": "iSum"
+      }
+    },
+    "products": {
+      "sourceTable": "Inventory",
+      "primaryKey": "cInvCode",
+      "fields": {
+        "sku": "cInvCode",
+        "name": "cInvName",
+        "specification": "cInvStd",
+        "unit": "cComUnitName",
+        "category": "cInvCCode"
+      }
+    },
+    "inventory": {
+      "sourceTable": "CurrentStock",
+      "primaryKey": ["cWhCode", "cInvCode", "cBatch"],
+      "queueOnly": true,
+      "fields": {
+        "warehouse_code": "cWhCode",
+        "product_source_record_id": "cInvCode",
+        "quantity": "iQuantity",
+        "snapshot_date": "dVDate",
+        "batch_no": "cBatch"
+      }
+    }
+  },
+  "safety": {
+    "allowDirectWriteBackToYonyou": false,
+    "allowAiDirectBusinessWrites": false,
+    "aiOutputTarget": "jintai_mvp.ai_extraction_queue"
+  }
+}

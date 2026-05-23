@@ -348,8 +348,8 @@
           submitBtn.disabled = false;
           return;
         }
-        // Cookie set by server; redirect to /win/
-        window.location.href = data.redirect || "/win/";
+        // Cookie set by server; redirect to the real agent dashboard.
+        window.location.href = data.redirect || "/dashboard";
       } catch (err) {
         globalError.textContent = "网络错误,请重试";
         globalError.style.display = "block";
