@@ -222,7 +222,17 @@ function tabFromHash(hash: string): TabKey | null {
   return HASH_TO_TAB[hash] ?? null;
 }
 
+import { JintaiProvider } from "./state/store";
+
 export function JintaiDemoPage() {
+  return (
+    <JintaiProvider>
+      <JintaiDemoPageInner />
+    </JintaiProvider>
+  );
+}
+
+function JintaiDemoPageInner() {
   const isDesktop = useIsDesktop();
   const [cards, setCards] = useState<ExtractionCard[]>(initialExtractionCards);
   const [processing, setProcessing] = useState<ProcessingCard[]>([]);
