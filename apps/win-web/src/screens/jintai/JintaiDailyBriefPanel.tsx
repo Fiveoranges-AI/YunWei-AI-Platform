@@ -146,15 +146,7 @@ function JintaiBrandHeader() {
 }
 
 function MainlineDemoBar() {
-  const { state, playAll, dispatch, consts } = useJintai();
-  const stepLabel: Record<typeof state.step, string> = {
-    idle: "未开始",
-    "shipment-pending": "1/5 收件箱待确认",
-    "stock-low": "2/5 库存已扣 · 预警",
-    "pr-pending": "3/5 申购草稿待审批",
-    "po-pending": "4/5 PO 待入库",
-    complete: "✓ 完成",
-  };
+  const { startTour, dispatch } = useJintai();
   return (
     <div
       style={{
@@ -168,24 +160,25 @@ function MainlineDemoBar() {
       }}
     >
       <span style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600, letterSpacing: "0.04em" }}>
-        端到端主线 demo
+        引导式演示
       </span>
       <button
-        onClick={playAll}
+        onClick={startTour}
         style={{
-          padding: "6px 14px",
-          fontSize: 12,
+          padding: "8px 16px",
+          fontSize: 12.5,
           fontWeight: 700,
-          background: "var(--jintai-red)",
+          background: "linear-gradient(95deg, var(--jintai-red) 0%, var(--jintai-green) 100%)",
           color: "#fff",
           border: "none",
-          borderRadius: 6,
+          borderRadius: 7,
           cursor: "pointer",
           fontFamily: "var(--font)",
+          boxShadow: "0 3px 10px rgba(195,38,41,0.20)",
         }}
-        title={`自动跑完 5 步: 上传 → 确认扣库存 (${consts.pivotMaterial}) → 申购草稿 → 批准 → 入库回补`}
+        title="自动播放 90 秒:从车间领料单到 KPI 联动,自动切 tab + 字幕"
       >
-        ▶ 一键演示主线 (约 7 秒)
+        ▶ 引导式演示 · 90 秒看懂 AI 锦泰
       </button>
       <button
         onClick={() => dispatch({ type: "RESET" })}
@@ -202,21 +195,8 @@ function MainlineDemoBar() {
       >
         ↻ 重置
       </button>
-      <span
-        style={{
-          marginLeft: "auto",
-          fontSize: 11,
-          color:
-            state.step === "complete"
-              ? "var(--ok-700)"
-              : state.step === "idle"
-              ? "var(--ink-500)"
-              : "var(--warn-700)",
-          fontWeight: 700,
-          fontFamily: "ui-monospace, monospace",
-        }}
-      >
-        {stepLabel[state.step]}
+      <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--ink-500)" }}>
+        10 步 · 自动切 tab + 旁白字幕 · 可暂停 / 退出
       </span>
     </div>
   );

@@ -18,7 +18,10 @@ const TABS: { id: Tab; label: string; sub: string }[] = [
 ];
 
 export function JintaiProductionTabs() {
-  const [tab, setTab] = useState<Tab>("A");
+  const { state: jt, dispatch } = useJintai();
+  // iter 23: tab 受 tour 控制 (productionSubtab) + 用户点击也回写
+  const tab = jt.productionSubtab as Tab;
+  const setTab = (t: Tab) => dispatch({ type: "SET_PRODUCTION_SUBTAB", subtab: t as "A" | "D" | "B" | "C" });
   const [cards, setCards] = useState<FlowCard[]>(flowCards);
   const [parameter, setParameter] = useState<ProcessParameter>(processParameter);
 

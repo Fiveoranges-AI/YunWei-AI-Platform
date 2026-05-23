@@ -21,17 +21,21 @@ export function JintaiPurchasePanel() {
       <AINativePurchaseBanner />
       <PurchaseChainHint />
 
-      <SectionHeader
-        title="物资申购单"
-        sub="申购 → 审批 → 转采购订单 · AI 自动从车间领料群 / 纸质单抽取"
-      />
-      <RequisitionList requisitions={state.purchaseRequisitions} />
+      <div data-anchor="requisition">
+        <SectionHeader
+          title="物资申购单"
+          sub="申购 → 审批 → 转采购订单 · AI 自动从车间领料群 / 纸质单抽取"
+        />
+        <RequisitionList requisitions={state.purchaseRequisitions} />
+      </div>
 
-      <SectionHeader
-        title="本月采购订单"
-        sub={`${state.purchaseOrders.length} 张 · 全部 AI 抽取自纸质合同 / 邮件订单 · 财务确认后入账`}
-      />
-      <PurchaseOrderTable orders={state.purchaseOrders} />
+      <div data-anchor="purchase-orders">
+        <SectionHeader
+          title="本月采购订单"
+          sub={`${state.purchaseOrders.length} 张 · 全部 AI 抽取自纸质合同 / 邮件订单 · 财务确认后入账`}
+        />
+        <PurchaseOrderTable orders={state.purchaseOrders} />
+      </div>
 
       <SectionHeader
         title="主要供应商"
@@ -61,22 +65,26 @@ export function JintaiPurchasePanel() {
         ))}
       </div>
 
-      <SectionHeader
-        title="库存台账 · 进销存月报"
-        sub="原料 + 成品月报 · 起始 + 入 − 出 = 结存自动滚算 · 跌破安全线自动预警"
-      />
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {state.stockLedgers.map((sl) => (
-          <StockLedgerTable key={sl.kind} ledger={sl} />
-        ))}
+      <div data-anchor="stock-ledger">
+        <SectionHeader
+          title="库存台账 · 进销存月报"
+          sub="原料 + 成品月报 · 起始 + 入 − 出 = 结存自动滚算 · 跌破安全线自动预警"
+        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {state.stockLedgers.map((sl) => (
+            <StockLedgerTable key={sl.kind} ledger={sl} />
+          ))}
+        </div>
       </div>
 
       {/* Section 6: 应付账款台账 + 账期提醒 */}
-      <SectionHeader
-        title="应付账款台账"
-        sub="从入库单 / 发票自动汇总应付 · 按到期日排序 · AI 提前 X 天提醒 · 接经营日报「本月待付」"
-      />
-      <PayableLedgerTable rows={state.payableLedger} />
+      <div data-anchor="payable">
+        <SectionHeader
+          title="应付账款台账"
+          sub="从入库单 / 发票自动汇总应付 · 按到期日排序 · AI 提前 X 天提醒 · 接经营日报「本月待付」"
+        />
+        <PayableLedgerTable rows={state.payableLedger} />
+      </div>
     </div>
   );
 }

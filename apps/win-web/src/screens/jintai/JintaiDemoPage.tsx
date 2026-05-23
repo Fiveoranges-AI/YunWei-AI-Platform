@@ -222,11 +222,13 @@ function tabFromHash(hash: string): TabKey | null {
   return HASH_TO_TAB[hash] ?? null;
 }
 
-import { JintaiProvider } from "./state/store";
+import { JintaiProvider, TOUR_TOTAL, useJintai } from "./state/store";
+import { JintaiDemoTour } from "./JintaiDemoTour";
 
 export function JintaiDemoPage() {
   return (
     <JintaiProvider>
+      <JintaiDemoTour />
       <JintaiDemoPageInner />
     </JintaiProvider>
   );
@@ -234,6 +236,7 @@ export function JintaiDemoPage() {
 
 function JintaiDemoPageInner() {
   const isDesktop = useIsDesktop();
+  const { state: jt, currentTourStep } = useJintai();
   const [cards, setCards] = useState<ExtractionCard[]>(initialExtractionCards);
   const [processing, setProcessing] = useState<ProcessingCard[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
@@ -285,6 +288,27 @@ function JintaiDemoPageInner() {
       window.scrollTo({ top: 0, behavior: "auto" });
     }
   };
+
+  // iter 23: 引导式 tour 步骤推进 → 自动切对应 tab + 滚到锚点
+  useEffect(() => {
+    if (!currentTourStep) return;
+    const targetTab = currentTourStep.tab as TabKey;
+    if (targetTab !== activeTab) setActiveTab(targetTab);
+    if (typeof window !== "undefined") {
+      // 顶部 tour bar 占位 ~60px,scrollTo 偏移
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+    // 延迟到 DOM 更新后滚动到锚点 (若有)
+    if (currentTourStep.scrollAnchor) {
+      window.setTimeout(() => {
+        const el = document.querySelector(`[data-anchor="${currentTourStep.scrollAnchor}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 300);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jt.tourStep]);
 
   const handleSimulateUpload = (kind: ExtractionCard["kind"]) => {
     const pid = `proc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -366,13 +390,18 @@ function JintaiDemoPageInner() {
 
   const head = TAB_HEAD[activeTab];
 
+  // iter 23: tour 进行中,顶部留位给固定控制条 (~64px desktop / ~84px mobile,字幕较长)
+  const tourActive = jt.tourStep > 0 && jt.tourStep <= TOUR_TOTAL;
   return (
     <div className="scroll" style={{ flex: 1, background: "var(--bg)" }}>
       <div
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          padding: isDesktop ? "20px 32px 64px" : "12px 16px 80px",
+          padding: isDesktop
+            ? `${tourActive ? 84 : 20}px 32px 64px`
+            : `${tourActive ? 96 : 12}px 16px 80px`,
+          transition: "padding-top 0.25s ease",
         }}
       >
         {/* Tab navigation — sticky-ish top bar, horizontally scrollable on small screens */}
