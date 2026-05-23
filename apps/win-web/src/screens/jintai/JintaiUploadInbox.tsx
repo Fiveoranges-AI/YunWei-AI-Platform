@@ -2,6 +2,7 @@ import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import type { ExtractionCard } from "./data";
 import { JintaiStatusBadge } from "./components";
+import { flashStyle, useJintai } from "./state/store";
 
 export type ProcessingCard = {
   id: string;
@@ -105,6 +106,7 @@ export function JintaiUploadInbox({
             >
               {I.layers(16)} 模拟上传出货单
             </button>
+            <MainlineKickoffButton />
           </div>
         </div>
       </div>
@@ -142,6 +144,7 @@ export function JintaiUploadInbox({
             AI 不直接入库，需人工确认
           </div>
         </div>
+        <StoreInboxCards />
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {processing.map((p) => (
             <ProcessingCardItem key={p.id} card={p} />
@@ -165,6 +168,132 @@ export function JintaiUploadInbox({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* iter 22: 主线领料单 kickoff 按钮 (调 store dispatch) */
+function MainlineKickoffButton() {
+  const { dispatch, state, consts } = useJintai();
+  const alreadyTriggered = state.inboxCards.some((c) => c.id === consts.newInboxId);
+  return (
+    <button
+      onClick={() => dispatch({ type: "SIMULATE_RAW_ISSUE" })}
+      style={{
+        width: "100%",
+        padding: "10px 14px",
+        fontSize: 13,
+        background: alreadyTriggered ? "var(--surface-2)" : "var(--jintai-red)",
+        color: alreadyTriggered ? "var(--ink-500)" : "#fff",
+        border: alreadyTriggered ? "1px solid var(--ink-200)" : "none",
+        borderRadius: 8,
+        cursor: alreadyTriggered ? "not-allowed" : "pointer",
+        fontWeight: 700,
+        fontFamily: "var(--font)",
+      }}
+      title="主线 demo 起点 — 模拟成型车间张师傅扫码领 α 氧化铝粉 800 kg"
+      disabled={alreadyTriggered}
+    >
+      📋 模拟车间领料单 (主线起点)
+    </button>
+  );
+}
+
+/* iter 22: 渲染 store-managed 收件箱草稿 (来自主线 dispatch) */
+function StoreInboxCards() {
+  const { state, dispatch, isFlashing } = useJintai();
+  const pending = state.inboxCards.filter((c) => c.status === "待确认");
+  if (pending.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
+      {pending.map((c) => {
+        const flashing = isFlashing(`inbox:${c.id}`);
+        return (
+          <article
+            key={c.id}
+            className="card"
+            style={{
+              padding: 14,
+              borderLeft: "3px solid var(--jintai-red)",
+              background: "rgba(195,38,41,0.04)",
+              ...flashStyle(flashing),
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--jintai-red)", letterSpacing: "0.04em" }}>
+                  ✨ AI 抽取 · {c.kind} · 主线
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink-900)", marginTop: 2 }}>
+                  {c.source}
+                </div>
+              </div>
+              <JintaiStatusBadge status={c.status} />
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gap: 6,
+                marginBottom: 10,
+              }}
+            >
+              {c.fields.map((f) => (
+                <div
+                  key={f.key}
+                  style={{
+                    padding: "6px 9px",
+                    borderRadius: 6,
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--ink-100)",
+                    fontSize: 11,
+                  }}
+                >
+                  <div style={{ fontSize: 10, color: "var(--ink-500)", fontWeight: 600 }}>{f.key}</div>
+                  <div style={{ color: "var(--ink-900)", fontWeight: 600, marginTop: 1 }}>{f.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={() => dispatch({ type: "CONFIRM_INBOX", cardId: c.id })}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  background: "var(--jintai-green)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                }}
+              >
+                ✓ 王仓管 确认入账
+              </button>
+              <button
+                onClick={() => dispatch({ type: "REJECT_INBOX", cardId: c.id })}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 11.5,
+                  fontWeight: 500,
+                  background: "var(--surface-2)",
+                  color: "var(--ink-700)",
+                  border: "1px solid var(--ink-200)",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                }}
+              >
+                驳回
+              </button>
+              <span style={{ fontSize: 11, color: "var(--ink-500)", marginLeft: "auto" }}>
+                {c.uploadedAt} · 即将生成: <strong style={{ color: "var(--ink-700)" }}>{c.toBeGenerated}</strong>
+              </span>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }

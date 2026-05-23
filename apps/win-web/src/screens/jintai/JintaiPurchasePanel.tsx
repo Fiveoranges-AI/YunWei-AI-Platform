@@ -1,13 +1,7 @@
+import { useState } from "react";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
-import {
-  payableLedger,
-  purchaseInboxCards,
-  purchaseOrders,
-  purchaseRequisitions,
-  stockLedgers,
-  suppliers,
-} from "./data";
+import { purchaseInboxCards, suppliers } from "./data";
 import type {
   PayableRow,
   PurchaseInboxCard,
@@ -17,35 +11,31 @@ import type {
   Supplier,
 } from "./data";
 import { JintaiSourceCitation, JintaiStatusBadge } from "./components";
+import { flashStyle, useJintai } from "./state/store";
 
 export function JintaiPurchasePanel() {
   const isDesktop = useIsDesktop();
+  const { state } = useJintai();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      {/* iter 19.1：AI-native 模式定位条 — "脱离金蝶也能跑" */}
       <AINativePurchaseBanner />
-
-      {/* iter 19 链路提示条：申购 → 订单 → 入库 → 库存 → 应付 */}
       <PurchaseChainHint />
 
-      {/* Section 1: 物资申购单（链路起点 · 新增） */}
       <SectionHeader
         title="物资申购单"
-        sub="申购 → 审批 → 转采购订单 · AI 自动从车间领料群 / 纸质单抽取，仓管 + 采购 + 老板分级审批"
+        sub="申购 → 审批 → 转采购订单 · AI 自动从车间领料群 / 纸质单抽取"
       />
-      <RequisitionList requisitions={purchaseRequisitions} />
+      <RequisitionList requisitions={state.purchaseRequisitions} />
 
-      {/* Section 2: 采购订单列表 */}
       <SectionHeader
         title="本月采购订单"
-        sub="6 张已下单 · 总金额 ¥327,000 · 全部来自 AI 抽取的纸质合同 / 邮件订单，财务确认后入账"
+        sub={`${state.purchaseOrders.length} 张 · 全部 AI 抽取自纸质合同 / 邮件订单 · 财务确认后入账`}
       />
-      <PurchaseOrderTable orders={purchaseOrders} />
+      <PurchaseOrderTable orders={state.purchaseOrders} />
 
-      {/* Section 3: 供应商档案 */}
       <SectionHeader
         title="主要供应商"
-        sub="5 家长期供应商 · 每月采购总额 ¥405,000 · 账期 30–60 天 · AI 维护账期与质量评分"
+        sub="5 家长期供应商 · AI 维护账期与质量评分"
       />
       <div
         style={{
@@ -61,10 +51,9 @@ export function JintaiPurchasePanel() {
         ))}
       </div>
 
-      {/* Section 4: AI 采购信息收件箱 */}
       <SectionHeader
         title="AI 采购信息收件箱"
-        sub="发票 / 合同 / 入库单 AI 自动抽取，财务 + 采购双确认才入账 · 防止重复付款 + 漏入库"
+        sub="发票 / 合同 / 入库单 AI 自动抽取,采购 + 财务双确认才入账"
       />
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {purchaseInboxCards.map((c) => (
@@ -72,13 +61,12 @@ export function JintaiPurchasePanel() {
         ))}
       </div>
 
-      {/* Section 5: 库存台账（原材料 + 成品）— 新增进销存核心 */}
       <SectionHeader
         title="库存台账 · 进销存月报"
-        sub="原材料月报表 + 成品月报表 · 起始 + 入 − 出 = 结存 自动滚算 · 低于安全库存自动预警"
+        sub="原料 + 成品月报 · 起始 + 入 − 出 = 结存自动滚算 · 跌破安全线自动预警"
       />
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {stockLedgers.map((sl) => (
+        {state.stockLedgers.map((sl) => (
           <StockLedgerTable key={sl.kind} ledger={sl} />
         ))}
       </div>
@@ -88,7 +76,7 @@ export function JintaiPurchasePanel() {
         title="应付账款台账"
         sub="从入库单 / 发票自动汇总应付 · 按到期日排序 · AI 提前 X 天提醒 · 接经营日报「本月待付」"
       />
-      <PayableLedgerTable rows={payableLedger} />
+      <PayableLedgerTable rows={state.payableLedger} />
     </div>
   );
 }
@@ -235,14 +223,17 @@ const PR_STATUS_META: Record<PurchaseRequisition["status"], { bg: string; fg: st
 };
 
 function RequisitionCard({ req }: { req: PurchaseRequisition }) {
+  const { dispatch, isFlashing } = useJintai();
   const meta = PR_STATUS_META[req.status];
   const pending = req.status === "待审批";
+  const flashing = isFlashing(`pr:${req.prNo}`);
   return (
     <div
       className="card"
       style={{
         padding: 16,
         borderLeft: `3px solid ${pending ? "var(--ai-500)" : "var(--jintai-green)"}`,
+        ...flashStyle(flashing),
       }}
     >
       <div
@@ -396,6 +387,7 @@ function RequisitionCard({ req }: { req: PurchaseRequisition }) {
           <>
             <button
               className="pill"
+              onClick={() => dispatch({ type: "APPROVE_PR", prNo: req.prNo })}
               style={{
                 background: "var(--brand-500)",
                 color: "#fff",
@@ -411,6 +403,7 @@ function RequisitionCard({ req }: { req: PurchaseRequisition }) {
             </button>
             <button
               className="pill"
+              onClick={() => dispatch({ type: "REJECT_PR", prNo: req.prNo })}
               style={{
                 background: "var(--surface-2)",
                 color: "var(--ink-700)",
@@ -493,14 +486,30 @@ function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
             </tr>
           </thead>
           <tbody>
-            {ledger.rows.map((r) => {
-              const lowStock = r.warning === "low";
-              return (
+            {ledger.rows.map((r) => (
+              <StockRow key={r.no} row={r} isRaw={isRaw} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function StockRow({ row: r, isRaw }: { row: StockLedger["rows"][number]; isRaw: boolean }) {
+  const { isFlashing } = useJintai();
+  const lowStock = r.warning === "low";
+  const flashing = isFlashing(`stock:${r.name}`);
+  return (
                 <tr
-                  key={r.no}
                   style={{
                     borderTop: "1px solid var(--ink-50)",
-                    background: lowStock ? "var(--warn-100)" : undefined,
+                    background: flashing
+                      ? "rgba(245,158,11,0.18)"
+                      : lowStock
+                      ? "var(--warn-100)"
+                      : undefined,
+                    transition: "background 0.3s ease",
                   }}
                 >
                   <SLTd center>{r.no}</SLTd>
@@ -551,12 +560,6 @@ function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
                     {r.note && <span style={{ color: "var(--ink-600)" }}>{r.note}</span>}
                   </SLTd>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 
@@ -930,42 +933,84 @@ function DesktopTable({ orders }: { orders: PurchaseOrder[] }) {
             <Th>订单号</Th>
             <Th>供应商</Th>
             <Th>物料</Th>
-            <Th>规格</Th>
             <Th align="right">数量</Th>
             <Th align="right">金额</Th>
-            <Th>交货</Th>
             <Th>状态</Th>
             <Th>录入方式</Th>
+            <Th>操作</Th>
           </tr>
         </thead>
         <tbody>
           {orders.map((o) => (
-            <tr key={o.poNo} style={{ borderTop: "1px solid var(--ink-100)" }}>
-              <Td mono>
-                {o.poNo}
-                {o.fromPrNo && (
-                  <div style={{ fontSize: 10, color: "var(--ink-500)", marginTop: 2 }}>
-                    ← {o.fromPrNo}
-                  </div>
-                )}
-              </Td>
-              <Td>{o.supplier}</Td>
-              <Td bold>{o.material}</Td>
-              <Td mono>{o.spec}</Td>
-              <Td align="right" mono>{o.qty}</Td>
-              <Td align="right" mono bold>{o.amount}</Td>
-              <Td mono>{o.deliveryDate}</Td>
-              <Td>
-                <JintaiStatusBadge status={o.status} />
-              </Td>
-              <Td>
-                <DataSourceTag source={o.dataSource} />
-              </Td>
-            </tr>
+            <PurchaseOrderRow key={o.poNo} o={o} />
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function PurchaseOrderRow({ o }: { o: PurchaseOrder }) {
+  const { dispatch, isFlashing } = useJintai();
+  const flashing = isFlashing(`po:${o.poNo}`);
+  const canReceive = o.status !== "已入库";
+  return (
+    <tr
+      style={{
+        borderTop: "1px solid var(--ink-100)",
+        ...flashStyle(flashing),
+        // 用 background 反映 flash (table row 不吃 box-shadow 好)
+        background: flashing ? "rgba(245,158,11,0.10)" : undefined,
+        transition: "background 0.3s ease",
+      }}
+    >
+      <Td mono>
+        {o.poNo}
+        {o.fromPrNo && (
+          <div style={{ fontSize: 10, color: "var(--ink-500)", marginTop: 2 }}>
+            ← {o.fromPrNo}
+          </div>
+        )}
+      </Td>
+      <Td>{o.supplier}</Td>
+      <Td bold>{o.material}</Td>
+      <Td align="right" mono>
+        {o.qty}
+      </Td>
+      <Td align="right" mono bold>
+        {o.amount}
+      </Td>
+      <Td>
+        <JintaiStatusBadge status={o.status} />
+      </Td>
+      <Td>
+        <DataSourceTag source={o.dataSource} />
+      </Td>
+      <Td>
+        {canReceive ? (
+          <button
+            onClick={() => dispatch({ type: "RECEIVE_PO", poNo: o.poNo })}
+            style={{
+              padding: "4px 10px",
+              fontSize: 10.5,
+              fontWeight: 700,
+              borderRadius: 5,
+              border: "1px solid var(--jintai-green)",
+              background: "rgba(27,127,58,0.08)",
+              color: "var(--jintai-green-dark)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "var(--font)",
+            }}
+            title={`模拟 ${o.poNo} 到货入库 → 库存回补 + 应付新增`}
+          >
+            模拟入库 →
+          </button>
+        ) : (
+          <span style={{ fontSize: 10.5, color: "var(--ok-700)", fontWeight: 600 }}>✓ 已入库</span>
+        )}
+      </Td>
+    </tr>
   );
 }
 
@@ -1139,14 +1184,25 @@ const KIND_META: Record<
 };
 
 function PurchaseInboxCardView({ card }: { card: PurchaseInboxCard }) {
+  const [local, setLocal] = useState<"待确认" | "已确认" | "已驳回">("待确认");
   const meta = KIND_META[card.kind];
   const isMissing = card.kind === "字段缺失";
+  const isHandled = local !== "待确认";
   return (
     <div
       className="card"
       style={{
         padding: 16,
-        borderLeft: `3px solid ${isMissing ? "var(--warn-500)" : "var(--ai-500)"}`,
+        borderLeft: `3px solid ${
+          local === "已确认"
+            ? "var(--ok-500)"
+            : local === "已驳回"
+            ? "var(--ink-300)"
+            : isMissing
+            ? "var(--warn-500)"
+            : "var(--ai-500)"
+        }`,
+        opacity: isHandled ? 0.7 : 1,
       }}
     >
       <div
@@ -1258,36 +1314,55 @@ function PurchaseInboxCardView({ card }: { card: PurchaseInboxCard }) {
           flexWrap: "wrap",
         }}
       >
-        <button
-          className="pill"
-          style={{
-            background: "var(--brand-500)",
-            color: "#fff",
-            border: "none",
-            padding: "6px 14px",
-            fontSize: 11.5,
-            fontWeight: 600,
-            cursor: "pointer",
-            borderRadius: 6,
-          }}
-        >
-          {isMissing ? "补充字段" : "确认入账"}
-        </button>
-        <button
-          className="pill"
-          style={{
-            background: "var(--surface-2)",
-            color: "var(--ink-700)",
-            border: "1px solid var(--ink-200)",
-            padding: "6px 14px",
-            fontSize: 11.5,
-            fontWeight: 500,
-            cursor: "pointer",
-            borderRadius: 6,
-          }}
-        >
-          驳回
-        </button>
+        {isHandled ? (
+          <span
+            style={{
+              padding: "6px 12px",
+              fontSize: 11.5,
+              fontWeight: 700,
+              borderRadius: 6,
+              background: local === "已确认" ? "var(--ok-100)" : "var(--ink-100)",
+              color: local === "已确认" ? "var(--ok-700)" : "var(--ink-600)",
+            }}
+          >
+            {local === "已确认" ? "✓ 已确认入账" : "✕ 已驳回"}
+          </span>
+        ) : (
+          <>
+            <button
+              className="pill"
+              onClick={() => setLocal("已确认")}
+              style={{
+                background: "var(--brand-500)",
+                color: "#fff",
+                border: "none",
+                padding: "6px 14px",
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                borderRadius: 6,
+              }}
+            >
+              {isMissing ? "补充字段" : "确认入账"}
+            </button>
+            <button
+              className="pill"
+              onClick={() => setLocal("已驳回")}
+              style={{
+                background: "var(--surface-2)",
+                color: "var(--ink-700)",
+                border: "1px solid var(--ink-200)",
+                padding: "6px 14px",
+                fontSize: 11.5,
+                fontWeight: 500,
+                cursor: "pointer",
+                borderRadius: 6,
+              }}
+            >
+              驳回
+            </button>
+          </>
+        )}
         <JintaiSourceCitation source={{ kind: "合同", label: card.source }} />
       </div>
     </div>

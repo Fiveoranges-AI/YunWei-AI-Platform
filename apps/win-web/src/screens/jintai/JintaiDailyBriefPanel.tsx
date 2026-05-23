@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { dailyBrief } from "./data";
 import type { DailyBriefAction, DailyBriefHistory, DailyBriefRisk } from "./data";
+import { useJintai } from "./state/store";
 
 /**
  * iter 21：经营日报全面图表化 + 顶部加锦泰品牌头。
@@ -34,51 +35,8 @@ export function JintaiDailyBriefPanel() {
       {/* 顶部要事条 — 5 段堆叠色块 + 3 件大事 */}
       <TodayHeroStrip />
 
-      {/* KPI 网格 — 4 个核心数字 + sparkline */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)",
-          gap: 12,
-        }}
-      >
-        <KpiCard
-          label="货币资金"
-          value="8,200,000"
-          unit="元"
-          deltaText="较月初 +170,000"
-          deltaTone="positive"
-          series={[7980, 8030, 8030, 8030, 8050, 8100, 8200]}
-          tone="brand"
-        />
-        <KpiCard
-          label="进行中生产单"
-          value="12"
-          unit="张"
-          deltaText="今日完成 2 张"
-          deltaTone="neutral"
-          series={[8, 9, 10, 11, 11, 12, 12]}
-          tone="red"
-        />
-        <KpiCard
-          label="本月应付"
-          value="327,000"
-          unit="元"
-          deltaText="超期 1 笔 / 30 天内 2 笔"
-          deltaTone="warn"
-          series={[180, 220, 250, 270, 290, 310, 327]}
-          tone="warn"
-        />
-        <KpiCard
-          label="本月回款"
-          value="4,800,000"
-          unit="元"
-          deltaText="今日新增 1,200,000"
-          deltaTone="positive"
-          series={[800, 1500, 2200, 2800, 3400, 3900, 4800]}
-          tone="green"
-        />
-      </div>
+      {/* KPI 网格 — 4 个核心数字 + sparkline (iter 22: 本月应付读 store 实时值) */}
+      <LiveKpiGrid isDesktop={isDesktop} />
 
       {/* 风险线索 — 横向 3 色块 */}
       <RisksStrip risks={dailyBrief.risks} />
@@ -173,6 +131,8 @@ function JintaiBrandHeader() {
           </div>
         </div>
       </div>
+      {/* iter 22: 一键演示 主线魔法按钮 */}
+      <MainlineDemoBar />
       {/* 锦泰红绿色带 */}
       <div
         style={{
@@ -181,6 +141,83 @@ function JintaiBrandHeader() {
             "linear-gradient(90deg, var(--jintai-red) 0%, var(--jintai-red) 50%, var(--jintai-green) 50%, var(--jintai-green) 100%)",
         }}
       />
+    </div>
+  );
+}
+
+function MainlineDemoBar() {
+  const { state, playAll, dispatch, consts } = useJintai();
+  const stepLabel: Record<typeof state.step, string> = {
+    idle: "未开始",
+    "shipment-pending": "1/5 收件箱待确认",
+    "stock-low": "2/5 库存已扣 · 预警",
+    "pr-pending": "3/5 申购草稿待审批",
+    "po-pending": "4/5 PO 待入库",
+    complete: "✓ 完成",
+  };
+  return (
+    <div
+      style={{
+        padding: "10px 18px",
+        background: "var(--surface-2)",
+        borderTop: "1px solid var(--ink-100)",
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
+      <span style={{ fontSize: 11, color: "var(--ink-500)", fontWeight: 600, letterSpacing: "0.04em" }}>
+        端到端主线 demo
+      </span>
+      <button
+        onClick={playAll}
+        style={{
+          padding: "6px 14px",
+          fontSize: 12,
+          fontWeight: 700,
+          background: "var(--jintai-red)",
+          color: "#fff",
+          border: "none",
+          borderRadius: 6,
+          cursor: "pointer",
+          fontFamily: "var(--font)",
+        }}
+        title={`自动跑完 5 步: 上传 → 确认扣库存 (${consts.pivotMaterial}) → 申购草稿 → 批准 → 入库回补`}
+      >
+        ▶ 一键演示主线 (约 7 秒)
+      </button>
+      <button
+        onClick={() => dispatch({ type: "RESET" })}
+        style={{
+          padding: "6px 14px",
+          fontSize: 12,
+          background: "var(--surface)",
+          color: "var(--ink-700)",
+          border: "1px solid var(--ink-200)",
+          borderRadius: 6,
+          cursor: "pointer",
+          fontFamily: "var(--font)",
+        }}
+      >
+        ↻ 重置
+      </button>
+      <span
+        style={{
+          marginLeft: "auto",
+          fontSize: 11,
+          color:
+            state.step === "complete"
+              ? "var(--ok-700)"
+              : state.step === "idle"
+              ? "var(--ink-500)"
+              : "var(--warn-700)",
+          fontWeight: 700,
+          fontFamily: "ui-monospace, monospace",
+        }}
+      >
+        {stepLabel[state.step]}
+      </span>
     </div>
   );
 }
@@ -338,6 +375,69 @@ function BigThingCard({
 }
 
 /* ============== KPI 卡 + sparkline (自绘 SVG) ============== */
+
+function LiveKpiGrid({ isDesktop }: { isDesktop: boolean }) {
+  const { state } = useJintai();
+  // 本月应付 = 应付台账金额合计 (随主线 RECEIVE_PO 增加)
+  const payableTotal = state.payableLedger.reduce(
+    (s, r) => s + parseInt(r.amount.replace(/[¥,]/g, ""), 10),
+    0,
+  );
+  const baseSeries = [180_000, 220_000, 250_000, 270_000, 290_000, 310_000, 327_000];
+  // 把 当前 payableTotal 替换最后一点 — 模拟实时更新
+  const series = [...baseSeries.slice(0, 6), payableTotal];
+  const delta = payableTotal - 327_000;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)",
+        gap: 12,
+      }}
+    >
+      <KpiCard
+        label="货币资金"
+        value="8,200,000"
+        unit="元"
+        deltaText="较月初 +170,000"
+        deltaTone="positive"
+        series={[7_980_000, 8_030_000, 8_030_000, 8_030_000, 8_050_000, 8_100_000, 8_200_000]}
+        tone="brand"
+      />
+      <KpiCard
+        label="进行中生产单"
+        value="12"
+        unit="张"
+        deltaText="今日完成 2 张"
+        deltaTone="neutral"
+        series={[8, 9, 10, 11, 11, 12, 12]}
+        tone="red"
+      />
+      <KpiCard
+        label="本月应付"
+        value={payableTotal.toLocaleString()}
+        unit="元"
+        deltaText={
+          delta > 0
+            ? `主线新增 +¥${delta.toLocaleString()} · 共 ${state.payableLedger.length} 笔`
+            : `超期 1 笔 / 30 天内 2 笔`
+        }
+        deltaTone="warn"
+        series={series}
+        tone="warn"
+      />
+      <KpiCard
+        label="本月回款"
+        value="4,800,000"
+        unit="元"
+        deltaText="今日新增 1,200,000"
+        deltaTone="positive"
+        series={[800_000, 1_500_000, 2_200_000, 2_800_000, 3_400_000, 3_900_000, 4_800_000]}
+        tone="green"
+      />
+    </div>
+  );
+}
 
 function KpiCard({
   label,

@@ -3,8 +3,9 @@ import { getJintaiProcessParameter, listJintaiFlowCards } from "../../api/jintai
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { batchRecipes, flowCards, processParameter } from "./data";
-import type { BatchRecipe, FlowCard, FlowStep, ProcessParameter } from "./data";
+import type { BatchRecipe, FlowCard, FlowStep, ProcessParameter, StockLedger } from "./data";
 import { JintaiRiskBadge, JintaiStatusBadge, JintaiSourceCitation } from "./components";
+import { useJintai } from "./state/store";
 
 type Tab = "A" | "B" | "C" | "D";
 
@@ -94,9 +95,24 @@ export function JintaiProductionTabs() {
 
 /* ---------- Tab D: 配料单 (iter 20 · 附件需求 5) ---------- */
 
+/** iter 22: 从 store stockLedgers 取动态库存余量,主线扣减后这里自动更新 */
+function liveStockBalance(
+  ledgers: StockLedger[],
+  materialName: string,
+  fallback: number,
+): number {
+  for (const l of ledgers) {
+    if (l.kind !== "原材料") continue;
+    const row = l.rows.find((r) => r.name === materialName);
+    if (row) return parseInt(row.balance.replace(/,/g, ""), 10) || 0;
+  }
+  return fallback;
+}
+
 function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
   const [idx, setIdx] = useState(0);
   const r = recipes[idx] ?? recipes[0];
+  const { state } = useJintai();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* 配料单切换 */}
@@ -210,7 +226,13 @@ function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
             <span style={{ textAlign: "right" }}>金额 (元)</span>
             <span style={{ textAlign: "right" }}>库存余量 (kg)</span>
           </div>
-          {r.ingredients.map((ing) => {
+          {r.ingredients.map((ingOrig) => {
+            const liveBalance = liveStockBalance(state.stockLedgers, ingOrig.materialName, ingOrig.stockBalance);
+            const ing = {
+              ...ingOrig,
+              stockBalance: liveBalance,
+              shortage: liveBalance < ingOrig.batchQty,
+            };
             const amount = ing.batchQty * ing.unitCost;
             return (
               <div
@@ -332,18 +354,21 @@ function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
           </div>
         </div>
 
-        {/* 库存关联提示条 */}
+        {/* 库存关联提示条 — iter 22 用 store 实时余量 */}
+        {(() => {
+          const liveIng = r.ingredients.map((i) => {
+            const bal = liveStockBalance(state.stockLedgers, i.materialName, i.stockBalance);
+            return { ...i, stockBalance: bal, shortage: bal < i.batchQty };
+          });
+          const shortItems = liveIng.filter((i) => i.shortage);
+          return (
         <div
           style={{
             marginTop: 14,
             padding: "10px 14px",
             borderRadius: 10,
-            background: r.ingredients.some((i) => i.shortage)
-              ? "var(--warn-100)"
-              : "var(--ok-100)",
-            border: `1px solid ${
-              r.ingredients.some((i) => i.shortage) ? "#f1d4a6" : "#c7e4d2"
-            }`,
+            background: shortItems.length > 0 ? "var(--warn-100)" : "var(--ok-100)",
+            border: `1px solid ${shortItems.length > 0 ? "#f1d4a6" : "#c7e4d2"}`,
             fontSize: 11.5,
             color: r.ingredients.some((i) => i.shortage)
               ? "var(--warn-700)"
@@ -352,20 +377,19 @@ function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
           }}
         >
           <strong>← 已关联库存台账 (采购 tab):</strong>{" "}
-          {r.ingredients.some((i) => i.shortage) ? (
+          {shortItems.length > 0 ? (
             <>
-              本批配料有 <strong>1 项</strong>{" "}
-              库存不足 ({r.ingredients.find((i) => i.shortage)?.materialName} 缺{" "}
-              {(
-                (r.ingredients.find((i) => i.shortage)?.batchQty ?? 0) -
-                (r.ingredients.find((i) => i.shortage)?.stockBalance ?? 0)
-              ).toLocaleString()}{" "}
-              kg)，AI 已自动触发申购单草稿，待采购张主管审批。
+              本批配料有 <strong>{shortItems.length} 项</strong>{" "}
+              库存不足 ({shortItems[0].materialName} 缺{" "}
+              {(shortItems[0].batchQty - shortItems[0].stockBalance).toLocaleString()} kg),
+              AI 已自动触发申购单草稿,待采购张主管审批。
             </>
           ) : (
-            <>本批所有原料库存充足，可立即领料投产。</>
+            <>本批所有原料库存充足,可立即领料投产。</>
           )}
         </div>
+          );
+        })()}
       </div>
     </div>
   );
