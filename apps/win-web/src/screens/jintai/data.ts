@@ -1290,6 +1290,356 @@ export const purchaseInboxCards: PurchaseInboxCard[] = [
 ];
 
 /* ===========================================================================
+ *  采购模块扩展 (iter 19 — 按客户 ERP 需求清单 + 表单 1 / 2.4 / 2.5)
+ *
+ *  补齐采购链路的"头"和"尾"：
+ *    · 物资申购单 (表单 1)：申购→审批→转采购订单 的起点
+ *    · 库存台账 (表单 2.4/2.5)：原材料 + 成品 月报，起始数+入+出=结存
+ *    · 应付账款台账：从入库单/发票汇总，按供应商账期排序 + 到期提醒
+ *
+ *  数据与已有 PO / 损益表内部自洽：
+ *    · 申购单 PR-2026-014/015 由 AI 从车间领料微信群抽取，已转 PO-2026-008/009 草稿
+ *    · 库存原料台账数字与 PO 入库金额匹配
+ *    · 应付账款合计 ¥296,600 ↔ 资产负债表 应付帐款期末 7,800,000 元中本月新增部分
+ * ========================================================================= */
+
+/* ----- 物资申购单 (表单 1) ----- */
+
+export type RequisitionItem = {
+  name: string;
+  spec: string;
+  unit: string;
+  qty: string;
+  arriveDate: string;
+  note?: string;
+};
+
+export type PurchaseRequisition = {
+  prNo: string;
+  dept: string;
+  applicant: string;
+  applyDate: string;
+  supplier?: string;
+  status: "待审批" | "已审批" | "已转订单" | "已驳回";
+  approver?: string;
+  approvedAt?: string;
+  source: "AI 抽取" | "纸质表单" | "手工录入";
+  sourceNote?: string;
+  items: RequisitionItem[];
+  poRef?: string; // 已转的采购订单号
+};
+
+export const purchaseRequisitions: PurchaseRequisition[] = [
+  {
+    prNo: "PR-2026-015",
+    dept: "成型车间",
+    applicant: "张师傅",
+    applyDate: "2026-05-16",
+    supplier: "山东中铝物资",
+    status: "已转订单",
+    approver: "采购 · 张主管",
+    approvedAt: "2026-05-16 14:32",
+    source: "AI 抽取",
+    sourceNote: "AI 从「成型领料群」张师傅 05-16 11:20 语音转写抽取",
+    items: [
+      {
+        name: "α 氧化铝粉",
+        spec: "CT3000SG · 5N 级",
+        unit: "kg",
+        qty: "4,000",
+        arriveDate: "2026-05-25",
+        note: "用于容百 SO-2026-001 高镍承烧板坯体配料",
+      },
+    ],
+    poRef: "PO-2026-008",
+  },
+  {
+    prNo: "PR-2026-014",
+    dept: "烧成车间",
+    applicant: "李师傅",
+    applyDate: "2026-05-15",
+    supplier: "萍乡耐材原料",
+    status: "已转订单",
+    approver: "采购 · 张主管",
+    approvedAt: "2026-05-15 16:05",
+    source: "纸质表单",
+    sourceNote: "李师傅 05-15 纸质申购单 · 仓管室扫描归档",
+    items: [
+      {
+        name: "莫来石骨料",
+        spec: "3–5 mm · M70",
+        unit: "kg",
+        qty: "8,000",
+        arriveDate: "2026-05-22",
+      },
+    ],
+    poRef: "PO-2026-007",
+  },
+  {
+    prNo: "PR-2026-016",
+    dept: "成型车间",
+    applicant: "成型组 · 王师傅",
+    applyDate: "2026-05-17",
+    status: "待审批",
+    source: "AI 抽取",
+    sourceNote: "AI 从「采购询价群」王师傅 05-17 09:48 文字 + 报价截图抽取",
+    items: [
+      {
+        name: "电熔白刚玉",
+        spec: "W18 · 99.2%",
+        unit: "kg",
+        qty: "6,000",
+        arriveDate: "2026-05-30",
+        note: "宜兴蓝海现货，库存仅 1,200 kg 安全线以下",
+      },
+      {
+        name: "磷酸二氢铝（结合剂）",
+        spec: "工业级 ≥ 99%",
+        unit: "kg",
+        qty: "500",
+        arriveDate: "2026-05-28",
+        note: "成型坯体结合剂，按 5% 配比预留 1 个月用量",
+      },
+    ],
+  },
+];
+
+/* ----- 库存台账 / 进销存月报 (表单 2.4 原材料 + 2.5 成品) ----- */
+
+export type StockLedgerRow = {
+  no: number;
+  name: string;
+  spec: string;
+  shape?: string; // 成品才有"形状"
+  unit: string;
+  opening: string; // 起始数
+  inQty: string; // 本月入库
+  outQty: string; // 本月出库
+  balance: string; // 期末库存
+  safetyStock?: string; // 安全库存(原材料)
+  warning?: "low" | "ok"; // 低库存预警
+  note?: string;
+};
+
+export type StockLedger = {
+  kind: "原材料" | "成品";
+  period: string;
+  warehouse: string;
+  keeper: string;
+  rows: StockLedgerRow[];
+};
+
+export const stockLedgers: StockLedger[] = [
+  {
+    kind: "原材料",
+    period: "2026 年 5 月",
+    warehouse: "原料库 A / B / C / D",
+    keeper: "仓管 · 周师傅",
+    rows: [
+      {
+        no: 1,
+        name: "α 氧化铝粉",
+        spec: "CT3000SG · 5N",
+        unit: "kg",
+        opening: "1,800",
+        inQty: "4,000",
+        outQty: "3,920",
+        balance: "1,880",
+        safetyStock: "1,500",
+        warning: "ok",
+      },
+      {
+        no: 2,
+        name: "莫来石骨料",
+        spec: "3–5 mm · M70",
+        unit: "kg",
+        opening: "3,200",
+        inQty: "8,000",
+        outQty: "7,640",
+        balance: "3,560",
+        safetyStock: "2,500",
+        warning: "ok",
+      },
+      {
+        no: 3,
+        name: "电熔白刚玉 (W18)",
+        spec: "刚玉骨料 · 0.5–2 mm",
+        unit: "kg",
+        opening: "2,800",
+        inQty: "6,000",
+        outQty: "7,600",
+        balance: "1,200",
+        safetyStock: "2,000",
+        warning: "low",
+        note: "已申购 PR-2026-016 · 待审批",
+      },
+      {
+        no: 4,
+        name: "石墨电极粉",
+        spec: "200 目 · C≥99.9%",
+        unit: "kg",
+        opening: "1,100",
+        inQty: "1,500",
+        outQty: "1,420",
+        balance: "1,180",
+        safetyStock: "800",
+        warning: "ok",
+      },
+      {
+        no: 5,
+        name: "硅微粉",
+        spec: "SF965 · D50≈1.5μm",
+        unit: "kg",
+        opening: "850",
+        inQty: "2,000",
+        outQty: "1,920",
+        balance: "930",
+        safetyStock: "600",
+        warning: "ok",
+      },
+      {
+        no: 6,
+        name: "磷酸二氢铝 (结合剂)",
+        spec: "工业级 ≥ 99%",
+        unit: "kg",
+        opening: "420",
+        inQty: "800",
+        outQty: "780",
+        balance: "440",
+        safetyStock: "300",
+        warning: "ok",
+      },
+    ],
+  },
+  {
+    kind: "成品",
+    period: "2026 年 5 月",
+    warehouse: "成品库 F-01 / F-02",
+    keeper: "仓管 · 陈师傅",
+    rows: [
+      {
+        no: 1,
+        name: "刚玉莫来石承烧板",
+        spec: "330×330×16 mm",
+        shape: "平板",
+        unit: "块",
+        opening: "1,200",
+        inQty: "12,100",
+        outQty: "11,722",
+        balance: "1,578",
+        note: "容百 SO-2026-001 已发 11,722 块",
+      },
+      {
+        no: 2,
+        name: "氧化铝匣钵",
+        spec: "300×220×100 mm",
+        shape: "盒形",
+        unit: "个",
+        opening: "180",
+        inQty: "1,500",
+        outQty: "1,380",
+        balance: "300",
+        note: "横店 SC-2026-017 检包入库 1,500 个",
+      },
+      {
+        no: 3,
+        name: "堇青石莫来石承烧板",
+        spec: "260×260×10 mm (MLCC)",
+        shape: "薄板",
+        unit: "块",
+        opening: "0",
+        inQty: "0",
+        outQty: "0",
+        balance: "0",
+        note: "风华 SO-2026-003 排产中，本月暂未入库",
+      },
+      {
+        no: 4,
+        name: "碳化硅推板",
+        spec: "300×300×20 mm",
+        shape: "平板",
+        unit: "块",
+        opening: "240",
+        inQty: "0",
+        outQty: "0",
+        balance: "240",
+        note: "厦钨 SO-2026-004 待生产",
+      },
+    ],
+  },
+];
+
+/* ----- 应付账款台账 + 账期提醒 ----- */
+
+export type PayableRow = {
+  supplier: string;
+  source: string; // 来源单据：入库单 / 发票
+  amount: string; // 应付金额
+  invoiceDate: string;
+  dueDate: string; // 应付到期日
+  aging: "未到期" | "即将到期" | "已超期";
+  daysToDue: number; // 距到期天数 (负数=已超期)
+  paid?: boolean;
+};
+
+export const payableLedger: PayableRow[] = [
+  {
+    supplier: "杭州瑞晟化工",
+    source: "PO-2026-003 入库单 + 发票",
+    amount: "¥30,400",
+    invoiceDate: "2026-04-08",
+    dueDate: "2026-05-08",
+    aging: "已超期",
+    daysToDue: -9,
+  },
+  {
+    supplier: "宜兴蓝海耐火",
+    source: "PO-2026-004 入库单 + 发票",
+    amount: "¥84,000",
+    invoiceDate: "2026-05-12",
+    dueDate: "2026-06-11",
+    aging: "即将到期",
+    daysToDue: 25,
+  },
+  {
+    supplier: "上海博凯化工",
+    source: "PO-2026-005 发票 (待补税率)",
+    amount: "¥13,600",
+    invoiceDate: "2026-05-15",
+    dueDate: "2026-06-14",
+    aging: "即将到期",
+    daysToDue: 28,
+  },
+  {
+    supplier: "焦作高纯石墨",
+    source: "PO-2026-006 入库单 + 发票",
+    amount: "¥27,000",
+    invoiceDate: "2026-05-19",
+    dueDate: "2026-06-18",
+    aging: "未到期",
+    daysToDue: 32,
+  },
+  {
+    supplier: "萍乡耐材原料",
+    source: "PO-2026-007 入库单",
+    amount: "¥76,000",
+    invoiceDate: "2026-05-22",
+    dueDate: "2026-07-06",
+    aging: "未到期",
+    daysToDue: 50,
+  },
+  {
+    supplier: "山东中铝物资",
+    source: "PO-2026-008 发票 (待入库)",
+    amount: "¥96,000",
+    invoiceDate: "2026-05-25",
+    dueDate: "2026-07-24",
+    aging: "未到期",
+    daysToDue: 68,
+  },
+];
+
+/* ===========================================================================
  *  📅 经营日报 (Iter 11)
  *
  *  老板早上 8 点打开手机看的 5 分钟摘要。

@@ -1,21 +1,45 @@
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
-import { purchaseInboxCards, purchaseOrders, suppliers } from "./data";
-import type { PurchaseInboxCard, PurchaseOrder, Supplier } from "./data";
+import {
+  payableLedger,
+  purchaseInboxCards,
+  purchaseOrders,
+  purchaseRequisitions,
+  stockLedgers,
+  suppliers,
+} from "./data";
+import type {
+  PayableRow,
+  PurchaseInboxCard,
+  PurchaseOrder,
+  PurchaseRequisition,
+  StockLedger,
+  Supplier,
+} from "./data";
 import { JintaiSourceCitation, JintaiStatusBadge } from "./components";
 
 export function JintaiPurchasePanel() {
   const isDesktop = useIsDesktop();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      {/* Section 1: 采购订单列表 */}
+      {/* iter 19 链路提示条：申购 → 订单 → 入库 → 库存 → 应付 */}
+      <PurchaseChainHint />
+
+      {/* Section 1: 物资申购单（链路起点 · 新增） */}
+      <SectionHeader
+        title="物资申购单"
+        sub="申购 → 审批 → 转采购订单 · AI 自动从车间领料群 / 纸质单抽取，仓管 + 采购 + 老板分级审批"
+      />
+      <RequisitionList requisitions={purchaseRequisitions} />
+
+      {/* Section 2: 采购订单列表 */}
       <SectionHeader
         title="本月采购订单"
         sub="6 张已下单 · 总金额 ¥327,000 · 全部来自 AI 抽取的纸质合同 / 邮件订单，财务确认后入账"
       />
       <PurchaseOrderTable orders={purchaseOrders} />
 
-      {/* Section 2: 供应商档案 */}
+      {/* Section 3: 供应商档案 */}
       <SectionHeader
         title="主要供应商"
         sub="5 家长期供应商 · 每月采购总额 ¥405,000 · 账期 30–60 天 · AI 维护账期与质量评分"
@@ -34,7 +58,7 @@ export function JintaiPurchasePanel() {
         ))}
       </div>
 
-      {/* Section 3: AI 采购信息收件箱 */}
+      {/* Section 4: AI 采购信息收件箱 */}
       <SectionHeader
         title="AI 采购信息收件箱"
         sub="发票 / 合同 / 入库单 AI 自动抽取，财务 + 采购双确认才入账 · 防止重复付款 + 漏入库"
@@ -43,6 +67,591 @@ export function JintaiPurchasePanel() {
         {purchaseInboxCards.map((c) => (
           <PurchaseInboxCardView key={c.id} card={c} />
         ))}
+      </div>
+
+      {/* Section 5: 库存台账（原材料 + 成品）— 新增进销存核心 */}
+      <SectionHeader
+        title="库存台账 · 进销存月报"
+        sub="原材料月报表 + 成品月报表 · 起始 + 入 − 出 = 结存 自动滚算 · 低于安全库存自动预警"
+      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {stockLedgers.map((sl) => (
+          <StockLedgerTable key={sl.kind} ledger={sl} />
+        ))}
+      </div>
+
+      {/* Section 6: 应付账款台账 + 账期提醒 */}
+      <SectionHeader
+        title="应付账款台账"
+        sub="从入库单 / 发票自动汇总应付 · 按到期日排序 · AI 提前 X 天提醒 · 接经营日报「本月待付」"
+      />
+      <PayableLedgerTable rows={payableLedger} />
+    </div>
+  );
+}
+
+/* ============== 链路提示条 ============== */
+
+function PurchaseChainHint() {
+  const steps = [
+    { label: "申购单", n: "3 张", color: "var(--ai-purple)" },
+    { label: "采购订单", n: "6 张", color: "var(--brand-700)" },
+    { label: "入库", n: "5 张", color: "var(--jintai-red)" },
+    { label: "库存台账", n: "原料 6 项 / 成品 4 项", color: "var(--jintai-green-dark)" },
+    { label: "应付账款", n: "¥327,000", color: "var(--warn-700)" },
+  ];
+  return (
+    <div
+      className="card-flat"
+      style={{
+        padding: "12px 16px",
+        borderRadius: 12,
+        display: "flex",
+        gap: 8,
+        flexWrap: "wrap",
+        alignItems: "center",
+        background: "var(--surface-2)",
+        border: "1px dashed var(--ink-200)",
+        fontSize: 11.5,
+      }}
+    >
+      <span style={{ fontWeight: 700, color: "var(--ink-700)", letterSpacing: "0.04em" }}>
+        采购链路：
+      </span>
+      {steps.map((s, i) => (
+        <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              display: "inline-flex",
+              flexDirection: "column",
+              alignItems: "center",
+              padding: "4px 10px",
+              borderRadius: 8,
+              background: "var(--surface)",
+              border: "1px solid var(--ink-100)",
+            }}
+          >
+            <span style={{ fontWeight: 700, color: s.color, fontSize: 11.5 }}>{s.label}</span>
+            <span style={{ fontSize: 10, color: "var(--ink-500)", marginTop: 1 }}>{s.n}</span>
+          </span>
+          {i < steps.length - 1 && <span style={{ color: "var(--ink-300)", fontSize: 14 }}>→</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ============== Section 1: 物资申购单 ============== */
+
+function RequisitionList({ requisitions }: { requisitions: PurchaseRequisition[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {requisitions.map((r) => (
+        <RequisitionCard key={r.prNo} req={r} />
+      ))}
+    </div>
+  );
+}
+
+const PR_STATUS_META: Record<PurchaseRequisition["status"], { bg: string; fg: string }> = {
+  待审批: { bg: "var(--ai-100)", fg: "var(--ai-700)" },
+  已审批: { bg: "var(--brand-100)", fg: "var(--brand-700)" },
+  已转订单: { bg: "var(--ok-100)", fg: "var(--ok-700)" },
+  已驳回: { bg: "var(--risk-100)", fg: "var(--risk-700)" },
+};
+
+function RequisitionCard({ req }: { req: PurchaseRequisition }) {
+  const meta = PR_STATUS_META[req.status];
+  const pending = req.status === "待审批";
+  return (
+    <div
+      className="card"
+      style={{
+        padding: 16,
+        borderLeft: `3px solid ${pending ? "var(--ai-500)" : "var(--jintai-green)"}`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: "var(--ink-900)",
+            fontFamily: "ui-monospace, monospace",
+          }}
+        >
+          {req.prNo}
+        </span>
+        <span className="pill" style={{ background: meta.bg, color: meta.fg, fontWeight: 600 }}>
+          {req.status}
+        </span>
+        <span style={{ fontSize: 11.5, color: "var(--ink-700)" }}>
+          {req.dept} · {req.applicant} · {req.applyDate}
+        </span>
+        {req.poRef && (
+          <span
+            className="pill"
+            style={{
+              background: "var(--brand-100)",
+              color: "var(--brand-700)",
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            → 已转 {req.poRef}
+          </span>
+        )}
+        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--ink-500)" }}>
+          {req.source}
+        </span>
+      </div>
+
+      {req.sourceNote && (
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "var(--ai-700)",
+            lineHeight: 1.5,
+            marginBottom: 10,
+            padding: "6px 10px",
+            background: "var(--ai-100)",
+            borderRadius: 6,
+            border: "1px dashed #bddff3",
+          }}
+        >
+          <span style={{ fontWeight: 700, marginRight: 4 }}>来源：</span>
+          {req.sourceNote}
+        </div>
+      )}
+
+      {/* 申购明细 */}
+      <div style={{ border: "1px solid var(--ink-100)", borderRadius: 8, overflow: "hidden" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.6fr 1.4fr 60px 90px 110px 1fr",
+            columnGap: 10,
+            background: "var(--surface-2)",
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: "var(--ink-600)",
+            letterSpacing: "0.04em",
+            padding: "6px 10px",
+            borderBottom: "1px solid var(--ink-100)",
+          }}
+        >
+          <span>物品名称</span>
+          <span>规格型号</span>
+          <span style={{ textAlign: "center" }}>单位</span>
+          <span style={{ textAlign: "right" }}>申购数量</span>
+          <span>到货日期</span>
+          <span>备注</span>
+        </div>
+        {req.items.map((it, idx) => (
+          <div
+            key={idx}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.6fr 1.4fr 60px 90px 110px 1fr",
+            columnGap: 10,
+              padding: "8px 10px",
+              borderTop: idx > 0 ? "1px solid var(--ink-50)" : "none",
+              fontSize: 11.5,
+              color: "var(--ink-800)",
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>{it.name}</span>
+            <span style={{ fontFamily: "ui-monospace, monospace" }}>{it.spec}</span>
+            <span style={{ textAlign: "center" }}>{it.unit}</span>
+            <span
+              style={{
+                textAlign: "right",
+                fontFamily: "ui-monospace, monospace",
+                fontWeight: 700,
+              }}
+            >
+              {it.qty}
+            </span>
+            <span style={{ fontFamily: "ui-monospace, monospace" }}>{it.arriveDate}</span>
+            <span style={{ color: "var(--ink-500)" }}>{it.note ?? "—"}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 审批 / 操作区 */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+          marginTop: 10,
+        }}
+      >
+        {req.approver && (
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--ok-700)",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                background: "var(--jintai-green)",
+              }}
+            />
+            ✓ {req.approver} · {req.approvedAt}
+          </span>
+        )}
+        {pending && (
+          <>
+            <button
+              className="pill"
+              style={{
+                background: "var(--brand-500)",
+                color: "#fff",
+                border: "none",
+                padding: "6px 14px",
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                borderRadius: 6,
+              }}
+            >
+              批准 → 转采购订单
+            </button>
+            <button
+              className="pill"
+              style={{
+                background: "var(--surface-2)",
+                color: "var(--ink-700)",
+                border: "1px solid var(--ink-200)",
+                padding: "6px 14px",
+                fontSize: 11.5,
+                fontWeight: 500,
+                cursor: "pointer",
+                borderRadius: 6,
+              }}
+            >
+              驳回
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============== Section 5: 库存台账 ============== */
+
+function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
+  const isRaw = ledger.kind === "原材料";
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      {/* 表头 */}
+      <div
+        style={{
+          padding: "10px 16px",
+          background: isRaw ? "rgba(15,69,42,0.06)" : "rgba(173,30,38,0.06)",
+          borderBottom: "1px solid var(--ink-100)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexWrap: "wrap",
+          fontSize: 11.5,
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 700,
+            color: isRaw ? "var(--jintai-green-dark)" : "var(--jintai-red)",
+            fontSize: 13,
+          }}
+        >
+          {ledger.kind}月报表
+        </span>
+        <span style={{ color: "var(--ink-500)" }}>
+          {ledger.period} · {ledger.warehouse}
+        </span>
+        <span style={{ marginLeft: "auto", color: "var(--ink-500)" }}>
+          仓管员：{ledger.keeper}
+        </span>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 11.5,
+            fontFamily: "var(--font)",
+          }}
+        >
+          <thead>
+            <tr style={{ background: "var(--surface-2)" }}>
+              <SLTh>序号</SLTh>
+              <SLTh>物品名称</SLTh>
+              <SLTh>规格型号</SLTh>
+              {!isRaw && <SLTh>形状</SLTh>}
+              <SLTh>单位</SLTh>
+              <SLTh align="right">起始数</SLTh>
+              <SLTh align="right">本月入库</SLTh>
+              <SLTh align="right">本月出库</SLTh>
+              <SLTh align="right">期末库存</SLTh>
+              {isRaw && <SLTh align="right">安全库存</SLTh>}
+              <SLTh>备注</SLTh>
+            </tr>
+          </thead>
+          <tbody>
+            {ledger.rows.map((r) => {
+              const lowStock = r.warning === "low";
+              return (
+                <tr
+                  key={r.no}
+                  style={{
+                    borderTop: "1px solid var(--ink-50)",
+                    background: lowStock ? "var(--warn-100)" : undefined,
+                  }}
+                >
+                  <SLTd center>{r.no}</SLTd>
+                  <SLTd bold>{r.name}</SLTd>
+                  <SLTd mono>{r.spec}</SLTd>
+                  {!isRaw && <SLTd>{r.shape ?? "—"}</SLTd>}
+                  <SLTd center>{r.unit}</SLTd>
+                  <SLTd align="right" mono>
+                    {r.opening}
+                  </SLTd>
+                  <SLTd align="right" mono pos>
+                    +{r.inQty}
+                  </SLTd>
+                  <SLTd align="right" mono neg>
+                    −{r.outQty}
+                  </SLTd>
+                  <SLTd
+                    align="right"
+                    mono
+                    bold
+                    style={lowStock ? { color: "var(--warn-700)" } : undefined}
+                  >
+                    {r.balance}
+                  </SLTd>
+                  {isRaw && (
+                    <SLTd align="right" mono style={{ color: "var(--ink-500)" }}>
+                      {r.safetyStock ?? "—"}
+                    </SLTd>
+                  )}
+                  <SLTd>
+                    {lowStock && (
+                      <span
+                        className="pill"
+                        style={{
+                          background: "var(--warn-100)",
+                          color: "var(--warn-700)",
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          marginRight: 6,
+                        }}
+                      >
+                        ⚠ 低库存
+                      </span>
+                    )}
+                    {r.note && <span style={{ color: "var(--ink-600)" }}>{r.note}</span>}
+                  </SLTd>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SLTh({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align?: "right" | "center";
+}) {
+  return (
+    <th
+      style={{
+        padding: "8px 10px",
+        textAlign: align ?? "left",
+        fontSize: 10.5,
+        fontWeight: 700,
+        color: "var(--ink-500)",
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function SLTd({
+  children,
+  align,
+  mono,
+  bold,
+  center,
+  pos,
+  neg,
+  style,
+}: {
+  children: React.ReactNode;
+  align?: "right";
+  mono?: boolean;
+  bold?: boolean;
+  center?: boolean;
+  pos?: boolean;
+  neg?: boolean;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <td
+      style={{
+        padding: "8px 10px",
+        textAlign: center ? "center" : align ?? "left",
+        color: pos ? "var(--ok-700)" : neg ? "var(--risk-700)" : bold ? "var(--ink-900)" : "var(--ink-800)",
+        fontFamily: mono ? "ui-monospace, monospace" : "var(--font)",
+        fontWeight: bold ? 700 : 500,
+        fontVariantNumeric: "tabular-nums",
+        ...style,
+      }}
+    >
+      {children}
+    </td>
+  );
+}
+
+/* ============== Section 6: 应付账款台账 ============== */
+
+const AGING_META: Record<PayableRow["aging"], { bg: string; fg: string; icon: string }> = {
+  已超期: { bg: "var(--risk-100)", fg: "var(--risk-700)", icon: "⚠" },
+  即将到期: { bg: "var(--warn-100)", fg: "var(--warn-700)", icon: "⏰" },
+  未到期: { bg: "var(--ok-100)", fg: "var(--ok-700)", icon: "✓" },
+};
+
+function PayableLedgerTable({ rows }: { rows: PayableRow[] }) {
+  const total = rows.reduce((acc, r) => acc + parseInt(r.amount.replace(/[¥,]/g, ""), 10), 0);
+  const overdue = rows.filter((r) => r.aging === "已超期");
+  const soon = rows.filter((r) => r.aging === "即将到期");
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      {/* AI 提醒条 */}
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "var(--ai-100)",
+          borderBottom: "1px solid #bddff3",
+          fontSize: 11.5,
+          color: "var(--ink-800)",
+          lineHeight: 1.55,
+          display: "flex",
+          gap: 14,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontWeight: 700, color: "var(--ai-700)", fontSize: 10.5, letterSpacing: "0.05em" }}>
+          {I.spark(11)} AI 账期提醒
+        </span>
+        <span>
+          本月应付合计 <strong>¥{total.toLocaleString()}</strong>　·
+          <span style={{ color: "var(--risk-700)", fontWeight: 700 }}>
+            已超期 {overdue.length} 笔
+          </span>
+          　·
+          <span style={{ color: "var(--warn-700)", fontWeight: 700 }}>
+            30 天内到期 {soon.length} 笔
+          </span>
+        </span>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 11.5,
+            fontFamily: "var(--font)",
+          }}
+        >
+          <thead>
+            <tr style={{ background: "var(--surface-2)" }}>
+              <SLTh>供应商</SLTh>
+              <SLTh>来源单据</SLTh>
+              <SLTh align="right">应付金额</SLTh>
+              <SLTh>开票日</SLTh>
+              <SLTh>到期日</SLTh>
+              <SLTh align="right">距到期</SLTh>
+              <SLTh>账龄</SLTh>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const aging = AGING_META[r.aging];
+              return (
+                <tr key={r.supplier + r.invoiceDate} style={{ borderTop: "1px solid var(--ink-50)" }}>
+                  <SLTd bold>{r.supplier}</SLTd>
+                  <SLTd>{r.source}</SLTd>
+                  <SLTd align="right" mono bold>
+                    {r.amount}
+                  </SLTd>
+                  <SLTd mono>{r.invoiceDate}</SLTd>
+                  <SLTd mono>{r.dueDate}</SLTd>
+                  <SLTd
+                    align="right"
+                    mono
+                    style={{
+                      color:
+                        r.daysToDue < 0
+                          ? "var(--risk-700)"
+                          : r.daysToDue < 30
+                          ? "var(--warn-700)"
+                          : "var(--ink-700)",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {r.daysToDue < 0 ? `超 ${-r.daysToDue} 天` : `${r.daysToDue} 天`}
+                  </SLTd>
+                  <SLTd>
+                    <span
+                      className="pill"
+                      style={{
+                        background: aging.bg,
+                        color: aging.fg,
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {aging.icon} {r.aging}
+                    </span>
+                  </SLTd>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
