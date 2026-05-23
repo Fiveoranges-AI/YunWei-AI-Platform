@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
-import { financeReports } from "./data";
+import { costBreakdown, depreciationLedger, financeReports } from "./data";
 import type {
   BalanceSheet,
   CashFlowStatement,
@@ -12,19 +12,29 @@ import type {
 import { JintaiSourceCitation } from "./components";
 
 type ReportId = FinanceReport["id"];
+type FinanceTabKey = ReportId | "cost" | "depreciation";
 
 const COMPANY_NAME = "宜兴市锦泰耐火材料有限公司";
 
+const TAB_LABELS: Record<FinanceTabKey, { label: string; sub: string }> = {
+  balance: { label: "资产负债表", sub: "会企01表 · 2026-05-31" },
+  income: { label: "利润及利润分配表", sub: "会企02表 · 2026-05" },
+  cashflow: { label: "现金流量表", sub: "会企03表 · 2026-05" },
+  cost: { label: "成本拆分", sub: "材料 / 人工 / 水电气 / 折旧" },
+  depreciation: { label: "折旧台账", sub: "5 项固定资产 · 月折计提" },
+};
+
+const TAB_ORDER: FinanceTabKey[] = ["balance", "income", "cashflow", "cost", "depreciation"];
+
 export function JintaiFinancePanel() {
-  const [active, setActive] = useState<ReportId>("balance");
-  const report = financeReports.find((r) => r.id === active) ?? financeReports[0];
+  const [active, setActive] = useState<FinanceTabKey>("balance");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* iter 19.1：AI-native 模式定位条 — "脱离金蝶也能跑" */}
       <AINativeBanner />
 
-      {/* 子 tab — 三张表 */}
+      {/* 子 tab — 三表 + 成本拆分 + 折旧台账 (iter 20 补附件需求 6) */}
       <div
         style={{
           display: "flex",
@@ -34,14 +44,16 @@ export function JintaiFinancePanel() {
           background: "var(--surface-2)",
           border: "1px solid var(--ink-100)",
           width: "fit-content",
+          flexWrap: "wrap",
         }}
       >
-        {financeReports.map((r) => {
-          const isActive = r.id === active;
+        {TAB_ORDER.map((k) => {
+          const meta = TAB_LABELS[k];
+          const isActive = k === active;
           return (
             <button
-              key={r.id}
-              onClick={() => setActive(r.id)}
+              key={k}
+              onClick={() => setActive(k)}
               style={{
                 padding: "8px 14px",
                 borderRadius: 8,
@@ -60,16 +72,24 @@ export function JintaiFinancePanel() {
                 fontFamily: "var(--font)",
               }}
             >
-              <span>{r.label}</span>
+              <span>{meta.label}</span>
               <span style={{ fontSize: 10.5, color: "var(--ink-500)", fontWeight: 500 }}>
-                {r.sub}
+                {meta.sub}
               </span>
             </button>
           );
         })}
       </div>
 
-      <FinanceReportView report={report} />
+      {active === "cost" ? (
+        <CostBreakdownView />
+      ) : active === "depreciation" ? (
+        <DepreciationLedgerView />
+      ) : (
+        <FinanceReportView
+          report={financeReports.find((r) => r.id === active) ?? financeReports[0]}
+        />
+      )}
 
       <CrossCheckHint />
     </div>
@@ -961,11 +981,478 @@ function CrossCheckHint() {
         lineHeight: 1.6,
       }}
     >
-      <span style={{ fontWeight: 700, color: "var(--ok-700)", marginRight: 6 }}>✓ 三表自洽：</span>
-      资产负债表 期末货币资金 <strong>8,200,000 元</strong> = 现金流量表 现金期末余额 <strong>8,200,000 元</strong> ·
-      利润分配表 八、未分配利润 <strong>19,300,000 元</strong> = 资产负债表 行次 121 未分配利润 <strong>19,300,000 元</strong> ·
-      利润分配表 净利润 <strong>1,189,000 元</strong> = 现金流量表 补充资料 净利润 <strong>1,189,000 元</strong> ·
-      所有数字均由 AI 自三方账套数据 (Kingdee / 支付宝 / 银行流水) 自动归集，不修改任何原始凭证。
+      <span style={{ fontWeight: 700, color: "var(--ok-700)", marginRight: 6 }}>✓ 五表自洽：</span>
+      资产负债表 期末货币资金 <strong>8,200,000 元</strong> = 现金流量表 现金期末余额 ·
+      利润分配表 八、未分配利润 <strong>19,300,000 元</strong> = 资产负债表 行 121 未分配利润 ·
+      利润分配表 净利润 <strong>1,189,000 元</strong> = 现金流量表 补充资料 净利润 ·
+      成本拆分合计 <strong>4,420,000 元</strong> = 损益表 行 2 主营业务成本 ·
+      折旧台账 月折合计 <strong>260,000 元</strong> = 资产负债表 行 40 累计折旧 期初→期末 增量 (8,540 → 8,800) ·
+      所有数字均由 AI 自业务单据 (发票/合同/入库/工资/抄表) 自动归集，不修改任何原始凭证。
     </div>
+  );
+}
+
+/* ============== 成本拆分视图 (iter 20 · 附件需求 6 "材料/水电气/工资") ============== */
+
+function CostBreakdownView() {
+  const isDesktop = useIsDesktop();
+  return (
+    <div className="card" style={{ padding: 20 }}>
+      <AIDraftBanner draft={costBreakdown.aiDraft} confirmedBy={costBreakdown.confirmedBy} />
+
+      <div style={{ marginTop: 14, marginBottom: 14, textAlign: "center" }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: "var(--ink-900)", letterSpacing: "0.12em" }}>
+          营业成本拆分
+        </div>
+        <div
+          style={{
+            fontSize: 10.5,
+            color: "var(--ink-500)",
+            marginTop: 4,
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+          }}
+        >
+          (打通损益表 行 2 主营业务成本 4,420,000 元 → 5 类成本 + 4 类产品)
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginTop: 10,
+            fontSize: 11.5,
+            color: "var(--ink-700)",
+            borderBottom: "1px solid var(--ink-200)",
+            paddingBottom: 6,
+          }}
+        >
+          <span>
+            <strong style={{ color: "var(--ink-800)" }}>编制单位：</strong>
+            {COMPANY_NAME}　　{costBreakdown.period}
+          </span>
+          <span style={{ color: "var(--ink-500)" }}>单位：元 (¥)</span>
+        </div>
+      </div>
+
+      {/* 第一块：按类型拆分 */}
+      <div style={{ marginBottom: 18 }}>
+        <SectionLabel>① 按成本要素</SectionLabel>
+        <div style={{ border: "1px solid var(--ink-200)", borderRadius: 8, overflow: "hidden" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.4fr 100px 70px 1.8fr 1fr",
+              background: "var(--surface-2)",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--ink-700)",
+              letterSpacing: "0.04em",
+              padding: "8px 12px",
+              borderBottom: "1px solid var(--ink-200)",
+            }}
+          >
+            <span>成本要素</span>
+            <span style={{ textAlign: "right" }}>金额 (元)</span>
+            <span style={{ textAlign: "right" }}>占比</span>
+            <span>数据来源</span>
+            <span>环比</span>
+          </div>
+          {costBreakdown.byType.map((t) => (
+            <div
+              key={t.key}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.4fr 100px 70px 1.8fr 1fr",
+                padding: "10px 12px",
+                borderTop: "1px solid var(--ink-50)",
+                fontSize: 11.5,
+                color: "var(--ink-800)",
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontWeight: 700 }}>{t.label}</span>
+              <span
+                style={{
+                  textAlign: "right",
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 700,
+                  color: "var(--ink-900)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {t.amount.toLocaleString()}
+              </span>
+              <span
+                style={{
+                  textAlign: "right",
+                  fontFamily: "ui-monospace, monospace",
+                  color: "var(--ink-600)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {t.pct.toFixed(1)}%
+              </span>
+              <span style={{ color: "var(--ai-700)", fontSize: 11 }}>
+                <span style={{ marginRight: 4 }}>✨</span>
+                {t.source}
+              </span>
+              <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{t.trend}</span>
+            </div>
+          ))}
+          {/* 合计行 */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.4fr 100px 70px 2.8fr",
+              padding: "10px 12px",
+              borderTop: "2px solid var(--ink-200)",
+              background: "var(--brand-100)",
+              fontSize: 12.5,
+              fontWeight: 800,
+              color: "var(--brand-700)",
+              alignItems: "center",
+            }}
+          >
+            <span>合计 = 损益表 行 2 主营业务成本</span>
+            <span
+              style={{
+                textAlign: "right",
+                fontFamily: "ui-monospace, monospace",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {costBreakdown.totalCost.toLocaleString()}
+            </span>
+            <span style={{ textAlign: "right", fontFamily: "ui-monospace, monospace" }}>100.0%</span>
+            <span style={{ fontSize: 11, color: "var(--ok-700)", fontWeight: 600 }}>✓ 与损益表自洽</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 第二块：按产品/客户拆分 */}
+      <div>
+        <SectionLabel>② 按产品 / 客户 (真实毛利率,金蝶通用件给不出)</SectionLabel>
+        <div style={{ border: "1px solid var(--ink-200)", borderRadius: 8, overflow: "hidden" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 90px" : "1fr 100px",
+              background: "var(--surface-2)",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--ink-700)",
+              letterSpacing: "0.04em",
+              padding: "8px 12px",
+              borderBottom: "1px solid var(--ink-200)",
+            }}
+          >
+            <span>产品</span>
+            {isDesktop && <span>客户</span>}
+            {isDesktop && <span style={{ textAlign: "right" }}>本月成本</span>}
+            {isDesktop && <span style={{ textAlign: "right" }}>本月收入</span>}
+            <span style={{ textAlign: "right" }}>毛利率</span>
+          </div>
+          {costBreakdown.byProduct.map((p) => {
+            const pct = parseFloat(p.margin);
+            const isLow = pct < 32;
+            return (
+              <div
+                key={p.product}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 90px" : "1fr 100px",
+                  padding: "10px 12px",
+                  borderTop: "1px solid var(--ink-50)",
+                  fontSize: 11.5,
+                  color: "var(--ink-800)",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{p.product}</span>
+                {isDesktop && <span style={{ color: "var(--ink-600)" }}>{p.customer}</span>}
+                {isDesktop && (
+                  <span
+                    style={{
+                      textAlign: "right",
+                      fontFamily: "ui-monospace, monospace",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {p.cost.toLocaleString()}
+                  </span>
+                )}
+                {isDesktop && (
+                  <span
+                    style={{
+                      textAlign: "right",
+                      fontFamily: "ui-monospace, monospace",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {p.revenue.toLocaleString()}
+                  </span>
+                )}
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 800,
+                    color: isLow ? "var(--warn-700)" : "var(--ok-700)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {p.margin}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <SignatureRow />
+    </div>
+  );
+}
+
+/* ============== 折旧台账视图 (iter 20 · 附件需求 6 "折旧") ============== */
+
+function DepreciationLedgerView() {
+  const isDesktop = useIsDesktop();
+  return (
+    <div className="card" style={{ padding: 20 }}>
+      <AIDraftBanner draft={depreciationLedger.aiDraft} confirmedBy={depreciationLedger.confirmedBy} />
+
+      <div style={{ marginTop: 14, marginBottom: 14, textAlign: "center" }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: "var(--ink-900)", letterSpacing: "0.12em" }}>
+          固定资产折旧台账
+        </div>
+        <div
+          style={{
+            fontSize: 10.5,
+            color: "var(--ink-500)",
+            marginTop: 4,
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+          }}
+        >
+          (打通资产负债表 行 39/40/41 + 成本拆分 折旧子项)
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginTop: 10,
+            fontSize: 11.5,
+            color: "var(--ink-700)",
+            borderBottom: "1px solid var(--ink-200)",
+            paddingBottom: 6,
+          }}
+        >
+          <span>
+            <strong style={{ color: "var(--ink-800)" }}>编制单位：</strong>
+            {COMPANY_NAME}　　{depreciationLedger.period}
+          </span>
+          <span style={{ color: "var(--ink-500)" }}>单位：元 (¥)</span>
+        </div>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 11.5,
+            fontFamily: "var(--font)",
+            border: "1px solid var(--ink-200)",
+            borderRadius: 8,
+            overflow: "hidden",
+          }}
+        >
+          <thead>
+            <tr style={{ background: "var(--surface-2)" }}>
+              <DepTh>资产名称</DepTh>
+              <DepTh>类别</DepTh>
+              <DepTh align="right">原值</DepTh>
+              <DepTh align="right">年限</DepTh>
+              {isDesktop && <DepTh align="right">残值率</DepTh>}
+              {isDesktop && <DepTh align="right">期初累计</DepTh>}
+              <DepTh align="right">本月折旧</DepTh>
+              <DepTh align="right">期末累计</DepTh>
+              <DepTh align="right">净值</DepTh>
+            </tr>
+          </thead>
+          <tbody>
+            {depreciationLedger.items.map((it) => (
+              <tr key={it.name} style={{ borderTop: "1px solid var(--ink-50)" }}>
+                <DepTd bold>{it.name}</DepTd>
+                <DepTd>
+                  <span
+                    className="pill"
+                    style={{
+                      background: "var(--surface-2)",
+                      color: "var(--ink-700)",
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {it.category}
+                  </span>
+                </DepTd>
+                <DepTd align="right" mono>
+                  {it.originalValue.toLocaleString()}
+                </DepTd>
+                <DepTd align="right" mono>
+                  {it.usefulLife} 年
+                </DepTd>
+                {isDesktop && (
+                  <DepTd align="right" mono>
+                    {it.salvageRate}%
+                  </DepTd>
+                )}
+                {isDesktop && (
+                  <DepTd align="right" mono>
+                    {it.accumDepBegin.toLocaleString()}
+                  </DepTd>
+                )}
+                <DepTd align="right" mono bold style={{ color: "var(--warn-700)" }}>
+                  {it.monthlyDep.toLocaleString()}
+                </DepTd>
+                <DepTd align="right" mono>
+                  {it.accumDepEnd.toLocaleString()}
+                </DepTd>
+                <DepTd align="right" mono bold>
+                  {it.netValue.toLocaleString()}
+                </DepTd>
+              </tr>
+            ))}
+            {/* 合计行 */}
+            <tr
+              style={{
+                background: "var(--brand-100)",
+                borderTop: "2px solid var(--ink-200)",
+                fontWeight: 800,
+              }}
+            >
+              <DepTd bold>合计 = 资产负债表对账</DepTd>
+              <DepTd>—</DepTd>
+              <DepTd align="right" mono bold style={{ color: "var(--brand-700)" }}>
+                {depreciationLedger.totalOriginal.toLocaleString()}
+              </DepTd>
+              <DepTd>—</DepTd>
+              {isDesktop && <DepTd>—</DepTd>}
+              {isDesktop && (
+                <DepTd align="right" mono bold style={{ color: "var(--brand-700)" }}>
+                  8,540,000
+                </DepTd>
+              )}
+              <DepTd align="right" mono bold style={{ color: "var(--brand-700)" }}>
+                {depreciationLedger.totalMonthlyDep.toLocaleString()}
+              </DepTd>
+              <DepTd align="right" mono bold style={{ color: "var(--brand-700)" }}>
+                {depreciationLedger.totalAccumDepEnd.toLocaleString()}
+              </DepTd>
+              <DepTd align="right" mono bold style={{ color: "var(--brand-700)" }}>
+                {depreciationLedger.totalNetValue.toLocaleString()}
+              </DepTd>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* 对账提示条 */}
+      <div
+        style={{
+          marginTop: 14,
+          padding: "10px 14px",
+          borderRadius: 10,
+          background: "var(--ok-100)",
+          border: "1px solid #c7e4d2",
+          fontSize: 11.5,
+          color: "var(--ok-700)",
+          lineHeight: 1.6,
+        }}
+      >
+        <strong>✓ 与资产负债表自洽：</strong>
+        原值合计 <strong>26,800,000 元</strong> = 行 39 固定资产原价 ·
+        期末累计折旧 <strong>8,800,000 元</strong> = 行 40 累计折旧 期末 ·
+        净值合计 <strong>18,000,000 元</strong> = 行 41 固定资产净值 期末 ·
+        本月折旧 <strong>260,000 元</strong> = 已结转至 损益表 营业成本 (折旧子项)。
+      </div>
+
+      <SignatureRow />
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 11.5,
+        fontWeight: 700,
+        color: "var(--jintai-green-dark)",
+        marginBottom: 6,
+        letterSpacing: "0.04em",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DepTh({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align?: "right" | "center";
+}) {
+  return (
+    <th
+      style={{
+        padding: "8px 10px",
+        textAlign: align ?? "left",
+        fontSize: 10.5,
+        fontWeight: 700,
+        color: "var(--ink-500)",
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function DepTd({
+  children,
+  align,
+  mono,
+  bold,
+  style,
+}: {
+  children: React.ReactNode;
+  align?: "right";
+  mono?: boolean;
+  bold?: boolean;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <td
+      style={{
+        padding: "8px 10px",
+        textAlign: align ?? "left",
+        color: bold ? "var(--ink-900)" : "var(--ink-800)",
+        fontFamily: mono ? "ui-monospace, monospace" : "var(--font)",
+        fontWeight: bold ? 700 : 500,
+        fontVariantNumeric: "tabular-nums",
+        ...style,
+      }}
+    >
+      {children}
+    </td>
   );
 }

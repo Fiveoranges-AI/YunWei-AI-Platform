@@ -2,14 +2,16 @@ import { useEffect, useState } from "react";
 import { getJintaiProcessParameter, listJintaiFlowCards } from "../../api/jintai";
 import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
-import { flowCards, processParameter } from "./data";
-import type { FlowCard, FlowStep, ProcessParameter } from "./data";
+import { batchRecipes, flowCards, processParameter } from "./data";
+import type { BatchRecipe, FlowCard, FlowStep, ProcessParameter } from "./data";
 import { JintaiRiskBadge, JintaiStatusBadge, JintaiSourceCitation } from "./components";
 
-type Tab = "A" | "B" | "C";
+type Tab = "A" | "B" | "C" | "D";
 
+// iter 20: 新增 D · 配料单 (打通附件需求 5 "配方或配料清单（关联库存原料）")
 const TABS: { id: Tab; label: string; sub: string }[] = [
   { id: "A", label: "A · 生产流转单", sub: "成型 / 烧结 / 检包" },
+  { id: "D", label: "D · 配料单", sub: "配方 + 库存联动" },
   { id: "B", label: "B · 工艺单 / 参数", sub: "配方 · 曲线 · 标准" },
   { id: "C", label: "C · 出货 / 入库", sub: "成品入库 · 出货" },
 ];
@@ -83,8 +85,270 @@ export function JintaiProductionTabs() {
       </div>
 
       {tab === "A" && <FlowCardPanel flowCards={cards} />}
+      {tab === "D" && <BatchRecipePanel recipes={batchRecipes} />}
       {tab === "B" && <ProcessParameterPanel processParameter={parameter} />}
       {tab === "C" && <ShippingPanel />}
+    </div>
+  );
+}
+
+/* ---------- Tab D: 配料单 (iter 20 · 附件需求 5) ---------- */
+
+function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
+  const [idx, setIdx] = useState(0);
+  const r = recipes[idx] ?? recipes[0];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* 配料单切换 */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11.5, color: "var(--ink-500)", fontWeight: 600 }}>
+          示例配料单：
+        </span>
+        {recipes.map((rec, i) => {
+          const active = i === idx;
+          return (
+            <button
+              key={rec.recipeNo}
+              onClick={() => setIdx(i)}
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                borderRadius: 8,
+                border: `1px solid ${active ? "var(--brand-500)" : "var(--ink-200)"}`,
+                background: active ? "var(--brand-100)" : "var(--surface)",
+                color: active ? "var(--brand-700)" : "var(--ink-700)",
+                cursor: "pointer",
+                fontWeight: active ? 600 : 500,
+              }}
+            >
+              {rec.recipeNo} · {rec.customer}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="card" style={{ padding: 18 }}>
+        {/* AI 草稿条 */}
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "var(--ai-100)",
+            border: "1px solid #bddff3",
+            marginBottom: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            fontSize: 11.5,
+          }}
+        >
+          <span
+            style={{
+              padding: "3px 9px",
+              borderRadius: 5,
+              background: "var(--ai-500)",
+              color: "#fff",
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+            }}
+          >
+            ✨ {r.source}
+          </span>
+          <span style={{ color: "var(--ink-700)" }}>
+            ← 关联生产流转单 <strong>{r.flowCardNo}</strong> · 本批材料成本{" "}
+            <strong>¥{r.totalMaterialCost.toLocaleString()}</strong>
+          </span>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 11,
+              color: "var(--ok-700)",
+              fontWeight: 600,
+            }}
+          >
+            ✓ {r.approver} · {r.mixedAt ?? "待领料"}
+          </span>
+        </div>
+
+        {/* 配料单表头 */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--ink-900)" }}>
+            {r.recipeNo} · {r.product}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 3 }}>
+            {r.spec} · {r.customer} · 本批 {r.batchSize.toLocaleString()} {r.batchUnit} · 操作人 {r.operator}
+          </div>
+          {r.note && (
+            <div style={{ fontSize: 11.5, color: "var(--ink-600)", marginTop: 4, fontStyle: "italic" }}>
+              {r.note}
+            </div>
+          )}
+        </div>
+
+        {/* 配方明细表 */}
+        <div style={{ border: "1px solid var(--ink-200)", borderRadius: 8, overflow: "hidden" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.4fr 1.2fr 70px 110px 110px 110px 130px",
+              background: "var(--surface-2)",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--ink-700)",
+              letterSpacing: "0.04em",
+              padding: "8px 12px",
+              borderBottom: "1px solid var(--ink-200)",
+            }}
+          >
+            <span>原料名称</span>
+            <span>规格</span>
+            <span style={{ textAlign: "right" }}>配比</span>
+            <span style={{ textAlign: "right" }}>本批用量</span>
+            <span style={{ textAlign: "right" }}>单价 (元)</span>
+            <span style={{ textAlign: "right" }}>金额 (元)</span>
+            <span style={{ textAlign: "right" }}>库存余量 (kg)</span>
+          </div>
+          {r.ingredients.map((ing) => {
+            const amount = ing.batchQty * ing.unitCost;
+            return (
+              <div
+                key={ing.materialName}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.4fr 1.2fr 70px 110px 110px 110px 130px",
+                  padding: "9px 12px",
+                  borderTop: "1px solid var(--ink-50)",
+                  fontSize: 11.5,
+                  background: ing.shortage ? "var(--warn-100)" : undefined,
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontWeight: 700, color: "var(--ink-900)" }}>{ing.materialName}</span>
+                <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--ink-700)" }}>
+                  {ing.spec}
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    color: "var(--ink-700)",
+                  }}
+                >
+                  {ing.ratio.toFixed(1)}%
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    color: "var(--ink-900)",
+                  }}
+                >
+                  {ing.batchQty.toLocaleString()} kg
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    color: "var(--ink-700)",
+                  }}
+                >
+                  {ing.unitCost.toFixed(2)}
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    color: "var(--ink-900)",
+                  }}
+                >
+                  {amount.toLocaleString()}
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    color: ing.shortage ? "var(--warn-700)" : "var(--ok-700)",
+                  }}
+                >
+                  {ing.shortage ? "⚠ " : "✓ "}
+                  {ing.stockBalance.toLocaleString()}
+                  {ing.shortage && (
+                    <div style={{ fontSize: 10, marginTop: 2 }}>
+                      缺 {(ing.batchQty - ing.stockBalance).toLocaleString()} kg
+                    </div>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {/* 合计行 */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "3.6fr 110px 110px 240px",
+              padding: "10px 12px",
+              borderTop: "2px solid var(--ink-200)",
+              background: "var(--brand-100)",
+              fontSize: 12.5,
+              fontWeight: 800,
+              color: "var(--brand-700)",
+              alignItems: "center",
+            }}
+          >
+            <span>本批材料成本合计</span>
+            <span>—</span>
+            <span style={{ textAlign: "right" }}>—</span>
+            <span
+              style={{
+                textAlign: "right",
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              ¥ {r.totalMaterialCost.toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {/* 库存关联提示条 */}
+        <div
+          style={{
+            marginTop: 14,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: r.ingredients.some((i) => i.shortage)
+              ? "var(--warn-100)"
+              : "var(--ok-100)",
+            border: `1px solid ${
+              r.ingredients.some((i) => i.shortage) ? "#f1d4a6" : "#c7e4d2"
+            }`,
+            fontSize: 11.5,
+            color: r.ingredients.some((i) => i.shortage)
+              ? "var(--warn-700)"
+              : "var(--ok-700)",
+            lineHeight: 1.6,
+          }}
+        >
+          <strong>← 已关联库存台账 (采购 tab):</strong>{" "}
+          {r.ingredients.some((i) => i.shortage) ? (
+            <>
+              本批配料有 <strong>1 项</strong>{" "}
+              库存不足 ({r.ingredients.find((i) => i.shortage)?.materialName} 缺{" "}
+              {(
+                (r.ingredients.find((i) => i.shortage)?.batchQty ?? 0) -
+                (r.ingredients.find((i) => i.shortage)?.stockBalance ?? 0)
+              ).toLocaleString()}{" "}
+              kg)，AI 已自动触发申购单草稿，待采购张主管审批。
+            </>
+          ) : (
+            <>本批所有原料库存充足，可立即领料投产。</>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

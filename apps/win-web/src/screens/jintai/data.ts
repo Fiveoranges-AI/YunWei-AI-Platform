@@ -487,26 +487,6 @@ export const presetQuestions: AIBlock[] = [
     ],
   },
   {
-    question: "本月哪些订单存在延期风险？影响多少金额？",
-    verdict:
-      "当前 3 单存在延期风险，影响金额合计约 ¥456 万。其中 1 单高风险（容百 SO-2026-001 烧结紧张 ¥327.6 万），1 单中风险（横店东磁 SO-2026-002 工艺参数待确认 ¥105.75 万），1 单低风险（风华高科 SO-2026-003 客户图纸未到 ¥22 万）。",
-    details: [
-      { key: "高风险", value: "SO-2026-001 · 容百锂电 · 承烧板 · 06-20 交期 · 烧结紧张 · ¥327.6 万" },
-      { key: "中风险", value: "SO-2026-002 · 横店东磁 · 氧化铝匣钵 · 工艺参数待确认 · ¥105.75 万" },
-      { key: "低风险", value: "SO-2026-003 · 风华高科 · MLCC 承烧板 · 客户图纸未到 · ¥22 万" },
-    ],
-    evidence: [
-      { kind: "生产流转单", label: "ZC-2026-015" },
-      { kind: "合同", label: "SO-2026-001 / 002 / 003" },
-      { kind: "微信", label: "风华高科 · 张工 · 昨天" },
-    ],
-    next: [
-      "优先处理 SO-2026-001 烧结进度，今日内确认是否切换备用窑。",
-      "技术与销售对齐 SO-2026-002 抗热震配方变更（v2.3 → v2.4）。",
-      "今日跟进 SO-2026-003 风华高科客户图纸归档。",
-    ],
-  },
-  {
     question: "梭式窑 SK-02 这周烧了哪些产品？不良率多少？",
     verdict:
       "近 7 天梭式窑 SK-02 共完成 5 批次烧结（LB-1580 / LB-1620 两类曲线），合计 64,200 块/个产品，平均不良率 2.1%。其中 1 批次（容百锂电 ZC-2026-011）出现轻微翘曲超差 4 件，已闭环挑选。本周窑炉利用率 92%。",
@@ -525,62 +505,6 @@ export const presetQuestions: AIBlock[] = [
       "查看 ZC-2026-011 翘曲偏高原因（4 件均位于窑车上层，怀疑温场不均）。",
       "下周排产时关注 LB-1580 装窑数量是否偏多，建议每车 ≤ 380 块。",
     ],
-  },
-  {
-    question: "刚玉莫来石承烧板近 30 天不良率怎么样？",
-    verdict:
-      "近 30 天刚玉莫来石承烧板（330×330×16 容百规格）累计生产 4 批共 72,400 块，整体不良率 2.06%，较上月（2.45%）下降 0.39 个百分点。主要不良项：翘曲超差 36%、边角小掉块 27%、黑斑 18%、显气孔率偏高 11%。",
-    details: [
-      { key: "总产", value: "72,400 块 / 4 批次" },
-      { key: "整体不良率", value: "2.06%（上月 2.45%）" },
-      { key: "翘曲超差", value: "占不良的 36%" },
-      { key: "边角小掉块", value: "占不良的 27%" },
-      { key: "黑斑", value: "占不良的 18%" },
-      { key: "显气孔率偏高", value: "占不良的 11%（疑似坯体密度不稳）" },
-    ],
-    evidence: [
-      { kind: "生产流转单", label: "ZC-2026-010 ~ 014" },
-      { kind: "工艺单", label: "刚玉莫来石承烧板 v2.3" },
-    ],
-    next: [
-      "检查近 30 天电熔白刚玉供应商批次（怀疑 0521 批粒度分布偏粗，影响坯体密度）。",
-      "翘曲超差集中在窑车上层，建议下批次调整装窑高度限制至 380 块/车。",
-    ],
-  },
-  {
-    question: "容百锂电今年下了多少单？还有没付的吗？",
-    verdict:
-      "容百锂电 2026 年 1–5 月共下 5 单刚玉莫来石承烧板，合计 ¥1,418 万。已付 ¥1,063.5 万（4 单结清 + SO-2026-001 首付 30%），剩余 ¥354.5 万：SO-2026-001 尾款按 60/10 分两笔，发货 60 天后 ¥196.56 万、验收 90 天后 ¥32.76 万。",
-    details: [
-      { key: "订单数", value: "5 单 · 全部为 330×330×16 承烧板" },
-      { key: "合同金额", value: "¥1,418 万（年化估计 ¥3,400+ 万）" },
-      { key: "已收款", value: "¥1,063.5 万（4 单已结清）" },
-      { key: "在途订单", value: "SO-2026-001 ¥327.6 万（首付已收）" },
-      { key: "下一笔账期", value: "2026-08-19（发货 60 天后）¥196.56 万" },
-    ],
-    evidence: [
-      { kind: "合同", label: "容百锂电_承烧板采购合同_2026Q2.pdf" },
-      { kind: "合同", label: "容百锂电_历史订单 4 份" },
-    ],
-    next: [
-      "销售王经理跟进 SO-2026-001 发货前的客户验收节奏，确认 60 天账期起算日。",
-      "本周内联系容百 SQE 王工，确认 Q3 是否追加 25,000 块订单（电话中已口头提及）。",
-    ],
-  },
-  {
-    question: "本周要给哪几个客户主动汇报进度？",
-    verdict:
-      "建议本周优先向 3 个客户主动报进度：容百锂电（SO-2026-001 烧结进度 + 交期预警）、横店东磁（SO-2026-002 抗热震配方变更确认）、风华高科（SO-2026-003 MLCC 承烧板图纸催复）。",
-    details: [
-      { key: "容百锂电", value: "06-20 交期 · 烧结进度同步 · 预警可能晚 1 天" },
-      { key: "横店东磁", value: "请客户确认是否接受 v2.4 抗热震配方变更" },
-      { key: "风华高科", value: "请客户尽快提交 MLCC 承烧板最新版图纸（含通气孔坐标）" },
-    ],
-    evidence: [
-      { kind: "生产流转单", label: "ZC-2026-015" },
-      { kind: "合同", label: "横店东磁 / 风华高科 订单" },
-    ],
-    next: ["销售今日内分别发出 3 条客户进度通知（建议附 1 张烧结实时照片给容百）。"],
   },
   /* ---- 财务 + 采购预设问题 (Iter 8/9) ---- */
   {
@@ -666,32 +590,9 @@ export const presetQuestions: AIBlock[] = [
       "宜兴蓝海距离近、关系长，可提前 3 天主动结清以维护应急加急通道。",
     ],
   },
-  /* ---- 经营日报预设问题 (Iter 11) ---- */
-  {
-    question: "今日经营日报怎么写的？哪些重点？",
-    verdict:
-      "2026-05-18（周一）经营日报 AI 07:55 已自动生成，标记 1 红 / 2 黄 / 4 行动。最该关注 3 件事：① 容百 SC-2026-016 烧结晚 2 天影响 06-20 交期（高风险） ② 王会计 5 月三表 1,189,000 净利润已生成等您看一眼 ③ α 氧化铝粉本批涨价 6.7%（中风险）。完整版在「📅 经营日报」tab。",
-    details: [
-      { key: "今日要事", value: "销售 1 / 财务 1 / 生产 2 / 采购 1 / 风险 1" },
-      { key: "财务", value: "今日回款 ¥1,200,000 · 月累计 ¥4,800,000 · 货币资金 ¥8,200,000" },
-      { key: "生产", value: "进行中 12 张 · 今日完成 2 张 · 延期风险 1 单" },
-      { key: "采购", value: "今日入库 α 氧化铝粉 ¥96,000 · 在途莫来石 5-22 到 · 1 笔账期超期" },
-      { key: "客户", value: "跟进容百王主管 · 新询盘宁波锂电 12,000 件 · 风华 -15%" },
-      { key: "AI 建议", value: "4 个行动 · 上午 9:00 优先电话容百车间确认 SC-2026-016 进度" },
-    ],
-    evidence: [
-      { kind: "Excel", label: "经营日报 2026-05-18 · AI 草稿" },
-      { kind: "生产流转单", label: "SC-2026-015 / 016 / 017" },
-      { kind: "合同", label: "容百 + 横店 + 风华 5 月订单合计" },
-    ],
-    next: [
-      "上午 9:00 给容百锂电王主管去电（高风险跟进）",
-      "上午 10:30 和王会计 review 5 月三表（财务一签）",
-      "下午 14:00 对采购小李，山东中铝 6 月行情 + 锁价决策",
-    ],
-  },
 ];
 
+// iter 20 精简：8 → 4 条最核心 (其余卡的"AI 先填、人确认"信号已散布在各 tab 的 AIDraftBanner + DataSourceTag + 三表自洽提示中,这里只做兜底)
 export const trustItems = [
   {
     title: "数据来源 100% 可追溯",
@@ -699,31 +600,15 @@ export const trustItems = [
   },
   {
     title: "AI 不直接写入业务数据",
-    body: "AI 抽取后先生成「待确认草稿」，必须由对应业务人员（销售 / 生产 / 检验）审核后才会进入正式订单 / 生产流转单。",
+    body: "AI 抽取后先生成「待确认草稿」，必须由对应业务人员（销售 / 生产 / 财务）审核后才会进入正式订单 / 流转单 / 凭证。",
   },
   {
     title: "财务三表绝不被 AI 修改",
-    body: "资产负债表 / 损益表 / 现金流量表 全程 AI 只生成草稿，财务总监 + 王会计双签确认后才入账，不接管任何凭证修改权限。",
-  },
-  {
-    title: "财务级双签 · 银行级加密",
-    body: "采购付款、应收冲账、报表确认 全部要求双人复核 + AES-256 端到端加密 + 操作日志可导出审计。",
+    body: "资产负债表 / 利润及利润分配表 / 现金流量表 全程 AI 只生成草稿，王会计 + 财务总监双签确认后才入账，不接管任何凭证修改权限。",
   },
   {
     title: "每条字段都有置信度",
     body: "置信度低于 85% 的字段会高亮提示（如手写操作人姓名 / 印章遮挡的税率），提醒人工重点检查。",
-  },
-  {
-    title: "原始资料原样保存",
-    body: "合同 PDF、纸质流转单照片、Excel 原件、微信截图都按客户 / 订单挂载留档，便于追溯与 ISO9001 审计。",
-  },
-  {
-    title: "权限可控",
-    body: "销售、成型、烧成、检包、老板分别看到自己关心的视图；老板视图默认只读，避免误操作。",
-  },
-  {
-    title: "工艺参数沉淀为可问数据",
-    body: "工艺单录入后，老板可以用中文查询历史配方、烧成曲线、不良率，不再翻 Excel 找 LB-1580 上次哪批最稳。",
   },
 ];
 
@@ -1077,6 +962,218 @@ const cashFlowStatement: CashFlowStatement = {
 
 export const financeReports: FinanceReport[] = [balanceSheet, incomeStatement, cashFlowStatement];
 
+/* ---------- 成本拆分 (iter 20 · 补附件需求 6 "统计成本：材料、水电气、工资等") ----------
+ * 损益表 行 2 主营业务成本 本月 4,420,000 元 = 直接材料 + 直接人工 + 水电气能耗 + 折旧 + 制造费用
+ * 折旧 260,000 ↔ depreciationLedger 月折合计 ↔ 资产负债表 行 40 累计折旧 期初→期末增量
+ * 数据来源：AI 从 入库/出库单 (材料) + 工资表 + 水电气抄表 + 折旧台账 自动归集
+ */
+
+export type CostType = {
+  key: string;
+  label: string;
+  amount: number; // 元
+  pct: number; // 占比
+  source: string; // 数据来源
+  trend: string; // 环比
+};
+
+export type CostByProduct = {
+  product: string;
+  customer: string;
+  cost: number;
+  revenue: number;
+  margin: string; // 毛利率
+};
+
+export const costBreakdown: {
+  period: string;
+  totalCost: number;
+  byType: CostType[];
+  byProduct: CostByProduct[];
+  aiDraft: string;
+  confirmedBy: string;
+} = {
+  period: "2026 年 5 月",
+  totalCost: 4_420_000,
+  byType: [
+    {
+      key: "material",
+      label: "直接材料",
+      amount: 3_160_000,
+      pct: 71.5,
+      source: "采购入库单 + 出库领料单 (AI 自动汇总)",
+      trend: "环比 +4.2% · 主因 α 氧化铝粉 +6.7%",
+    },
+    {
+      key: "labor",
+      label: "直接人工 (工资)",
+      amount: 650_000,
+      pct: 14.7,
+      source: "本月工资表 · 一线员工 38 人 (AI OCR)",
+      trend: "环比 +1.5% · 烧成班加班",
+    },
+    {
+      key: "energy",
+      label: "水电气能耗",
+      amount: 230_000,
+      pct: 5.2,
+      source: "电表/水表/天然气抄表 (AI 月初自动抄录)",
+      trend: "环比 −3.1% · 4 月窑炉检修期高",
+    },
+    {
+      key: "depreciation",
+      label: "折旧",
+      amount: 260_000,
+      pct: 5.9,
+      source: "折旧台账 (AI 按月自动计提)",
+      trend: "环比 持平",
+    },
+    {
+      key: "overhead",
+      label: "制造费用",
+      amount: 120_000,
+      pct: 2.7,
+      source: "车间杂费 / 工装模具摊销 (AI 归集)",
+      trend: "环比 −5.0%",
+    },
+  ],
+  byProduct: [
+    {
+      product: "刚玉莫来石承烧板 330×330",
+      customer: "容百锂电",
+      cost: 2_077_000,
+      revenue: 3_200_000,
+      margin: "35.1%",
+    },
+    {
+      product: "氧化铝匣钵 300×220",
+      customer: "横店东磁",
+      cost: 1_149_000,
+      revenue: 1_800_000,
+      margin: "36.2%",
+    },
+    {
+      product: "堇青石莫来石承烧板 260×260 (MLCC)",
+      customer: "风华高科",
+      cost: 663_000,
+      revenue: 950_000,
+      margin: "30.2%",
+    },
+    {
+      product: "其他 (碳化硅推板 + 小批量)",
+      customer: "厦钨 + 散客",
+      cost: 531_000,
+      revenue: 850_000,
+      margin: "37.5%",
+    },
+  ],
+  aiDraft:
+    "AI 已从 5 张采购入库单 + 6 张出库领料单 + 工资表 + 水电气抄表 + 折旧台账 自动归集本月主营业务成本 4,420,000 元，并按 5 类成本 + 4 类产品双维度拆解。横店东磁匣钵 (毛利 36.2%) 受电熔白刚玉涨价压力较大；风华 MLCC 承烧板 (毛利 30.2%) 偏低需关注。",
+  confirmedBy: "财务 · 王会计 · 2026-05-17 09:55 复核确认",
+};
+
+/* ---------- 折旧台账 (iter 20 · 补附件需求 6 "折旧") ----------
+ * 5 项固定资产汇总：原值 26,800,000 ↔ 资产负债表 行 39 期末
+ * 期末累计折旧 8,800,000 ↔ 资产负债表 行 40 期末
+ * 月折合计 260,000 ↔ costBreakdown 折旧 ↔ 资产负债表 行 40 期初→期末增量 (8,540 → 8,800)
+ * 净值合计 18,000,000 ↔ 资产负债表 行 41 / 行 43 / 行 50 期末
+ */
+
+export type DepreciationAsset = {
+  name: string;
+  category: "厂房" | "窑炉设备" | "成型设备" | "粉磨混炼" | "辅助设备";
+  originalValue: number; // 原值
+  usefulLife: number; // 年限
+  salvageRate: number; // 残值率 %
+  monthsInUse: number; // 已用月数
+  accumDepBegin: number; // 期初累计折旧
+  monthlyDep: number; // 本月折旧
+  accumDepEnd: number; // 期末累计折旧
+  netValue: number; // 净值
+};
+
+export const depreciationLedger: {
+  period: string;
+  items: DepreciationAsset[];
+  totalOriginal: number;
+  totalAccumDepEnd: number;
+  totalMonthlyDep: number;
+  totalNetValue: number;
+  aiDraft: string;
+  confirmedBy: string;
+} = {
+  period: "2026 年 5 月",
+  totalOriginal: 26_800_000,
+  totalAccumDepEnd: 8_800_000,
+  totalMonthlyDep: 260_000,
+  totalNetValue: 18_000_000,
+  items: [
+    {
+      name: "厂房 (砖混结构 + 配套)",
+      category: "厂房",
+      originalValue: 8_500_000,
+      usefulLife: 20,
+      salvageRate: 0,
+      monthsInUse: 70,
+      accumDepBegin: 2_464_583,
+      monthlyDep: 35_417,
+      accumDepEnd: 2_500_000,
+      netValue: 6_000_000,
+    },
+    {
+      name: "烧成窑炉群 (梭式窑 SK-02/03 + 老窑)",
+      category: "窑炉设备",
+      originalValue: 7_800_000,
+      usefulLife: 8,
+      salvageRate: 0,
+      monthsInUse: 31,
+      accumDepBegin: 2_713_333,
+      monthlyDep: 86_667,
+      accumDepEnd: 2_800_000,
+      netValue: 5_000_000,
+    },
+    {
+      name: "等静压成型机 IP-03 / IP-04",
+      category: "成型设备",
+      originalValue: 5_800_000,
+      usefulLife: 8,
+      salvageRate: 0,
+      monthsInUse: 28,
+      accumDepBegin: 1_835_556,
+      monthlyDep: 64_444,
+      accumDepEnd: 1_900_000,
+      netValue: 3_900_000,
+    },
+    {
+      name: "振动成型机 ZD-01/02 + 球磨混炼线",
+      category: "粉磨混炼",
+      originalValue: 2_900_000,
+      usefulLife: 6,
+      salvageRate: 0,
+      monthsInUse: 22,
+      accumDepBegin: 909_722,
+      monthlyDep: 40_278,
+      accumDepEnd: 950_000,
+      netValue: 1_950_000,
+    },
+    {
+      name: "检包设备 + 厂内运输 + 办公",
+      category: "辅助设备",
+      originalValue: 1_800_000,
+      usefulLife: 4.5,
+      salvageRate: 5,
+      monthsInUse: 18,
+      accumDepBegin: 616_806,
+      monthlyDep: 33_194,
+      accumDepEnd: 650_000,
+      netValue: 1_150_000,
+    },
+  ],
+  aiDraft:
+    "AI 按月自动计提 5 类固定资产折旧，本月计提 260,000 元 → 已自动结转到 损益表 营业成本 (折旧子项) + 资产负债表 累计折旧 (期初 8,540,000 → 期末 8,800,000)。烧成窑炉群是折旧主头 (月折 86,667 元 33%)，反映出锦泰耐火行业重资产特征。",
+  confirmedBy: "财务 · 王会计 · 2026-05-17 09:58 复核确认",
+};
+
 /* ===========================================================================
  *  采购模块 (Iter 9)
  *
@@ -1297,6 +1394,148 @@ export const purchaseInboxCards: PurchaseInboxCard[] = [
       { key: "匹配订单", value: "PO-2026-005" },
     ],
     suggestedAction: "建议：人工补充税率（推测 13%）→ 重新生成应付凭证；或退回供应商重开发票",
+  },
+];
+
+/* ===========================================================================
+ *  配料单 (iter 20 · 补附件需求 5 "配方或配料清单（关联库存原料）")
+ *
+ *  打通"配料单 → 库存原料"显式链路:
+ *    · 每张配料单关联一张生产流转单 (ZC-2026-xxx)
+ *    · 配方按真实耐火配比 (α 氧化铝 / 莫来石 / 电熔白刚玉 / 结合剂)
+ *    · 本批用量自动从 stockLedgers 取库存余量并校验是否够用
+ * ========================================================================= */
+
+export type RecipeIngredient = {
+  /** 关联 stockLedgers.rows.name (用于库存联动) */
+  materialName: string;
+  spec: string;
+  ratio: number; // 配比 %
+  batchQty: number; // 本批需求 kg
+  unitCost: number; // 单价 元/kg
+  /** 库存可用余量 (从 stockLedgers 取数,展示时动态计算) */
+  stockBalance: number;
+  /** 缺料预警: 本批需求 > 库存余量 */
+  shortage?: boolean;
+};
+
+export type BatchRecipe = {
+  recipeNo: string;
+  flowCardNo: string; // 关联生产流转单 (ZC-xxx)
+  product: string;
+  spec: string;
+  customer: string;
+  batchSize: number; // 本批坯体目标重量 kg (或件数 × 单件重)
+  batchUnit: string;
+  status: "已审核" | "待审核" | "已领料";
+  approver?: string;
+  mixedAt?: string; // 已混料时间
+  operator: string;
+  ingredients: RecipeIngredient[];
+  totalMaterialCost: number; // 本批材料成本合计
+  source: "AI 自 工艺单 v2.3 自动套用" | "人工录入";
+  note?: string;
+};
+
+export const batchRecipes: BatchRecipe[] = [
+  {
+    recipeNo: "BL-2026-015",
+    flowCardNo: "ZC-2026-015",
+    product: "刚玉莫来石承烧板",
+    spec: "330×330×16 mm (NCM811 高镍专用)",
+    customer: "容百锂电",
+    batchSize: 18800, // kg 坯体
+    batchUnit: "kg",
+    status: "已领料",
+    approver: "工艺 · 李师傅 · 张主管复核",
+    mixedAt: "2026-06-11 09:20",
+    operator: "成型组 · 张师傅",
+    source: "AI 自 工艺单 v2.3 自动套用",
+    totalMaterialCost: 268_840,
+    note: "用于 SO-2026-001 · 18,000 块承烧板 · 已成型 18,420 块 (含 60 块废坯)",
+    ingredients: [
+      {
+        materialName: "α 氧化铝粉",
+        spec: "CT3000SG · 5N",
+        ratio: 21.3,
+        batchQty: 4000,
+        unitCost: 24.0,
+        stockBalance: 1880,
+      },
+      {
+        materialName: "莫来石骨料",
+        spec: "3–5 mm · M70",
+        ratio: 42.6,
+        batchQty: 8000,
+        unitCost: 9.5,
+        stockBalance: 3560,
+      },
+      {
+        materialName: "电熔白刚玉 (W18)",
+        spec: "刚玉骨料 · 0.5–2 mm",
+        ratio: 31.9,
+        batchQty: 6000,
+        unitCost: 14.0,
+        stockBalance: 1200,
+        shortage: true,
+      },
+      {
+        materialName: "磷酸二氢铝 (结合剂)",
+        spec: "工业级 ≥ 99%",
+        ratio: 4.3,
+        batchQty: 800,
+        unitCost: 38.0,
+        stockBalance: 440,
+      },
+    ],
+  },
+  {
+    recipeNo: "BL-2026-017",
+    flowCardNo: "ZC-2026-017",
+    product: "氧化铝匣钵",
+    spec: "300×220×100 mm",
+    customer: "横店东磁",
+    batchSize: 4200,
+    batchUnit: "kg",
+    status: "已审核",
+    approver: "工艺 · 李师傅 · 张主管复核",
+    operator: "成型组 · 王师傅",
+    source: "AI 自 工艺单 v2.3 自动套用",
+    totalMaterialCost: 58_140,
+    ingredients: [
+      {
+        materialName: "α 氧化铝粉",
+        spec: "CT3000SG · 5N",
+        ratio: 35.7,
+        batchQty: 1500,
+        unitCost: 24.0,
+        stockBalance: 1880,
+      },
+      {
+        materialName: "莫来石骨料",
+        spec: "3–5 mm · M70",
+        ratio: 47.6,
+        batchQty: 2000,
+        unitCost: 9.5,
+        stockBalance: 3560,
+      },
+      {
+        materialName: "硅微粉",
+        spec: "SF965 · D50≈1.5μm",
+        ratio: 11.9,
+        batchQty: 500,
+        unitCost: 6.8,
+        stockBalance: 930,
+      },
+      {
+        materialName: "磷酸二氢铝 (结合剂)",
+        spec: "工业级 ≥ 99%",
+        ratio: 4.8,
+        batchQty: 200,
+        unitCost: 38.0,
+        stockBalance: 440,
+      },
+    ],
   },
 ];
 
