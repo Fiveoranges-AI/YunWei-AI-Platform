@@ -267,22 +267,40 @@ function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
                 >
                   {amount.toLocaleString()}
                 </span>
-                <span
-                  style={{
-                    textAlign: "right",
-                    fontFamily: "ui-monospace, monospace",
-                    fontWeight: 700,
-                    color: ing.shortage ? "var(--warn-700)" : "var(--ok-700)",
-                  }}
-                >
-                  {ing.shortage ? "⚠ " : "✓ "}
-                  {ing.stockBalance.toLocaleString()}
-                  {ing.shortage && (
-                    <div style={{ fontSize: 10, marginTop: 2 }}>
-                      缺 {(ing.batchQty - ing.stockBalance).toLocaleString()} kg
-                    </div>
-                  )}
-                </span>
+                {/* iter 21: 库存覆盖进度条 — 覆盖率 = 库存 ÷ 本批用量 */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <div
+                    style={{
+                      height: 10,
+                      borderRadius: 5,
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--ink-100)",
+                      overflow: "hidden",
+                    }}
+                    title={`库存 ${ing.stockBalance.toLocaleString()} kg · 本批需求 ${ing.batchQty.toLocaleString()} kg`}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(100, (ing.stockBalance / ing.batchQty) * 100)}%`,
+                        background: ing.shortage ? "var(--risk-500)" : "var(--ok-500)",
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 10.5,
+                      fontFamily: "ui-monospace, monospace",
+                      color: ing.shortage ? "var(--risk-700)" : "var(--ok-700)",
+                      fontWeight: 700,
+                      textAlign: "right",
+                    }}
+                  >
+                    {ing.shortage
+                      ? `⚠ 缺 ${(ing.batchQty - ing.stockBalance).toLocaleString()} kg`
+                      : `✓ ${ing.stockBalance.toLocaleString()} kg`}
+                  </div>
+                </div>
               </div>
             );
           })}

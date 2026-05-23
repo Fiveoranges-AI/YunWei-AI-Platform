@@ -854,13 +854,13 @@ function AIDraftBanner({ draft, confirmedBy }: { draft: string; confirmedBy: str
   );
 }
 
-/* AI-native 定位条：脱离金蝶也能跑 */
+/* iter 21: AI-native 定位条精简到 1 行 */
 function AINativeBanner() {
   return (
     <div
       style={{
-        padding: "10px 14px",
-        borderRadius: 10,
+        padding: "8px 14px",
+        borderRadius: 8,
         background:
           "linear-gradient(90deg, rgba(173,30,38,0.04) 0%, rgba(15,69,42,0.06) 50%, rgba(56,138,210,0.06) 100%)",
         border: "1px solid var(--ink-100)",
@@ -873,9 +873,6 @@ function AINativeBanner() {
     >
       <span
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
           padding: "3px 9px",
           borderRadius: 5,
           background: "var(--jintai-red)",
@@ -885,43 +882,85 @@ function AINativeBanner() {
           letterSpacing: "0.06em",
         }}
       >
-        AI-NATIVE 模式
+        AI-NATIVE
       </span>
-      <span style={{ color: "var(--ink-700)", lineHeight: 1.55, flex: 1, minWidth: 280 }}>
-        本套财务三表<strong style={{ color: "var(--jintai-green-dark)" }}>不依赖金蝶</strong>。
-        AI 直接从 发票 / 销售合同 / 入库单 / 银行流水 / 工资表 / 抄表 自动归集 →
-        生成会企小企业准则三表草稿 → 王会计 1 步确认入账。
-        <span style={{ color: "var(--ink-500)" }}>
-          (金蝶科目余额表可作为可选数据源导入 · 不强制 · 共生不替代)
-        </span>
+      <span style={{ color: "var(--ink-700)" }}>
+        本套三表<strong style={{ color: "var(--jintai-green-dark)" }}>不依赖金蝶</strong> ·
+        AI 自 发票/合同/入库/流水/工资/抄表 自动归集 → 王会计 1 步确认。
       </span>
     </div>
   );
 }
 
-const AI_INSIGHTS: Record<ReportId, { headline: string; body: string; suggestion: string }> = {
+/* iter 21: AI 财务洞察长段落 → KPI 大数字 + 1 组成结构条 + 1 句话建议 */
+type InsightSegment = { label: string; value: number; color: string };
+type InsightSpec = {
+  metric: string;
+  metricValue: string;
+  metricUnit: string;
+  trend: string;
+  trendTone: "positive" | "neutral" | "warn";
+  segments: InsightSegment[]; // 横向组成条
+  segmentsLabel: string;
+  suggestion: string;
+};
+const AI_INSIGHTS: Record<ReportId, InsightSpec> = {
   balance: {
-    headline: "资产期末 4,900 万元，三表对账平",
-    body:
-      "期末资产总计 49,000,000 元 = 负债 18,980,000 + 所有者权益 30,020,000，账期平。环比期初 +1,060,000 元，主要来自存货 +380,000 与货币资金 +170,000；应收帐款 12,500,000 仍偏高（容百锂电 5,200,000 + 横店 3,100,000）。",
-    suggestion: "AI 建议：本月底前与容百对接 SO-2026-001 验收回款节奏（下月到期一笔 1,800,000 元），把应收占流动资产从 40.5% 降回 38% 以下。",
+    metric: "期末资产总计",
+    metricValue: "49,000,000",
+    metricUnit: "元",
+    trend: "较月初 +1,060,000 · 账期平",
+    trendTone: "positive",
+    segmentsLabel: "权益结构 (期末)",
+    segments: [
+      { label: "实收资本", value: 10_000_000, color: "var(--brand-700)" },
+      { label: "盈余公积", value: 720_000, color: "var(--brand-500)" },
+      { label: "未分配利润", value: 19_300_000, color: "var(--jintai-green)" },
+    ],
+    suggestion:
+      "本月底前与容百对账 SO-2026-001 验收回款 (下月到期 1,800,000),把应收占流动资产 40.5% 压回 38% 以下。",
   },
   income: {
-    headline: "本月净利润 1,189,000 元，毛利率 35.0%",
-    body:
-      "本月主营收入 6,800,000 元（环比 +8.6%），主营业务利润 2,344,000 元；期间费用 795,000 元控制平稳；本月净利润 1,189,000 元。利润分配段全月未提取盈余公积（5 月留存月份），可供分配利润 19,300,000 元 = 末未分配利润 19,300,000 元（与资产负债表行次 121 一致）。",
-    suggestion: "AI 建议：横店东磁匣钵单价下行 −2.1%，本月毛利率被压低 0.4 个点，可在 Q3 谈判时提示电熔白刚玉 +6.7% 的原料成本压力。",
+    metric: "本月净利润",
+    metricValue: "1,189,000",
+    metricUnit: "元 · 毛利率 35.0%",
+    trend: "营收环比 +8.6% · 期间费用控平",
+    trendTone: "positive",
+    segmentsLabel: "营业收入结构 (本月)",
+    segments: [
+      { label: "容百承烧板", value: 3_200_000, color: "var(--jintai-red)" },
+      { label: "横店匣钵", value: 1_800_000, color: "var(--jintai-red-40)" },
+      { label: "风华 MLCC", value: 950_000, color: "var(--warn-700)" },
+      { label: "其他", value: 850_000, color: "var(--ink-300)" },
+    ],
+    suggestion:
+      "横店匣钵单价 −2.1% 拉低毛利 0.4 个点;Q3 谈判提示电熔白刚玉 +6.7% 的原料成本压力。",
   },
   cashflow: {
-    headline: "经营净流入 +870,000，期末余额 8,200,000",
-    body:
-      "经营活动净流入 870,000 元（容百首付 1,200,000 + 横店尾款 800,000 减原料/工资支出）；投资活动 −200,000 元（等静压辅机升级）；筹资活动 −500,000 元（偿还短期借款）。补充资料中净利润 1,189,000 经 折旧 260,000 + 经营性应收 −700,000 等调节后得 +870,000，与左半呼应。期末现金 8,200,000 = 资产负债表 货币资金 8,200,000。",
-    suggestion: "AI 建议：下月初有 3 张原料采购付款（合计 327,000 元）到期，建议预留 400,000 元经营备用金，并提前催收容百到期 1,800,000 元。",
+    metric: "经营活动净现金流",
+    metricValue: "+870,000",
+    metricUnit: "元 · 期末 8,200,000",
+    trend: "容百首付 1,200K + 横店尾款 800K",
+    trendTone: "positive",
+    segmentsLabel: "三大现金流活动 (本月净额)",
+    segments: [
+      { label: "经营 +870K", value: 870_000, color: "var(--ok-500)" },
+      { label: "投资 −200K", value: 200_000, color: "var(--warn-500)" },
+      { label: "筹资 −500K", value: 500_000, color: "var(--risk-500)" },
+    ],
+    suggestion:
+      "下月初 3 张原料采购付款合计 327,000 到期,建议预留 400,000 备用金 + 提前催容百 1,800,000。",
   },
 };
 
 function AIInsightCard({ reportId }: { reportId: ReportId }) {
   const ins = AI_INSIGHTS[reportId];
+  const trendColor =
+    ins.trendTone === "positive"
+      ? "var(--ok-700)"
+      : ins.trendTone === "warn"
+      ? "var(--warn-700)"
+      : "var(--ink-500)";
   return (
     <div
       className="ai-surface"
@@ -929,7 +968,7 @@ function AIInsightCard({ reportId }: { reportId: ReportId }) {
         padding: 16,
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 12,
       }}
     >
       <div
@@ -946,15 +985,62 @@ function AIInsightCard({ reportId }: { reportId: ReportId }) {
       >
         {I.spark(12)} AI 财务洞察
       </div>
-      <div style={{ fontSize: 13.5, color: "var(--ink-900)", lineHeight: 1.55, fontWeight: 600 }}>
-        {ins.headline}
+
+      {/* KPI 大数字 */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ fontSize: 11.5, color: "var(--ink-500)", fontWeight: 600 }}>{ins.metric}</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+          <span
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: "var(--ink-900)",
+              fontFamily: "ui-monospace, monospace",
+              fontVariantNumeric: "tabular-nums",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {ins.metricValue}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{ins.metricUnit}</span>
+        </div>
+        <div style={{ fontSize: 11, color: trendColor, fontWeight: 500, marginTop: 2 }}>
+          {ins.trend}
+        </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--ink-700)", lineHeight: 1.6 }}>{ins.body}</div>
+
+      {/* 组成结构条 — 自绘 SVG/CSS 堆叠条 */}
+      <div>
+        <div
+          style={{
+            fontSize: 10.5,
+            color: "var(--ink-500)",
+            fontWeight: 600,
+            marginBottom: 5,
+            letterSpacing: "0.04em",
+          }}
+        >
+          {ins.segmentsLabel}
+        </div>
+        <CompositionBar segments={ins.segments} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+          {ins.segments.map((s) => (
+            <span
+              key={s.label}
+              style={{ fontSize: 10.5, color: "var(--ink-600)", display: "inline-flex", alignItems: "center", gap: 4 }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color }} />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* AI 建议 */}
       <div
         style={{
-          marginTop: 4,
-          padding: "10px 12px",
-          borderRadius: 10,
+          padding: "9px 11px",
+          borderRadius: 8,
           background: "rgba(255,255,255,0.7)",
           border: "1px solid #bddff3",
           fontSize: 11.5,
@@ -962,8 +1048,43 @@ function AIInsightCard({ reportId }: { reportId: ReportId }) {
           lineHeight: 1.55,
         }}
       >
+        <strong style={{ color: "var(--ai-700)", marginRight: 4 }}>AI 建议</strong>·{" "}
         {ins.suggestion}
       </div>
+    </div>
+  );
+}
+
+/* iter 21: 横向堆叠组成条 (复用于 AI 洞察 + 成本 + 折旧) */
+function CompositionBar({
+  segments,
+  height = 14,
+}: {
+  segments: { label: string; value: number; color: string }[];
+  height?: number;
+}) {
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+  return (
+    <div
+      style={{
+        display: "flex",
+        height,
+        borderRadius: 4,
+        overflow: "hidden",
+        border: "1px solid var(--ink-100)",
+      }}
+    >
+      {segments.map((s) => (
+        <div
+          key={s.label}
+          style={{
+            flex: s.value,
+            background: s.color,
+            minWidth: s.value > 0 ? 2 : 0,
+          }}
+          title={`${s.label}: ${s.value.toLocaleString()} (${((s.value / total) * 100).toFixed(1)}%)`}
+        />
+      ))}
     </div>
   );
 }
@@ -1038,6 +1159,38 @@ function CostBreakdownView() {
       {/* 第一块：按类型拆分 */}
       <div style={{ marginBottom: 18 }}>
         <SectionLabel>① 按成本要素</SectionLabel>
+
+        {/* iter 21: 5 段堆叠条 — 一眼看比例,而不是读 5 行表 */}
+        <div style={{ marginBottom: 10 }}>
+          <CompositionBar
+            height={20}
+            segments={[
+              { label: "直接材料 71.5%", value: 3_160_000, color: "var(--jintai-red)" },
+              { label: "直接人工 14.7%", value: 650_000, color: "var(--jintai-red-40)" },
+              { label: "水电气 5.2%", value: 230_000, color: "var(--warn-500)" },
+              { label: "折旧 5.9%", value: 260_000, color: "var(--brand-500)" },
+              { label: "制造费用 2.7%", value: 120_000, color: "var(--ink-300)" },
+            ]}
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 }}>
+            {[
+              { label: "直接材料 71.5%", color: "var(--jintai-red)" },
+              { label: "直接人工 14.7%", color: "var(--jintai-red-40)" },
+              { label: "水电气 5.2%", color: "var(--warn-500)" },
+              { label: "折旧 5.9%", color: "var(--brand-500)" },
+              { label: "制造费用 2.7%", color: "var(--ink-300)" },
+            ].map((l) => (
+              <span
+                key={l.label}
+                style={{ fontSize: 10.5, color: "var(--ink-600)", display: "inline-flex", alignItems: "center", gap: 4 }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: l.color }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
         <div style={{ border: "1px solid var(--ink-200)", borderRadius: 8, overflow: "hidden" }}>
           <div
             style={{
@@ -1130,14 +1283,14 @@ function CostBreakdownView() {
         </div>
       </div>
 
-      {/* 第二块：按产品/客户拆分 */}
+      {/* 第二块：按产品/客户拆分 — iter 21: 毛利率改成进度条 */}
       <div>
         <SectionLabel>② 按产品 / 客户 (真实毛利率,金蝶通用件给不出)</SectionLabel>
         <div style={{ border: "1px solid var(--ink-200)", borderRadius: 8, overflow: "hidden" }}>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 90px" : "1fr 100px",
+              gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 1.4fr 60px" : "1fr 60px",
               background: "var(--surface-2)",
               fontSize: 11,
               fontWeight: 700,
@@ -1145,13 +1298,15 @@ function CostBreakdownView() {
               letterSpacing: "0.04em",
               padding: "8px 12px",
               borderBottom: "1px solid var(--ink-200)",
+              gap: 8,
             }}
           >
             <span>产品</span>
             {isDesktop && <span>客户</span>}
             {isDesktop && <span style={{ textAlign: "right" }}>本月成本</span>}
             {isDesktop && <span style={{ textAlign: "right" }}>本月收入</span>}
-            <span style={{ textAlign: "right" }}>毛利率</span>
+            {isDesktop && <span>毛利率 (0 — 45%)</span>}
+            <span style={{ textAlign: "right" }}>%</span>
           </div>
           {costBreakdown.byProduct.map((p) => {
             const pct = parseFloat(p.margin);
@@ -1161,12 +1316,13 @@ function CostBreakdownView() {
                 key={p.product}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 90px" : "1fr 100px",
+                  gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 1.4fr 60px" : "1fr 60px",
                   padding: "10px 12px",
                   borderTop: "1px solid var(--ink-50)",
                   fontSize: 11.5,
                   color: "var(--ink-800)",
                   alignItems: "center",
+                  gap: 8,
                 }}
               >
                 <span style={{ fontWeight: 600 }}>{p.product}</span>
@@ -1192,6 +1348,27 @@ function CostBreakdownView() {
                   >
                     {p.revenue.toLocaleString()}
                   </span>
+                )}
+                {isDesktop && (
+                  <div
+                    style={{
+                      height: 10,
+                      borderRadius: 5,
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--ink-100)",
+                      overflow: "hidden",
+                      position: "relative",
+                    }}
+                    title={`${p.margin} (条满刻度 = 45%)`}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(100, (pct / 45) * 100)}%`,
+                        background: isLow ? "var(--warn-500)" : "var(--ok-500)",
+                      }}
+                    />
+                  </div>
                 )}
                 <span
                   style={{
@@ -1255,6 +1432,60 @@ function DepreciationLedgerView() {
             {COMPANY_NAME}　　{depreciationLedger.period}
           </span>
           <span style={{ color: "var(--ink-500)" }}>单位：元 (¥)</span>
+        </div>
+      </div>
+
+      {/* iter 21: 5 类资产 原值/累计折旧/净值 堆叠条 — 一眼看资产新旧 */}
+      <div style={{ marginBottom: 16 }}>
+        <SectionLabel>资产折旧覆盖率 (累计折旧 ÷ 原值)</SectionLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {depreciationLedger.items.map((it) => {
+            const depPct = (it.accumDepEnd / it.originalValue) * 100;
+            return (
+              <div
+                key={it.name}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.4fr 1fr 60px",
+                  alignItems: "center",
+                  gap: 10,
+                  fontSize: 11.5,
+                }}
+              >
+                <span style={{ color: "var(--ink-800)", fontWeight: 600 }}>{it.name}</span>
+                <div
+                  style={{
+                    height: 14,
+                    borderRadius: 4,
+                    background: "rgba(27,127,58,0.15)",
+                    border: "1px solid var(--ink-100)",
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                  title={`原值 ${it.originalValue.toLocaleString()} · 累计折旧 ${it.accumDepEnd.toLocaleString()} (${depPct.toFixed(0)}%) · 净值 ${it.netValue.toLocaleString()}`}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${depPct}%`,
+                      background:
+                        depPct > 60 ? "var(--warn-500)" : depPct > 30 ? "var(--brand-500)" : "var(--ok-500)",
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    color: "var(--ink-700)",
+                  }}
+                >
+                  {depPct.toFixed(0)}%
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

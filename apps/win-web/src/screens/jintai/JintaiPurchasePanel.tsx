@@ -487,7 +487,7 @@ function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
               <SLTh align="right">本月入库</SLTh>
               <SLTh align="right">本月出库</SLTh>
               <SLTh align="right">期末库存</SLTh>
-              {isRaw && <SLTh align="right">安全库存</SLTh>}
+              {isRaw && <SLTh>余量 / 安全线</SLTh>}
               <SLTh>录入方式</SLTh>
               <SLTh>备注</SLTh>
             </tr>
@@ -526,8 +526,8 @@ function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
                     {r.balance}
                   </SLTd>
                   {isRaw && (
-                    <SLTd align="right" mono style={{ color: "var(--ink-500)" }}>
-                      {r.safetyStock ?? "—"}
+                    <SLTd>
+                      <StockSafetyBar balance={r.balance} safetyStock={r.safetyStock} warning={r.warning} />
                     </SLTd>
                   )}
                   <SLTd>
@@ -585,6 +585,66 @@ function SLTh({
   );
 }
 
+/* iter 21: 库存余量 vs 安全库存 进度条 */
+function StockSafetyBar({
+  balance,
+  safetyStock,
+  warning,
+}: {
+  balance: string;
+  safetyStock?: string;
+  warning?: "low" | "ok";
+}) {
+  const bal = parseInt(balance.replace(/,/g, ""), 10) || 0;
+  const safe = safetyStock ? parseInt(safetyStock.replace(/,/g, ""), 10) || 0 : 0;
+  if (safe === 0) {
+    return <span style={{ fontSize: 11, color: "var(--ink-400)" }}>—</span>;
+  }
+  // 满刻度 = 安全线 × 2.5 (留 visualization 范围)
+  const fullScale = safe * 2.5;
+  const pct = Math.min(100, (bal / fullScale) * 100);
+  const safetyPct = (safe / fullScale) * 100;
+  const isLow = warning === "low";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 100 }}>
+      <div
+        style={{
+          height: 10,
+          borderRadius: 5,
+          background: "var(--surface-2)",
+          border: "1px solid var(--ink-100)",
+          position: "relative",
+          overflow: "visible",
+        }}
+        title={`库存 ${balance} kg · 安全线 ${safetyStock} kg`}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: isLow ? "var(--risk-500)" : "var(--ok-500)",
+            borderRadius: "5px 0 0 5px",
+          }}
+        />
+        {/* 安全线刻度 */}
+        <div
+          style={{
+            position: "absolute",
+            left: `${safetyPct}%`,
+            top: -2,
+            bottom: -2,
+            width: 2,
+            background: "var(--ink-700)",
+          }}
+        />
+      </div>
+      <div style={{ fontSize: 10, color: "var(--ink-500)", fontFamily: "ui-monospace, monospace" }}>
+        安全线 {safetyStock}
+      </div>
+    </div>
+  );
+}
+
 function SLTd({
   children,
   align,
@@ -631,38 +691,75 @@ const AGING_META: Record<PayableRow["aging"], { bg: string; fg: string; icon: st
 
 function PayableLedgerTable({ rows }: { rows: PayableRow[] }) {
   const total = rows.reduce((acc, r) => acc + parseInt(r.amount.replace(/[¥,]/g, ""), 10), 0);
-  const overdue = rows.filter((r) => r.aging === "已超期");
-  const soon = rows.filter((r) => r.aging === "即将到期");
+  const overdueAmt = rows
+    .filter((r) => r.aging === "已超期")
+    .reduce((a, r) => a + parseInt(r.amount.replace(/[¥,]/g, ""), 10), 0);
+  const soonAmt = rows
+    .filter((r) => r.aging === "即将到期")
+    .reduce((a, r) => a + parseInt(r.amount.replace(/[¥,]/g, ""), 10), 0);
+  const okAmt = total - overdueAmt - soonAmt;
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      {/* AI 提醒条 */}
+      {/* iter 21: AI 账期提醒 → KPI + 3 段账龄堆叠条 */}
       <div
         style={{
-          padding: "10px 16px",
+          padding: "12px 16px",
           background: "var(--ai-100)",
           borderBottom: "1px solid #bddff3",
-          fontSize: 11.5,
-          color: "var(--ink-800)",
-          lineHeight: 1.55,
           display: "flex",
-          gap: 14,
-          flexWrap: "wrap",
+          gap: 18,
           alignItems: "center",
+          flexWrap: "wrap",
         }}
       >
-        <span style={{ fontWeight: 700, color: "var(--ai-700)", fontSize: 10.5, letterSpacing: "0.05em" }}>
-          {I.spark(11)} AI 账期提醒
-        </span>
-        <span>
-          本月应付合计 <strong>¥{total.toLocaleString()}</strong>　·
-          <span style={{ color: "var(--risk-700)", fontWeight: 700 }}>
-            已超期 {overdue.length} 笔
-          </span>
-          　·
-          <span style={{ color: "var(--warn-700)", fontWeight: 700 }}>
-            30 天内到期 {soon.length} 笔
-          </span>
-        </span>
+        <div>
+          <div style={{ fontSize: 10.5, color: "var(--ai-700)", fontWeight: 700, letterSpacing: "0.05em" }}>
+            {I.spark(11)} AI 账期提醒
+          </div>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: "var(--ink-900)",
+              fontFamily: "ui-monospace, monospace",
+              fontVariantNumeric: "tabular-nums",
+              marginTop: 2,
+            }}
+          >
+            ¥{total.toLocaleString()}
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--ink-500)" }}>本月应付合计</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div
+            style={{
+              display: "flex",
+              height: 16,
+              borderRadius: 4,
+              overflow: "hidden",
+              border: "1px solid var(--ink-100)",
+            }}
+            title={`已超期 ¥${overdueAmt.toLocaleString()} · 30天内 ¥${soonAmt.toLocaleString()} · 未到期 ¥${okAmt.toLocaleString()}`}
+          >
+            <div style={{ flex: overdueAmt, background: "var(--risk-500)" }} />
+            <div style={{ flex: soonAmt, background: "var(--warn-500)" }} />
+            <div style={{ flex: okAmt, background: "var(--ok-500)" }} />
+          </div>
+          <div style={{ display: "flex", gap: 12, fontSize: 11, marginTop: 6 }}>
+            <span style={{ color: "var(--risk-700)" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--risk-500)", marginRight: 4 }} />
+              已超期 ¥{overdueAmt.toLocaleString()}
+            </span>
+            <span style={{ color: "var(--warn-700)" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--warn-500)", marginRight: 4 }} />
+              30 天内 ¥{soonAmt.toLocaleString()}
+            </span>
+            <span style={{ color: "var(--ok-700)" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--ok-500)", marginRight: 4 }} />
+              未到期 ¥{okAmt.toLocaleString()}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div style={{ overflowX: "auto" }}>
