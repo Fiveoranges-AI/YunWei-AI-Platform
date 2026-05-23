@@ -21,6 +21,9 @@ export function JintaiFinancePanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* iter 19.1：AI-native 模式定位条 — "脱离金蝶也能跑" */}
+      <AINativeBanner />
+
       {/* 子 tab — 三张表 */}
       <div
         style={{
@@ -706,21 +709,27 @@ function SignatureRow() {
 
 /* ============== AI 草稿 / 来源 / 洞察 / 自洽提示 (复用 iter 17) ============== */
 
+// iter 19.1：来源 chip 不再以"Kingdee"作为唯一/必需数据源。
+// AI 直接从业务单据(发票/合同/入库/出库/银行流水/工资表/抄表)聚合 → 客户即便不用金蝶也能跑。
+// 金蝶导入 仅作为"可选额外数据源",展示"共生"姿态。
 const REPORT_SOURCES: Record<ReportId, { kind: "合同" | "Excel" | "入库单" | "工艺单"; label: string }[]> = {
   balance: [
-    { kind: "Excel", label: "Kingdee 月末科目余额表.xlsx" },
-    { kind: "入库单", label: "本月 5 张采购入库 · 已记账" },
-    { kind: "Excel", label: "招行 + 工行月末对账单" },
+    { kind: "入库单", label: "本月 5 张采购入库 · AI 自动归集" },
+    { kind: "合同", label: "本月 8 张应收 / 应付台账 · AI 抽取" },
+    { kind: "Excel", label: "招行 + 工行月末对账单 · AI 比对" },
+    { kind: "Excel", label: "金蝶月末科目余额表 (可选)" },
   ],
   income: [
-    { kind: "合同", label: "本月 3 张销售合同（容百 / 横店 / 风华）" },
-    { kind: "入库单", label: "5 张采购入库 · 计入成本" },
-    { kind: "Excel", label: "本月期间费用凭证 12 张" },
+    { kind: "合同", label: "本月 3 张销售合同（容百 / 横店 / 风华）· AI 抽取" },
+    { kind: "入库单", label: "5 张采购入库 · AI 自动计成本" },
+    { kind: "Excel", label: "工资表 + 水电气抄表 · AI 归并" },
+    { kind: "Excel", label: "本月期间费用 12 张发票 · AI OCR" },
   ],
   cashflow: [
-    { kind: "Excel", label: "招行 / 工行月度流水 · 已对账" },
-    { kind: "入库单", label: "采购付款凭证 5 张" },
+    { kind: "Excel", label: "招行 / 工行月度流水 · AI 已对账" },
+    { kind: "入库单", label: "采购付款凭证 5 张 · AI 抽自发票" },
     { kind: "合同", label: "客户回款明细（容百首付 + 横店尾款）" },
+    { kind: "Excel", label: "支付宝 / 微信收款 月度账单" },
   ],
 };
 
@@ -738,20 +747,23 @@ function AIDraftBanner({ draft, confirmedBy }: { draft: string; confirmedBy: str
   return (
     <div
       style={{
-        padding: "12px 14px",
+        padding: "14px 16px",
         borderRadius: 10,
-        background: "var(--ai-100)",
-        border: "1px solid #bddff3",
+        background:
+          "linear-gradient(135deg, rgba(186,224,247,0.6) 0%, rgba(232,242,251,0.85) 100%)",
+        border: "1.5px solid var(--ai-500)",
+        boxShadow: "0 2px 8px rgba(56,138,210,0.10)",
         display: "flex",
         flexDirection: "column",
-        gap: 6,
+        gap: 8,
       }}
     >
+      {/* 阶段标识：AI 先填 → 人工确认 */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: 10,
           fontSize: 11,
           fontWeight: 700,
           color: "var(--ai-700)",
@@ -759,16 +771,49 @@ function AIDraftBanner({ draft, confirmedBy }: { draft: string; confirmedBy: str
           textTransform: "uppercase",
         }}
       >
-        {I.spark(12)} AI 草稿
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "3px 9px",
+            borderRadius: 5,
+            background: "var(--ai-500)",
+            color: "#fff",
+            fontSize: 10.5,
+            letterSpacing: "0.06em",
+          }}
+        >
+          {I.spark(11)} 第 1 步 · AI 先填
+        </span>
+        <span style={{ color: "var(--ink-300)", fontSize: 13 }}>→</span>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "3px 9px",
+            borderRadius: 5,
+            background: "var(--jintai-green)",
+            color: "#fff",
+            fontSize: 10.5,
+            letterSpacing: "0.06em",
+          }}
+        >
+          ✓ 第 2 步 · 王会计 确认
+        </span>
+        <span style={{ marginLeft: "auto", color: "var(--ink-500)", fontSize: 10, fontWeight: 600 }}>
+          AI 不直接入账 · 人工最终拍板
+        </span>
       </div>
-      <div style={{ fontSize: 12.5, color: "var(--ink-800)", lineHeight: 1.55 }}>{draft}</div>
+      <div style={{ fontSize: 12.5, color: "var(--ink-800)", lineHeight: 1.6 }}>{draft}</div>
       <div
         style={{
           fontSize: 11,
           color: "var(--ok-700)",
           fontWeight: 600,
-          paddingTop: 4,
-          borderTop: "1px dashed #bddff3",
+          paddingTop: 6,
+          borderTop: "1px dashed rgba(56,138,210,0.4)",
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
@@ -785,6 +830,51 @@ function AIDraftBanner({ draft, confirmedBy }: { draft: string; confirmedBy: str
         />
         ✓ {confirmedBy}
       </div>
+    </div>
+  );
+}
+
+/* AI-native 定位条：脱离金蝶也能跑 */
+function AINativeBanner() {
+  return (
+    <div
+      style={{
+        padding: "10px 14px",
+        borderRadius: 10,
+        background:
+          "linear-gradient(90deg, rgba(173,30,38,0.04) 0%, rgba(15,69,42,0.06) 50%, rgba(56,138,210,0.06) 100%)",
+        border: "1px solid var(--ink-100)",
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        flexWrap: "wrap",
+        fontSize: 11.5,
+      }}
+    >
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "3px 9px",
+          borderRadius: 5,
+          background: "var(--jintai-red)",
+          color: "#fff",
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+        }}
+      >
+        AI-NATIVE 模式
+      </span>
+      <span style={{ color: "var(--ink-700)", lineHeight: 1.55, flex: 1, minWidth: 280 }}>
+        本套财务三表<strong style={{ color: "var(--jintai-green-dark)" }}>不依赖金蝶</strong>。
+        AI 直接从 发票 / 销售合同 / 入库单 / 银行流水 / 工资表 / 抄表 自动归集 →
+        生成会企小企业准则三表草稿 → 王会计 1 步确认入账。
+        <span style={{ color: "var(--ink-500)" }}>
+          (金蝶科目余额表可作为可选数据源导入 · 不强制 · 共生不替代)
+        </span>
+      </span>
     </div>
   );
 }

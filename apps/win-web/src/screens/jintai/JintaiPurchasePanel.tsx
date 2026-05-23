@@ -22,6 +22,9 @@ export function JintaiPurchasePanel() {
   const isDesktop = useIsDesktop();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {/* iter 19.1：AI-native 模式定位条 — "脱离金蝶也能跑" */}
+      <AINativePurchaseBanner />
+
       {/* iter 19 链路提示条：申购 → 订单 → 入库 → 库存 → 应付 */}
       <PurchaseChainHint />
 
@@ -87,6 +90,77 @@ export function JintaiPurchasePanel() {
       />
       <PayableLedgerTable rows={payableLedger} />
     </div>
+  );
+}
+
+/* ============== AI-native 模式定位条 ============== */
+
+function AINativePurchaseBanner() {
+  return (
+    <div
+      style={{
+        padding: "10px 14px",
+        borderRadius: 10,
+        background:
+          "linear-gradient(90deg, rgba(173,30,38,0.04) 0%, rgba(15,69,42,0.06) 50%, rgba(56,138,210,0.06) 100%)",
+        border: "1px solid var(--ink-100)",
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        flexWrap: "wrap",
+        fontSize: 11.5,
+      }}
+    >
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "3px 9px",
+          borderRadius: 5,
+          background: "var(--jintai-red)",
+          color: "#fff",
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+        }}
+      >
+        AI-NATIVE 模式
+      </span>
+      <span style={{ color: "var(--ink-700)", lineHeight: 1.55, flex: 1, minWidth: 280 }}>
+        本套采购<strong style={{ color: "var(--jintai-green-dark)" }}>不依赖金蝶</strong>。
+        AI 从 微信群语音 / 邮件合同 / 纸质表单 OCR / 发票 自动抽取申购 + 订单 + 入库 + 应付 →
+        采购张主管 + 财务王会计 1 步确认即可入账。
+        <span style={{ color: "var(--ink-500)" }}>
+          (每条数据带"AI 抽取"或"人工录入"标签，全程可追溯)
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/* 通用 数据来源 tag (AI 抽取 / 人工录入) */
+function DataSourceTag({ source }: { source: string }) {
+  const isAI = source.startsWith("AI");
+  return (
+    <span
+      className="pill"
+      style={{
+        background: isAI ? "var(--ai-100)" : "var(--surface-2)",
+        color: isAI ? "var(--ai-700)" : "var(--ink-600)",
+        fontSize: 10,
+        fontWeight: 600,
+        padding: "2px 7px",
+        borderRadius: 5,
+        whiteSpace: "nowrap",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+      }}
+      title={isAI ? "AI 自动抽取，已待人工确认" : "由人工手动录入，无 AI 草稿"}
+    >
+      {isAI ? "✨" : "👤"} {source}
+    </span>
   );
 }
 
@@ -414,6 +488,7 @@ function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
               <SLTh align="right">本月出库</SLTh>
               <SLTh align="right">期末库存</SLTh>
               {isRaw && <SLTh align="right">安全库存</SLTh>}
+              <SLTh>录入方式</SLTh>
               <SLTh>备注</SLTh>
             </tr>
           </thead>
@@ -455,6 +530,9 @@ function StockLedgerTable({ ledger }: { ledger: StockLedger }) {
                       {r.safetyStock ?? "—"}
                     </SLTd>
                   )}
+                  <SLTd>
+                    <DataSourceTag source={r.recordedBy} />
+                  </SLTd>
                   <SLTd>
                     {lowStock && (
                       <span
@@ -601,10 +679,10 @@ function PayableLedgerTable({ rows }: { rows: PayableRow[] }) {
               <SLTh>供应商</SLTh>
               <SLTh>来源单据</SLTh>
               <SLTh align="right">应付金额</SLTh>
-              <SLTh>开票日</SLTh>
               <SLTh>到期日</SLTh>
               <SLTh align="right">距到期</SLTh>
               <SLTh>账龄</SLTh>
+              <SLTh>录入方式</SLTh>
             </tr>
           </thead>
           <tbody>
@@ -617,7 +695,6 @@ function PayableLedgerTable({ rows }: { rows: PayableRow[] }) {
                   <SLTd align="right" mono bold>
                     {r.amount}
                   </SLTd>
-                  <SLTd mono>{r.invoiceDate}</SLTd>
                   <SLTd mono>{r.dueDate}</SLTd>
                   <SLTd
                     align="right"
@@ -646,6 +723,9 @@ function PayableLedgerTable({ rows }: { rows: PayableRow[] }) {
                     >
                       {aging.icon} {r.aging}
                     </span>
+                  </SLTd>
+                  <SLTd>
+                    <DataSourceTag source={r.dataSource} />
                   </SLTd>
                 </tr>
               );
@@ -755,25 +835,34 @@ function DesktopTable({ orders }: { orders: PurchaseOrder[] }) {
             <Th>物料</Th>
             <Th>规格</Th>
             <Th align="right">数量</Th>
-            <Th align="right">单价</Th>
             <Th align="right">金额</Th>
             <Th>交货</Th>
             <Th>状态</Th>
+            <Th>录入方式</Th>
           </tr>
         </thead>
         <tbody>
           {orders.map((o) => (
             <tr key={o.poNo} style={{ borderTop: "1px solid var(--ink-100)" }}>
-              <Td mono>{o.poNo}</Td>
+              <Td mono>
+                {o.poNo}
+                {o.fromPrNo && (
+                  <div style={{ fontSize: 10, color: "var(--ink-500)", marginTop: 2 }}>
+                    ← {o.fromPrNo}
+                  </div>
+                )}
+              </Td>
               <Td>{o.supplier}</Td>
               <Td bold>{o.material}</Td>
               <Td mono>{o.spec}</Td>
               <Td align="right" mono>{o.qty}</Td>
-              <Td align="right" mono>{o.unitPrice}</Td>
               <Td align="right" mono bold>{o.amount}</Td>
               <Td mono>{o.deliveryDate}</Td>
               <Td>
                 <JintaiStatusBadge status={o.status} />
+              </Td>
+              <Td>
+                <DataSourceTag source={o.dataSource} />
               </Td>
             </tr>
           ))}
@@ -815,6 +904,9 @@ function MobileList({ orders }: { orders: PurchaseOrder[] }) {
           </div>
           <div style={{ fontSize: 11.5, color: "var(--ink-700)", marginTop: 2 }}>
             {o.qty} · {o.unitPrice} · <strong>{o.amount}</strong> · 交 {o.deliveryDate}
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <DataSourceTag source={o.dataSource} />
           </div>
         </div>
       ))}

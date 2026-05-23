@@ -878,7 +878,7 @@ const balanceSheet: BalanceSheet = {
   period: "2026年5月份",
   unit: "单位：元 (¥)",
   aiDraft:
-    "智通 AI 已根据本月 12 张凭证、5 张采购入库单、3 张销售出库单自动汇总科目余额，按会企01表行次排版。",
+    "AI 已自动归集本月 5 张采购入库单、3 张销售出库单、12 张费用发票、银行 + 支付宝月度流水 → 按会企01表行次生成草稿。所有科目余额可下钻回原始单据，王会计 1 步确认即可入账。",
   confirmedBy: "财务 · 王会计 · 2026-05-17 09:24 复核确认",
   // 左侧：资产
   assets: [
@@ -949,7 +949,7 @@ const incomeStatement: IncomeStatement = {
   period: "2026年5月份",
   unit: "单位：元 (¥)",
   aiDraft:
-    "智通 AI 已根据本月 3 张销售出库单、5 张采购入库单、12 张费用凭证自动归集收入与成本，按会企02表行次排版（含利润分配段）。",
+    "AI 已从本月 3 张销售合同、5 张采购入库单、12 张期间费用发票、工资表 + 水电气抄表自动归集收入与成本 → 按会企02表行次排版（含利润分配段）。本月营业成本 4,420,000 元 中：直接材料 3,180,000 + 人工 650,000 + 水电气 230,000 + 折旧 260,000 + 制造费用 100,000，全部可下钻到原始单据。",
   confirmedBy: "财务 · 王会计 · 2026-05-17 09:31 复核确认",
   // —— 利润形成段 (行 1-17) ——
   formation: [
@@ -1005,7 +1005,7 @@ const cashFlowStatement: CashFlowStatement = {
   period: "2026年5月份",
   unit: "单位：元 (¥)",
   aiDraft:
-    "智通 AI 已根据本月 8 张银行流水、支付宝入账、5 张采购付款单自动归集三类现金流，按会企03表行次 + 补充资料排版。",
+    "AI 已对账 招行 + 工行 月度流水、支付宝 / 微信收款月度账单、5 张采购付款凭证 → 按会企03表行次 + 补充资料排版。经营/投资/筹资三段自动分类，补充资料 净利润 1,189,000 → 调节后 +870,000 与左半呼应。",
   confirmedBy: "财务 · 王会计 · 2026-05-17 09:38 复核确认",
   // —— 左半：主表 (行 1-56) ——
   mainFlow: [
@@ -1096,6 +1096,9 @@ export type PurchaseOrder = {
   deliveryDate: string;
   status: "已入库" | "已到货待入库" | "在途";
   warehouse?: string;
+  /** iter 19.1：数据来源 — AI 抽取 / 人工录入,体现可追溯 */
+  dataSource: "AI · 邮件合同" | "AI · 微信群" | "AI · 纸质单 OCR" | "人工录入";
+  fromPrNo?: string; // 来源申购单号
 };
 
 export const purchaseOrders: PurchaseOrder[] = [
@@ -1109,6 +1112,8 @@ export const purchaseOrders: PurchaseOrder[] = [
     amount: "¥96,000",
     deliveryDate: "2026-05-25",
     status: "已到货待入库",
+    dataSource: "AI · 微信群",
+    fromPrNo: "PR-2026-015",
   },
   {
     poNo: "PO-2026-007",
@@ -1121,6 +1126,8 @@ export const purchaseOrders: PurchaseOrder[] = [
     deliveryDate: "2026-05-22",
     status: "已入库",
     warehouse: "原料库 A-03",
+    dataSource: "AI · 纸质单 OCR",
+    fromPrNo: "PR-2026-014",
   },
   {
     poNo: "PO-2026-006",
@@ -1133,6 +1140,7 @@ export const purchaseOrders: PurchaseOrder[] = [
     deliveryDate: "2026-05-19",
     status: "已入库",
     warehouse: "原料库 B-02",
+    dataSource: "AI · 邮件合同",
   },
   {
     poNo: "PO-2026-005",
@@ -1145,6 +1153,7 @@ export const purchaseOrders: PurchaseOrder[] = [
     deliveryDate: "2026-05-15",
     status: "已入库",
     warehouse: "原料库 C-01",
+    dataSource: "AI · 邮件合同",
   },
   {
     poNo: "PO-2026-004",
@@ -1157,6 +1166,7 @@ export const purchaseOrders: PurchaseOrder[] = [
     deliveryDate: "2026-05-12",
     status: "已入库",
     warehouse: "原料库 A-01",
+    dataSource: "AI · 微信群",
   },
   {
     poNo: "PO-2026-003",
@@ -1169,6 +1179,7 @@ export const purchaseOrders: PurchaseOrder[] = [
     deliveryDate: "2026-05-08",
     status: "已入库",
     warehouse: "原料库 D-01",
+    dataSource: "人工录入",
   },
 ];
 
@@ -1419,6 +1430,8 @@ export type StockLedgerRow = {
   safetyStock?: string; // 安全库存(原材料)
   warning?: "low" | "ok"; // 低库存预警
   note?: string;
+  /** iter 19.1：本月入/出量的录入方式 — AI 自动 / 人工录入 / 混合 */
+  recordedBy: "AI 自动" | "人工录入" | "AI + 人工";
 };
 
 export type StockLedger = {
@@ -1447,6 +1460,7 @@ export const stockLedgers: StockLedger[] = [
         balance: "1,880",
         safetyStock: "1,500",
         warning: "ok",
+        recordedBy: "AI 自动",
       },
       {
         no: 2,
@@ -1459,6 +1473,7 @@ export const stockLedgers: StockLedger[] = [
         balance: "3,560",
         safetyStock: "2,500",
         warning: "ok",
+        recordedBy: "AI 自动",
       },
       {
         no: 3,
@@ -1472,6 +1487,7 @@ export const stockLedgers: StockLedger[] = [
         safetyStock: "2,000",
         warning: "low",
         note: "已申购 PR-2026-016 · 待审批",
+        recordedBy: "AI + 人工",
       },
       {
         no: 4,
@@ -1484,6 +1500,7 @@ export const stockLedgers: StockLedger[] = [
         balance: "1,180",
         safetyStock: "800",
         warning: "ok",
+        recordedBy: "AI 自动",
       },
       {
         no: 5,
@@ -1496,6 +1513,7 @@ export const stockLedgers: StockLedger[] = [
         balance: "930",
         safetyStock: "600",
         warning: "ok",
+        recordedBy: "AI 自动",
       },
       {
         no: 6,
@@ -1508,6 +1526,7 @@ export const stockLedgers: StockLedger[] = [
         balance: "440",
         safetyStock: "300",
         warning: "ok",
+        recordedBy: "人工录入",
       },
     ],
   },
@@ -1528,6 +1547,7 @@ export const stockLedgers: StockLedger[] = [
         outQty: "11,722",
         balance: "1,578",
         note: "容百 SO-2026-001 已发 11,722 块",
+        recordedBy: "AI 自动",
       },
       {
         no: 2,
@@ -1540,6 +1560,7 @@ export const stockLedgers: StockLedger[] = [
         outQty: "1,380",
         balance: "300",
         note: "横店 SC-2026-017 检包入库 1,500 个",
+        recordedBy: "AI 自动",
       },
       {
         no: 3,
@@ -1552,6 +1573,7 @@ export const stockLedgers: StockLedger[] = [
         outQty: "0",
         balance: "0",
         note: "风华 SO-2026-003 排产中，本月暂未入库",
+        recordedBy: "AI 自动",
       },
       {
         no: 4,
@@ -1564,6 +1586,7 @@ export const stockLedgers: StockLedger[] = [
         outQty: "0",
         balance: "240",
         note: "厦钨 SO-2026-004 待生产",
+        recordedBy: "人工录入",
       },
     ],
   },
@@ -1580,6 +1603,8 @@ export type PayableRow = {
   aging: "未到期" | "即将到期" | "已超期";
   daysToDue: number; // 距到期天数 (负数=已超期)
   paid?: boolean;
+  /** iter 19.1：金额由 AI 自发票 OCR 还是人工录入 */
+  dataSource: "AI · 发票 OCR" | "AI · 入库单" | "人工录入";
 };
 
 export const payableLedger: PayableRow[] = [
@@ -1591,6 +1616,7 @@ export const payableLedger: PayableRow[] = [
     dueDate: "2026-05-08",
     aging: "已超期",
     daysToDue: -9,
+    dataSource: "人工录入",
   },
   {
     supplier: "宜兴蓝海耐火",
@@ -1600,6 +1626,7 @@ export const payableLedger: PayableRow[] = [
     dueDate: "2026-06-11",
     aging: "即将到期",
     daysToDue: 25,
+    dataSource: "AI · 发票 OCR",
   },
   {
     supplier: "上海博凯化工",
@@ -1609,6 +1636,7 @@ export const payableLedger: PayableRow[] = [
     dueDate: "2026-06-14",
     aging: "即将到期",
     daysToDue: 28,
+    dataSource: "AI · 发票 OCR",
   },
   {
     supplier: "焦作高纯石墨",
@@ -1618,6 +1646,7 @@ export const payableLedger: PayableRow[] = [
     dueDate: "2026-06-18",
     aging: "未到期",
     daysToDue: 32,
+    dataSource: "AI · 发票 OCR",
   },
   {
     supplier: "萍乡耐材原料",
@@ -1627,6 +1656,7 @@ export const payableLedger: PayableRow[] = [
     dueDate: "2026-07-06",
     aging: "未到期",
     daysToDue: 50,
+    dataSource: "AI · 入库单",
   },
   {
     supplier: "山东中铝物资",
@@ -1636,6 +1666,7 @@ export const payableLedger: PayableRow[] = [
     dueDate: "2026-07-24",
     aging: "未到期",
     daysToDue: 68,
+    dataSource: "AI · 发票 OCR",
   },
 ];
 
