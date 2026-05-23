@@ -5,10 +5,9 @@ import { JintaiSourceCitation } from "./components";
 
 export function JintaiTrustPanel() {
   const isMobile = useIsMobile();
-  // Iter 8/9：在 4 张原有 + 2 张新增财务安全后扩到 6 张展示（其余在其他 tab 自然展示）
-  // Iter 10/11：trace 示例 1 → 3（生产 + 财务三表 + 经营日报），演示 AI 不偷换账 + 不替老板瞎签
-  const visibleTrust = trustItems.slice(0, 6);
-  const visibleTrace = [traceExamples[0], traceExamples[3], traceExamples[4]];
+  // iter 20 精简：trust 8→4 + trace 5→2 (各 tab 内的 AIDraftBanner 已承担主信任锚点,这里只做兜底)
+  const visibleTrust = trustItems;
+  const visibleTrace = [traceExamples[0], traceExamples[3]];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div

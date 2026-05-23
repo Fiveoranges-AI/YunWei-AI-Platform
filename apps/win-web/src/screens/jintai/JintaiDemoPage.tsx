@@ -8,15 +8,12 @@ import { I } from "../../icons";
 import { useIsDesktop } from "../../lib/breakpoints";
 import { initialExtractionCards } from "./data";
 import type { ExtractionCard } from "./data";
-import { JintaiHero } from "./JintaiHero";
-import { JintaiKpiCards } from "./JintaiKpiCards";
 import { JintaiUploadInbox } from "./JintaiUploadInbox";
 import type { ProcessingCard } from "./JintaiUploadInbox";
 import { JintaiWorkflowTimeline } from "./JintaiWorkflowTimeline";
 import { JintaiProductionTabs } from "./JintaiProductionTabs";
 import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
 import { JintaiTrustPanel } from "./JintaiTrustPanel";
-import { dailyBrief } from "./data";
 import { JintaiFinancePanel } from "./JintaiFinancePanel";
 import { JintaiPurchasePanel } from "./JintaiPurchasePanel";
 import { JintaiDailyBriefPanel } from "./JintaiDailyBriefPanel";
@@ -149,18 +146,16 @@ const KIND_SIZE: Record<ExtractionCard["kind"], string> = {
 };
 
 type TabKey =
-  | "overview"
+  | "briefing"
   | "inbox"
   | "production"
   | "finance"
   | "purchase"
-  | "briefing"
   | "ask"
   | "trust";
 
-// iter 13：统一 8 tab icon — 全部用 codebase 现有 I.* outline 风格
-// iter 16：按 4 个业务族分组配色（经营管理 brand 蓝 / 业务核心 锦泰红 / 资金合规 锦泰绿 / AI 智能 ai 紫）
-// 每 icon 2-tone（外形填淡 + 描边实色 + 关键细节实色）
+// iter 20：删 概览 tab (信息密度低 + 与经营日报严重重叠) · 默认 tab 改成 经营日报
+// 顺序按"老板/会计/采购/AI"业务族重排：经营日报(老板入口) → 财务 → 采购 → 生产 → 收件箱 → 问问 → 可信
 const TABS: {
   key: TabKey;
   label: string;
@@ -168,41 +163,36 @@ const TABS: {
   icon: typeof I.grid;
   color: string;
 }[] = [
-  { key: "overview", label: "概览", hint: "今天总体什么情况", icon: I.grid, color: "var(--brand-500)" },
-  { key: "inbox", label: "AI 收件箱", hint: "新资料如何进系统", icon: I.inbox, color: "var(--ai-purple)" },
-  { key: "production", label: "生产流转", hint: "这单生产到哪了", icon: I.factory, color: "var(--jintai-red)" },
-  { key: "finance", label: "财务", hint: "AI 三表 · 草稿待复核", icon: I.cash, color: "var(--jintai-green)" },
-  { key: "purchase", label: "采购", hint: "订单 · 供应商 · AI 收件箱", icon: I.pkg, color: "var(--jintai-red-40)" },
   { key: "briefing", label: "经营日报", hint: "陈总 5 分钟看完今天", icon: I.calendar, color: "var(--brand-700)" },
+  { key: "finance", label: "财务", hint: "会企三表 · 成本 · 折旧", icon: I.cash, color: "var(--jintai-green)" },
+  { key: "purchase", label: "采购", hint: "申购→订单→入库→应付", icon: I.pkg, color: "var(--jintai-red-40)" },
+  { key: "production", label: "生产流转", hint: "配料→成型→烧结→检包", icon: I.factory, color: "var(--jintai-red)" },
+  { key: "inbox", label: "AI 收件箱", hint: "新单据进系统 · AI 抽取", icon: I.inbox, color: "var(--ai-purple)" },
   { key: "ask", label: "问问 AI", hint: "中文问，答案带来源", icon: I.ask, color: "var(--ai-purple-deep)" },
   { key: "trust", label: "可信 AI", hint: "AI 不瞎编，每条都可追溯", icon: I.shield, color: "var(--jintai-green-dark)" },
 ];
 
 // 视觉减负：每 tab 副标精简到 1 句，去除长 narration
 const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
-  overview: {
-    title: "试点总览",
-    sub: "今日 KPI、风险简报，3 秒看清要紧的事。",
+  briefing: {
+    title: "经营日报 · 老板 5 分钟",
+    sub: "AI 早上 7:55 自动整合 财务 / 生产 / 采购 / 客户 / 风险 5 大模块，陈总醒后 5 分钟看完今天。",
+  },
+  finance: {
+    title: "财务 · 会企三表 + 成本 + 折旧",
+    sub: "AI 自动归集 → 资产负债表 / 利润及利润分配表 / 现金流量表 + 成本拆分 + 折旧台账 → 王会计 1 步确认。",
+  },
+  purchase: {
+    title: "采购 · 申购→订单→入库→应付",
+    sub: "AI 抽取邮件合同、发票、入库单字段，采购 + 财务双确认入账，防漏付防漏入。",
+  },
+  production: {
+    title: "生产流转 · 配料→成型→烧结→检包",
+    sub: "订单 → 计划 → 配料 → 生产 → 入库 → 出货，可回放任意节点；配料单直接关联库存原料。",
   },
   inbox: {
     title: "AI 资料收件箱",
-    sub: "AI 抽取字段 → 人工 1 步确认 → 自动生成订单 / 流转单 / 出货草稿。",
-  },
-  production: {
-    title: "生产流转",
-    sub: "订单 → 计划 → 生产 → 入库 → 出货，5 段流转可回放任意节点；详细工序在下方「流转单 / 工艺单 / 出货入库」3 子 tab。",
-  },
-  finance: {
-    title: "财务 · AI 三表",
-    sub: "AI 已自动归集本月凭证 → 生成资产负债表 / 损益表 / 现金流量表草稿 → 王会计一键复核确认。",
-  },
-  purchase: {
-    title: "采购 · 订单 + 供应商",
-    sub: "AI 自动抽取邮件合同、发票、入库单字段，采购 + 财务双确认入账，防漏付防漏入。",
-  },
-  briefing: {
-    title: "经营日报 · 老板 5 分钟",
-    sub: "AI 早上 7:55 自动整合财务 / 生产 / 采购 / 客户 / 风险 5 大模块，陈总醒后 5 分钟看完。",
+    sub: "上传合同 / 订单 Excel / 纸质流转单 → AI 抽字段 → 1 步确认 → 自动生成业务草稿。",
   },
   ask: {
     title: "老板 AI 助手",
@@ -215,12 +205,11 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
 };
 
 const HASH_TO_TAB: Record<string, TabKey> = {
-  "#overview": "overview",
+  "#briefing": "briefing",
   "#inbox": "inbox",
   "#production": "production",
   "#finance": "finance",
   "#purchase": "purchase",
-  "#briefing": "briefing",
   "#ask": "ask",
   "#trust": "trust",
 };
@@ -233,27 +222,13 @@ function tabFromHash(hash: string): TabKey | null {
   return HASH_TO_TAB[hash] ?? null;
 }
 
-// Map legacy section IDs (used by Hero CTA buttons + simulate-upload auto scroll)
-// to a target tab so existing call-sites keep working.
-const SECTION_TO_TAB: Record<string, TabKey> = {
-  "ai-inbox": "inbox",
-  "ai-query": "ask",
-  workflow: "production",
-  production: "production",
-  // legacy「briefing」(原指概览内的每日简报) 现重定向到新的「📅 经营日报」tab
-  briefing: "briefing",
-  trust: "trust",
-  finance: "finance",
-  purchase: "purchase",
-};
-
 export function JintaiDemoPage() {
   const isDesktop = useIsDesktop();
   const [cards, setCards] = useState<ExtractionCard[]>(initialExtractionCards);
   const [processing, setProcessing] = useState<ProcessingCard[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
-    if (typeof window === "undefined") return "overview";
-    return tabFromHash(window.location.hash) ?? "overview";
+    if (typeof window === "undefined") return "briefing";
+    return tabFromHash(window.location.hash) ?? "briefing";
   });
   const timers = useRef<Set<number>>(new Set());
   const simCounterRef = useRef(0);
@@ -299,13 +274,6 @@ export function JintaiDemoPage() {
       // Scroll page top so each tab opens at its header, not mid-scroll.
       window.scrollTo({ top: 0, behavior: "auto" });
     }
-  };
-
-  // Hero CTA / simulate-upload scrollTo handler — now switches tabs
-  // instead of vertically scrolling (single-page sections no longer exist).
-  const handleScrollTo = (id: string) => {
-    const next = SECTION_TO_TAB[id];
-    if (next) switchTab(next);
   };
 
   const handleSimulateUpload = (kind: ExtractionCard["kind"]) => {
@@ -535,19 +503,9 @@ export function JintaiDemoPage() {
             state (selected preset Q, A/B/C tab, flow card variant, etc.) survives
             tab switches. */}
 
-        {/* Tab 1: 概览 — Hero + KPI + 跳经营日报链接（iter 11 简化：DailyBriefing 移至独立 tab） */}
-        <div role="tabpanel" hidden={activeTab !== "overview"}>
-          <JintaiHero
-            onScrollTo={handleScrollTo}
-            onSimulateUploadContract={() => handleSimulateUpload("合同")}
-            onSimulateUploadFlowCard={() => handleSimulateUpload("生产流转单")}
-          />
-          <JintaiKpiCards />
-          <div style={{ height: 20 }} />
-          <BriefingShortcut onGo={() => switchTab("briefing")} />
-        </div>
+        {/* iter 20: 概览 tab 已删 (信息密度低 + 与经营日报严重重叠). 默认 tab 现为 经营日报. */}
 
-        {/* Tab 2: AI 收件箱 */}
+        {/* Tab: AI 收件箱 */}
         <div role="tabpanel" hidden={activeTab !== "inbox"}>
           <div
             style={{
@@ -651,61 +609,3 @@ export function JintaiDemoPage() {
 
 /* ---------------- 概览 → 经营日报 跳转入口（iter 11） ---------------- */
 
-function BriefingShortcut({ onGo }: { onGo: () => void }) {
-  const b = dailyBrief;
-  const total =
-    b.counts.sales + b.counts.finance + b.counts.production + b.counts.purchase + b.counts.risk;
-  return (
-    <div
-      className="card"
-      style={{
-        padding: 16,
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        flexWrap: "wrap",
-        borderLeft: "3px solid var(--ai-500)",
-      }}
-    >
-      <span
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: "var(--ai-100)",
-          color: "var(--ai-700)",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        {I.calendar(18)}
-      </span>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", lineHeight: 1.4 }}>
-          今日经营日报 · {b.date} {b.weekday}
-        </div>
-        <div style={{ fontSize: 11.5, color: "var(--ink-600)", marginTop: 3, lineHeight: 1.5 }}>
-          AI 已于 {b.generatedAt} 生成 · 今日要事 {total} · 1 红 / 2 黄 / 4 行动 · 5 分钟可读完
-        </div>
-      </div>
-      <button
-        onClick={onGo}
-        style={{
-          padding: "8px 14px",
-          fontSize: 12.5,
-          fontWeight: 600,
-          borderRadius: 8,
-          border: "none",
-          background: "var(--brand-500)",
-          color: "#fff",
-          cursor: "pointer",
-          fontFamily: "var(--font)",
-        }}
-      >
-        → 看完整版
-      </button>
-    </div>
-  );
-}

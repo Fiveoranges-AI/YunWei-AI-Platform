@@ -8,11 +8,11 @@ import { JintaiSourceCitation } from "./components";
 
 export function JintaiAIQueryPanel() {
   const isDesktop = useIsDesktop();
-  // Iter 8/9/11：4 业务 + 2 财务 + 2 采购 + 1 经营日报 = 9 共
-  const visibleQuestions = presetQuestions.slice(0, 9);
-  const productionQs = visibleQuestions.slice(0, 4);
-  const financeQs = visibleQuestions.slice(4, 8);
-  const briefingQs = visibleQuestions.slice(8, 9);
+  // iter 20 精简：11 → 6 预设 (生产 2 + 财务 2 + 采购 2)
+  const visibleQuestions = presetQuestions.slice(0, 6);
+  const productionQs = visibleQuestions.slice(0, 2);
+  const financeQs = visibleQuestions.slice(2, 4);
+  const briefingQs = visibleQuestions.slice(4, 6);
   const [active, setActive] = useState<AIBlock | null>(presetQuestions[0]);
   const [draft, setDraft] = useState("");
   const [isAsking, setIsAsking] = useState(false);
@@ -96,19 +96,19 @@ export function JintaiAIQueryPanel() {
         </div>
 
         <QuestionGroup
-          label="业务进度"
+          label="生产"
           items={productionQs}
           activeQuestion={active?.question}
           onPick={ask}
         />
         <QuestionGroup
-          label="财务 + 采购"
+          label="财务"
           items={financeQs}
           activeQuestion={active?.question}
           onPick={ask}
         />
         <QuestionGroup
-          label="经营日报"
+          label="采购"
           items={briefingQs}
           activeQuestion={active?.question}
           onPick={ask}
