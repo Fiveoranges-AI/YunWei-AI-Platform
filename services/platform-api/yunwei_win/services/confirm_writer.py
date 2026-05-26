@@ -45,6 +45,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yunwei_win.models import (
     ActionLog,
     ActionTargetType,
+    BillOfMaterials,
+    BillOfMaterialsLine,
     Contact,
     ContactRole,
     Contract,
@@ -84,6 +86,9 @@ _ENTITY_MODEL: dict[str, type] = {
     "IssueVoucher": IssueVoucher,
     "PurchaseRequisition": PurchaseRequisition,
     "PurchaseRequisitionItem": PurchaseRequisitionItem,
+    # BOM (配料单)
+    "BillOfMaterials": BillOfMaterials,
+    "BillOfMaterialsLine": BillOfMaterialsLine,
 }
 
 _ENTITY_TARGET: dict[str, ActionTargetType] = {
@@ -103,6 +108,8 @@ _ENTITY_TARGET: dict[str, ActionTargetType] = {
     "IssueVoucher": ActionTargetType.other,
     "PurchaseRequisition": ActionTargetType.other,
     "PurchaseRequisitionItem": ActionTargetType.other,
+    "BillOfMaterials": ActionTargetType.other,
+    "BillOfMaterialsLine": ActionTargetType.other,
 }
 
 # Fields the candidate JSON may carry but the ORM models drive via FK
@@ -213,6 +220,9 @@ _PARENT_FK_BY_RELATIONSHIP: dict[str, tuple[str, str]] = {
     "Supplier-has-PurchaseRequisition":     ("PurchaseRequisition", "supplier_id"),
     "PurchaseRequisition-has-Item":         ("PurchaseRequisitionItem", "pr_id"),
     "Material-has-PurchaseRequisitionItem": ("PurchaseRequisitionItem", "material_id"),
+    # BOM
+    "BillOfMaterials-has-Line":             ("BillOfMaterialsLine", "bom_id"),
+    "Material-has-BillOfMaterialsLine":     ("BillOfMaterialsLine", "material_id"),
 }
 
 

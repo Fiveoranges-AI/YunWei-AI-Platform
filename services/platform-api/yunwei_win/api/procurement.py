@@ -403,6 +403,29 @@ async def list_stock_movements(
     ]
 
 
+@router.get("/inventory-ledger")
+async def inventory_ledger(
+    request: Request,
+    material_id: UUID = Query(...),
+    period: str = Query(..., description="YYYY-MM"),
+    session: AsyncSession = Depends(get_session),
+):
+    """进销存台账: 期初 / 入 / 出 / 期末 + 期内流水明细 (按物料 × 期)."""
+    from yunwei_win.services.finance import compute_inventory_ledger, period_bounds
+
+    await _ensure_tables(request)
+    try:
+        period_bounds(period)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        return await compute_inventory_ledger(
+            material_id=material_id, period=period, session=session,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
 # ============================== mutations ===============================
 
 

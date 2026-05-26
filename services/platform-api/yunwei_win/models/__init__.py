@@ -119,6 +119,30 @@ from yunwei_win.models.procurement import (
     Supplier,
 )
 
+# ---------------------------------------------------------------------------
+# Finance (会企 01/02/03 — chart of accounts + opening balances + fixed assets)
+# ---------------------------------------------------------------------------
+from yunwei_win.models.finance import (
+    AccountClass,
+    ChartOfAccount,
+    DEFAULT_CHART_OF_ACCOUNTS,
+    FixedAsset,
+    FixedAssetCategory,
+    FixedAssetStatus,
+    NormalBalance,
+    PeriodOpeningBalance,
+    StatementSection,
+)
+
+# ---------------------------------------------------------------------------
+# BOM (配料单) — 锦泰 demo "配料单 D" 用
+# ---------------------------------------------------------------------------
+from yunwei_win.models.bom import (
+    BillOfMaterials,
+    BillOfMaterialsLine,
+    BomStatus,
+)
+
 __all__ = [
     # profile
     "Contact", "ContactRole",
@@ -167,4 +191,11 @@ __all__ = [
     "GoodsReceipt",
     "Payable", "PayableStatus",
     "StockAlert", "StockAlertLevel",
+    # Finance (会企 01/02/03)
+    "ChartOfAccount", "AccountClass", "StatementSection", "NormalBalance",
+    "PeriodOpeningBalance",
+    "FixedAsset", "FixedAssetCategory", "FixedAssetStatus",
+    "DEFAULT_CHART_OF_ACCOUNTS",
+    # BOM (配料单)
+    "BillOfMaterials", "BillOfMaterialsLine", "BomStatus",
 ]

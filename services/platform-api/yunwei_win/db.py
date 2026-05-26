@@ -227,6 +227,15 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         StockMovement,
         Supplier,
     )
+    from yunwei_win.models.finance import (
+        ChartOfAccount,
+        FixedAsset,
+        PeriodOpeningBalance,
+    )
+    from yunwei_win.models.bom import (
+        BillOfMaterials,
+        BillOfMaterialsLine,
+    )
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -261,6 +270,13 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         GoodsReceipt.__table__,
         Payable.__table__,
         StockAlert.__table__,
+        # Finance (会企 01/02/03)
+        ChartOfAccount.__table__,
+        PeriodOpeningBalance.__table__,
+        FixedAsset.__table__,
+        # BOM (配料单)
+        BillOfMaterials.__table__,
+        BillOfMaterialsLine.__table__,
     ]
 
     async with engine.begin() as conn:
@@ -423,6 +439,10 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
         },
         "ingest_jobs": {
             "extraction_id": "UUID",
+        },
+        # Procurement / inventory (锦泰 主线 — finance reports 加 last_unit_cost)
+        "procurement_materials": {
+            "last_unit_cost": "NUMERIC(18, 4) NOT NULL DEFAULT 0",
         },
     }
 
