@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.models import (
@@ -58,7 +58,9 @@ logger = logging.getLogger(__name__)
 
 
 # Rule constants. Kept as module-level so tests can monkeypatch.
-DEFAULT_REORDER_MULTIPLIER = Decimal("2.0")  # reorder qty = safety_stock × N − balance
+DEFAULT_REORDER_MULTIPLIER = Decimal("2.0")  # fallback: reorder qty = safety_stock × N − balance
+USAGE_LOOKBACK_DAYS = 90                     # 近 3 月用量
+USAGE_REORDER_COVER_MONTHS = Decimal("2.0")  # 备 2 个月用量
 AI_AUTODRAFT_ACTOR = "system:rule-engine"
 
 
@@ -167,10 +169,105 @@ def _compute_reorder_qty(
     *, safety_stock: Decimal, balance: Decimal,
     multiplier: Decimal = DEFAULT_REORDER_MULTIPLIER,
 ) -> Decimal:
-    """target = safety_stock × multiplier; reorder = target - balance, ≥0."""
+    """fallback target = safety_stock × multiplier; reorder = target - balance, ≥0."""
     target = safety_stock * multiplier
     reorder = target - balance
     return reorder if reorder > 0 else Decimal("0")
+
+
+@dataclass
+class ReorderRecommendation:
+    qty: Decimal
+    source: str  # "usage_3mo_avg" | "safety_fallback"
+    monthly_avg_usage: Decimal | None = None
+    months_of_history: Decimal | None = None
+    note: str = ""
+
+
+async def _compute_reorder_recommendation(
+    *,
+    session: AsyncSession,
+    material: Material,
+    balance: Decimal,
+    lookback_days: int = USAGE_LOOKBACK_DAYS,
+    cover_months: Decimal = USAGE_REORDER_COVER_MONTHS,
+) -> ReorderRecommendation:
+    """Try "近 3 月平均月用量 × cover_months";落到 safety_stock × N − balance."""
+    cutoff = _now() - timedelta(days=lookback_days)
+    total_out = (
+        await session.execute(
+            select(func.sum(StockMovement.quantity)).where(
+                StockMovement.material_id == material.id,
+                StockMovement.direction == StockMovementDirection.out,
+                StockMovement.occurred_at >= cutoff,
+            )
+        )
+    ).scalar_one() or Decimal("0")
+    total_out = Decimal(total_out)
+    months = Decimal(lookback_days) / Decimal(30)
+    if total_out > 0 and months > 0:
+        monthly_avg = total_out / months
+        target = monthly_avg * cover_months
+        reorder = target - balance
+        if reorder > 0:
+            return ReorderRecommendation(
+                qty=reorder.quantize(Decimal("0.0001")),
+                source="usage_3mo_avg",
+                monthly_avg_usage=monthly_avg.quantize(Decimal("0.0001")),
+                months_of_history=months,
+                note=(
+                    f"按近 {lookback_days} 天累计用量 {total_out} ÷ {months} 月 = "
+                    f"{monthly_avg.quantize(Decimal('0.01'))}/月,备 {cover_months} 个月扣 balance"
+                ),
+            )
+    # fallback
+    qty = _compute_reorder_qty(
+        safety_stock=Decimal(material.safety_stock), balance=balance,
+    )
+    return ReorderRecommendation(
+        qty=qty,
+        source="safety_fallback",
+        note=f"无 {lookback_days} 天用量历史 → 按 safety_stock × {DEFAULT_REORDER_MULTIPLIER} − balance 兜底",
+    )
+
+
+async def _last_supplier_for_material(
+    *, session: AsyncSession, material_id,
+) -> Supplier | None:
+    """Find the supplier of the most recent received PO containing this material."""
+    stmt = (
+        select(Supplier)
+        .select_from(PurchaseOrderItem)
+        .join(PurchaseOrder, PurchaseOrder.id == PurchaseOrderItem.po_id)
+        .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
+        .where(
+            PurchaseOrderItem.material_id == material_id,
+            PurchaseOrder.received_at.is_not(None),
+        )
+        .order_by(PurchaseOrder.received_at.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _last_unit_price_for_material(
+    *, session: AsyncSession, material_id, supplier_id=None,
+) -> Decimal | None:
+    """Look up the last unit_price on a PO item for this material (optionally same supplier)."""
+    stmt = (
+        select(PurchaseOrderItem.unit_price)
+        .select_from(PurchaseOrderItem)
+        .join(PurchaseOrder, PurchaseOrder.id == PurchaseOrderItem.po_id)
+        .where(
+            PurchaseOrderItem.material_id == material_id,
+            PurchaseOrderItem.unit_price.is_not(None),
+        )
+        .order_by(PurchaseOrder.created_at.desc())
+        .limit(1)
+    )
+    if supplier_id is not None:
+        stmt = stmt.where(PurchaseOrder.supplier_id == supplier_id)
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 # ============================== rule: confirm-and-issue =================
@@ -309,30 +406,52 @@ async def _ai_autodraft_requisition(
     balance: Decimal,
     related_alert: StockAlert,
 ) -> PurchaseRequisition | None:
-    """AI 规则版 auto-draft. 真正调 LLM 留给后续 task."""
-
-    reorder_qty = _compute_reorder_qty(
-        safety_stock=Decimal(material.safety_stock), balance=balance,
+    """AI 规则版 auto-draft (升级):
+      1. 优先按近 3 月平均月用量 × 2 推荐 qty (fallback 到 safety×2 − balance)
+      2. 按"该物料最近成交 supplier"自动绑(若有)
+      3. 按"该物料最近 unit_price"回填 (若有)
+    真正调 LLM 留给后续 task.
+    """
+    rec = await _compute_reorder_recommendation(
+        session=session, material=material, balance=balance,
     )
-    if reorder_qty <= 0:
+    if rec.qty <= 0:
         return None
+
+    supplier = await _last_supplier_for_material(
+        session=session, material_id=material.id,
+    )
+    supplier_id = supplier.id if supplier else None
+    unit_price = await _last_unit_price_for_material(
+        session=session, material_id=material.id, supplier_id=supplier_id,
+    )
+    if unit_price is None:
+        unit_price = await _last_unit_price_for_material(
+            session=session, material_id=material.id,
+        )
 
     pr_no = await _next_seq(
         session, PurchaseRequisition, PurchaseRequisition.pr_no, "PR",
     )
     today = date.today()
+    source_note_parts = [
+        f"AI 检测到 {material.name} 跌破安全线 {material.safety_stock}",
+        f"(余量 {balance})",
+        f"· qty 来源: {rec.source}",
+    ]
+    if supplier is not None:
+        source_note_parts.append(f"· supplier 自动绑: {supplier.name} (按最近成交)")
+    if unit_price is not None:
+        source_note_parts.append(f"· unit_price 回填: ¥{unit_price} (按历史)")
     pr = PurchaseRequisition(
         pr_no=pr_no,
         dept=triggering_voucher.workshop,
         applicant=triggering_voucher.applicant,
         apply_date=today,
-        supplier_id=None,
+        supplier_id=supplier_id,
         status=PurchaseRequisitionStatus.pending_approval,
         source=PurchaseRequisitionSource.ai_autodraft,
-        source_note=(
-            f"AI 检测到 {material.name} 跌破安全线 {material.safety_stock} "
-            f"(余量 {balance}),按规则引擎自动生成申购草稿"
-        ),
+        source_note=" ".join(source_note_parts),
         # AI auto-draft — human has NOT verified yet (approve flips this).
         human_verified=False,
         source_type="ai_autodraft",
@@ -345,15 +464,18 @@ async def _ai_autodraft_requisition(
     session.add(pr)
     await session.flush()
 
+    item_amount = (
+        (Decimal(unit_price) * rec.qty) if unit_price is not None else None
+    )
     pr_item = PurchaseRequisitionItem(
         pr_id=pr.id,
         material_id=material.id,
-        quantity=reorder_qty,
+        quantity=rec.qty,
         unit=material.unit,
         arrive_date=today + timedelta(days=10),
-        unit_price=None,
-        amount=None,
-        note=f"按 safety_stock × {DEFAULT_REORDER_MULTIPLIER} - balance 计算",
+        unit_price=Decimal(unit_price) if unit_price is not None else None,
+        amount=item_amount,
+        note=rec.note,
         human_verified=False,
         source_type="ai_autodraft",
         extracted_by="llm:rule-engine",
@@ -372,7 +494,10 @@ async def _ai_autodraft_requisition(
         actor_kind="system",
         action_type=NextActionType.other,
         input_summary=(
-            f"action=ai_autodraft_pr material={material.code} reorder_qty={reorder_qty} "
+            f"action=ai_autodraft_pr material={material.code} "
+            f"reorder_qty={rec.qty} qty_source={rec.source} "
+            f"supplier={supplier.name if supplier else 'unbound'} "
+            f"unit_price={unit_price if unit_price is not None else 'unknown'} "
             f"triggered_by_voucher={triggering_voucher.voucher_no} "
             f"triggered_by_alert={related_alert.id}"
         ),
@@ -616,7 +741,16 @@ async def receive_purchase_order(
             raise ProcurementRuleError(
                 f"material {item.material_id} on PO {po.po_no} not found"
             )
-        new_balance = Decimal(material.last_balance) + Decimal(item.quantity)
+        old_balance = Decimal(material.last_balance)
+        old_cost = Decimal(material.last_unit_cost)
+        new_balance = old_balance + Decimal(item.quantity)
+        # 加权平均成本 (WAC):receipt 携带 unit_price 才参与;无价时不影响 last_unit_cost.
+        if item.unit_price is not None and new_balance > 0:
+            received_cost = Decimal(item.unit_price)
+            material.last_unit_cost = (
+                (old_balance * old_cost + Decimal(item.quantity) * received_cost)
+                / new_balance
+            ).quantize(Decimal("0.0001"))
         movement = StockMovement(
             material_id=material.id,
             direction=StockMovementDirection.in_,

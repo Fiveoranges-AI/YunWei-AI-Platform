@@ -4,6 +4,16 @@
 **目标**: 把锦泰前端 demo (`apps/win-web/src/screens/jintai/`) 的 5 步主线从内存 mock 升级成后端真实落库 API。
 **老板早上 5 分钟扫这一份就能 review 整体方案。**
 
+> **更新 (round 2, 凌晨)**: 老板追加授权 "你为我做最佳判断 然后执行",已:
+> 1. 把 PR #114 末尾 7 项决策全部拍板 (5 ✅ / 2 ⏸),写到 PR description 顶部
+> 2. 推进 P1 财务三表 / 进销存台账 / 折旧 / 成本拆分 (新 PR `feat/jintai-finance-reports`,base 于 #114)
+> 3. P2.b auto-draft 升级(近 3 月用量 + supplier 自动绑 + unit_price 回填)
+> 4. P2.a BOM (配料单) explode API
+> 5. WAC 加权平均成本(Material 加 `last_unit_cost`,receive PO 自动更新)
+>
+> Round 2 决策 / 文件 / 测试详见 `outputs/JINTAI_BACKEND_ROUND2_REPORT.md`。
+> 本文件 §10-12 是 round 2 的增量章节。
+
 ---
 
 ## 1. 决策摘要 (Why-and-What, 不读代码也能懂)
@@ -287,3 +297,70 @@ Step 6   GET /briefing/kpi    (经营日报,实时反映)
 ```
 
 **预算**: Phase 2 是大头,占今晚 70% 时间。E2E 测试是 gate,必须通过才能收尾。
+
+---
+
+## 10. Round 2 (老板追加授权后) — 决策落地
+
+老板凌晨原话:"你为我做最佳判断 然后执行"。Claude 拍板了原本 7 项待决策,继续推进 P1 + P2,详见 `outputs/JINTAI_BACKEND_ROUND2_REPORT.md`。决策汇总:
+
+| 议题 | 决策 | 落地代码 |
+|---|---|---|
+| 分支策略 | ✅ 保持 base #113 | 本 PR base 在 #114 |
+| AI auto-draft 公式 | ✅ 升级到近 3 月用量 + safety fallback | `services/procurement.py::_compute_reorder_recommendation` |
+| Supplier/Material 入库 | ⏸ 走 confirm 不变 | 无 |
+| 应付账期 60 天 | ✅ 保持 | 无 |
+| auto-draft 自动绑 supplier | ✅ 升级 | `_last_supplier_for_material` / `_last_unit_price_for_material` |
+| ActionTargetType 扩展 | ⏸ 仍延后 | 无 |
+| 财务三表 自研 vs Kingdee | ✅ 自研最小聚合 | `models/finance.py` + `services/finance.py` + `api/finance.py` |
+
+---
+
+## 11. Round 2 新增数据 / API
+
+**5 张新表**:
+- `finance_chart_of_accounts` (科目主表,15 个常用 seed)
+- `finance_period_opening_balances` (每期每科目期初余额)
+- `finance_fixed_assets` (固定资产卡片 + 直线折旧)
+- `procurement_bills_of_materials` (BOM head)
+- `procurement_bill_of_materials_lines` (BOM line)
+
+**Material 加 1 列** `last_unit_cost` (Numeric 18,4,WAC 自动更新)
+
+**9 个新 API**:
+```
+GET  /finance/balance-sheet?period=YYYY-MM      (会企01)
+GET  /finance/pnl-distribution?period=YYYY-MM   (会企02)
+GET  /finance/cashflow?period=YYYY-MM           (会企03)
+GET  /finance/depreciation?period=YYYY-MM
+GET  /finance/cost-breakdown?period=YYYY-MM
+GET  /finance/chart-of-accounts
+GET  /procurement/inventory-ledger?material_id=&period=
+GET  /procurement/boms[?status=]
+GET  /procurement/boms/{id}
+POST /procurement/boms/{id}/explode  (按 batch_quantity 爆开)
+```
+
+**业务规则升级**:
+- `receive_purchase_order` → WAC 自动更新 material.last_unit_cost
+- `_ai_autodraft_requisition` → 用近 3 月用量 + 最近 supplier + 最近 unit_price
+- BOM `explode` → 算每料 required vs balance + shortage + available 标记
+
+---
+
+## 12. Round 2 测试
+
+```
+$ pytest tests/test_jintai_bom.py tests/test_jintai_finance_reports.py \
+         tests/test_jintai_mainline_e2e.py tests/test_procurement_api_listings.py \
+         tests/test_confirm_cards.py tests/test_ontology_schema.py \
+         tests/test_p0_end_to_end.py tests/test_parse_pipeline.py \
+         tests/test_ontology_migration_cycle.py -q
+56 passed in 2.74s
+```
+
+- 11 finance reports tests (含 WAC, auto-draft 升级, 3 月用量推荐)
+- 5 BOM tests (含 explode + scrap_rate + confirm_writer 走 BOM)
+- 9 既有 round 1 测试 (mainline e2e + listings) 不破
+- 31 既有 ontology / parse / confirm 测试 不破
+
