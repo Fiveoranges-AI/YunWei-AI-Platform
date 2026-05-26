@@ -16,9 +16,15 @@
 import { useState } from "react";
 import { useJintai } from "./state/store";
 
+function _readInspectDefault(): boolean {
+  if (typeof window === "undefined") return false;
+  const qp = new URLSearchParams(window.location.search);
+  return qp.get("inspect") === "1" || qp.get("inspectPanel") === "1";
+}
+
 export function JintaiBackendModePanel() {
   const { state, setMode, refreshBackendKpi } = useJintai();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(_readInspectDefault);
   const mode = state.mode;
   const ids = state.backendIds;
   const kpi = state.backendKpi;

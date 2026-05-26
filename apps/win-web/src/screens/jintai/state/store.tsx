@@ -742,6 +742,18 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
     [state.flash],
   );
 
+  /* ---------- round 4 screenshot helper: ?jumpToEnd=1 直接到 demo-complete ---------- */
+  const jumpedRef = useRef(false);
+  useEffect(() => {
+    if (jumpedRef.current) return;
+    if (typeof window === "undefined") return;
+    const qp = new URLSearchParams(window.location.search);
+    if (qp.get("jumpToEnd") === "1") {
+      jumpedRef.current = true;
+      dispatch({ type: "TOUR_SET_STEP", step: TOUR_TOTAL + 1 });
+    }
+  }, []);
+
   /* ---------- iter 23: 引导式 Tour 引擎 ---------- */
   // 进入每一步:① 派发 step.action ② 重新激活 flashKeys ③ 设置子 tab + scroll
   useEffect(() => {
