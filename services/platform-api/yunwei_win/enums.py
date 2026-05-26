@@ -49,6 +49,17 @@ from yunwei_win.models.operations import (
     NextActionStatus,
     NextActionType,
 )
+from yunwei_win.models.procurement import (
+    IssueVoucherStatus,
+    MaterialKind,
+    PayableStatus,
+    PurchaseOrderStatus,
+    PurchaseRequisitionSource,
+    PurchaseRequisitionStatus,
+    StockAlertLevel,
+    StockMovementDirection,
+    StockMovementReferenceType,
+)
 
 __all__ = [
     # contact / customer
@@ -72,4 +83,12 @@ __all__ = [
     "NextActionType", "NextActionStatus",
     "ActionTargetType",
     "DeliveryStatus",
+    # procurement / inventory layer (锦泰 主线)
+    "MaterialKind",
+    "StockMovementDirection", "StockMovementReferenceType",
+    "IssueVoucherStatus",
+    "PurchaseRequisitionStatus", "PurchaseRequisitionSource",
+    "PurchaseOrderStatus",
+    "PayableStatus",
+    "StockAlertLevel",
 ]

@@ -3,11 +3,13 @@
 from fastapi import APIRouter
 
 from yunwei_win.api.ask import router as _ask_router
+from yunwei_win.api.briefing import router as _briefing_router
 from yunwei_win.api.company_schema import router as _company_schema_router
 from yunwei_win.api.confirm import router as _confirm_router
 from yunwei_win.api.customer_management import router as _customer_management_router
 from yunwei_win.api.customer_profile import router as _customer_profile_router
 from yunwei_win.api.ingest import router as _ingest_router
+from yunwei_win.api.procurement import router as _procurement_router
 from yunwei_win.api.read import router as _read_router
 from yunwei_win.assistant.router import router as _assistant_router
 
@@ -22,6 +24,8 @@ def create_router() -> APIRouter:
     router.include_router(_customer_management_router)
     router.include_router(_company_schema_router)
     router.include_router(_confirm_router)
+    router.include_router(_procurement_router)
+    router.include_router(_briefing_router)
     return router
 
 
