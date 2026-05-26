@@ -22,6 +22,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import ensure_schema_ingest_tables_for, get_session
@@ -457,6 +458,11 @@ async def issue_voucher_confirm_and_issue(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return IssueVoucherConfirmResponse(
         voucher_id=result.voucher_id,
         material_id=result.material_id,
@@ -503,6 +509,11 @@ async def approve_requisition_endpoint(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return ApproveRequisitionResponse(
         pr_id=result.pr_id,
         po_id=result.po_id,
@@ -532,6 +543,11 @@ async def reject_requisition_endpoint(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return {"pr_id": str(pr_id_out), "status": "rejected"}
 
 
@@ -574,6 +590,11 @@ async def purchase_order_receive(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return ReceivePoResponse(
         po_id=result.po_id,
         receipt_id=result.receipt_id,

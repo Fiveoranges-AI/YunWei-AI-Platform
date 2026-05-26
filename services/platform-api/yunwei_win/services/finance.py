@@ -468,6 +468,10 @@ async def compute_pnl(
 ) -> dict[str, Any]:
     """会企02 利润及利润分配表.
 
+    Round 3 闭环: 当期折旧自动并入"管理费用" → 流到 net_profit → 流到 retained_earnings.
+    这样 balance_sheet 的 累计折旧 增量 (-D) 与 retained_earnings 减量 (-D) 自然平衡.
+    demo 简化:全部折旧记入管理费用 6602 (实际会计可细分到制造费用/销售费用).
+
     seed_only=True 时跳过 ensure_chart_of_accounts_seeded (避免 balance_sheet 调用时
     递归 flush).
     """
@@ -479,8 +483,12 @@ async def compute_pnl(
     cogs = await _cogs_in_period(session, start, end)
     openings = await _opening_balances(session, period)
     selling = openings.get("6601", ZERO)
-    admin = openings.get("6602", ZERO)
+    admin_opening = openings.get("6602", ZERO)
     finance_expense = openings.get("6603", ZERO)
+
+    # 当期折旧 → 并入管理费用 (round 3 决策 #4 闭环)
+    period_depreciation = await _current_period_depreciation_total(session, end)
+    admin = admin_opening + period_depreciation
 
     operating_profit = revenue - cogs - selling - admin - finance_expense
     profit_total = operating_profit  # 无其他业务利润 / 营业外
@@ -494,7 +502,10 @@ async def compute_pnl(
         ReportRow("1",  "一、营业收入",        "6001", revenue),
         ReportRow("2",  "  减:营业成本",      "6401", cogs),
         ReportRow("3",  "  减:销售费用",      "6601", selling),
-        ReportRow("4",  "  减:管理费用",      "6602", admin),
+        ReportRow("4",  "  减:管理费用",      "6602", admin,
+                  note=(f"含本期折旧 ¥{_q(period_depreciation)} (并入管理费用,demo 简化)"
+                        if period_depreciation > 0 else None)),
+        ReportRow("4.1", "    其中:折旧费用", None,   period_depreciation),
         ReportRow("5",  "  减:财务费用",      "6603", finance_expense),
         ReportRow("6",  "二、营业利润",        None,   operating_profit),
         ReportRow("7",  "三、利润总额",        None,   profit_total),
@@ -517,12 +528,46 @@ async def compute_pnl(
         "rows": [r.to_dict() for r in rows],
         "net_profit_period": str(_q(net_profit)),
         "retained_earnings_change_period": str(_q(retained_change)),
+        "period_depreciation_in_admin": str(_q(period_depreciation)),
         "totals": {
             "revenue": str(_q(revenue)),
             "operating_profit": str(_q(operating_profit)),
             "net_profit": str(_q(net_profit)),
         },
     }
+
+
+async def _current_period_depreciation_total(
+    session: AsyncSession, period_end: date,
+) -> Decimal:
+    """Sum of (monthly_depreciation × 1) for active FAs whose accum hasn't capped at period_end.
+
+    Mirrors compute_depreciation_schedule's per-asset calc:
+        current_period_dep = accum(end) − accum(prev_end)
+    """
+    rows = (
+        await session.execute(
+            select(FixedAsset).where(
+                FixedAsset.acquired_date <= period_end,
+                FixedAsset.is_deleted == False,
+            )
+        )
+    ).scalars().all()
+    total = ZERO
+    for asset in rows:
+        if asset.status == FixedAssetStatus.disposed and asset.disposed_date and asset.disposed_date <= period_end:
+            continue
+        monthly = monthly_depreciation(asset)
+        months_through = months_depreciated(asset, period_end)
+        if months_through == 0:
+            continue
+        max_depreciable = Decimal(asset.original_cost) - Decimal(asset.salvage_value)
+        accum = min(monthly * months_through, max_depreciable)
+        prev_accum = min(monthly * max(0, months_through - 1), max_depreciable)
+        period_dep = accum - prev_accum
+        if period_dep > 0:
+            total += period_dep
+    return _q(total)
 
 
 async def compute_cashflow(period: str, session: AsyncSession) -> dict[str, Any]:
