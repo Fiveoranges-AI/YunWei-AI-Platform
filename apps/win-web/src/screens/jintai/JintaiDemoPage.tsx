@@ -224,11 +224,13 @@ function tabFromHash(hash: string): TabKey | null {
 
 import { JintaiProvider, TOUR_TOTAL, useJintai } from "./state/store";
 import { JintaiDemoTour } from "./JintaiDemoTour";
+import { JintaiBackendModePanel } from "./JintaiBackendModePanel";
 
 export function JintaiDemoPage() {
   return (
     <JintaiProvider>
       <JintaiDemoTour />
+      <JintaiBackendModePanel />
       <JintaiDemoPageInner />
     </JintaiProvider>
   );

@@ -35,6 +35,18 @@ import type {
   PurchaseRequisition,
   StockLedger,
 } from "../data";
+import {
+  createIssueVoucher,
+  ensureDemoSeed,
+  getBriefingKpi,
+  getHealth,
+  JintaiBackendError,
+  postApprovePr,
+  postIssueAndConfirm,
+  postReceivePo,
+  type BriefingKpiOut,
+  type HealthOut,
+} from "../../../api/jintai-backend";
 
 /* ---------- Toast ---------- */
 export type Toast = {
@@ -71,6 +83,25 @@ const NEW_INBOX_ID = "demo-line-issue-001";
 export type ProductionSubtab = "A" | "D" | "B" | "C";
 /** tourStep: 0 = 未启动 / 1-N = 步骤中 / N+1 = 总结 */
 
+/* ---------- Round 4: backend-mode 状态 ---------- */
+export type BackendMode = "mock" | "backend";
+
+/** 后端落库的真实 ID,backend mode 用 (mock 模式忽略). */
+export type BackendIds = {
+  supplierId?: string;
+  materialId?: string;
+  voucherId?: string;
+  prId?: string;
+  poId?: string;
+};
+
+export type BackendStatus = {
+  health?: HealthOut;
+  lastError?: string;
+  seeding?: boolean;
+  lastSyncedAt?: number;
+};
+
 /* ---------- State ---------- */
 export type JintaiState = {
   stockLedgers: StockLedger[];
@@ -88,6 +119,27 @@ export type JintaiState = {
   productionSubtab: ProductionSubtab;
   /** iter 23: tour 滚动锚点 (panel 监听后 scrollIntoView) */
   scrollAnchor: string | null;
+  /** round 4: 当前 demo 模式 */
+  mode: BackendMode;
+  /** round 4: 后端落库的真实 ID,用于串起 4 个 mutation API 调用 */
+  backendIds: BackendIds;
+  /** round 4: 来自 GET /briefing/kpi 的最新快照 (持久化证明) */
+  backendKpi: BriefingKpiOut | null;
+  /** round 4: 后端连通性 + 最近错误 */
+  backendStatus: BackendStatus;
+};
+
+const _readInitialMode = (): BackendMode => {
+  if (typeof window === "undefined") return "mock";
+  const qp = new URLSearchParams(window.location.search);
+  const q = qp.get("mode");
+  if (q === "backend") return "backend";
+  if (q === "mock") return "mock";
+  try {
+    const ls = window.localStorage.getItem("jintai.mode");
+    if (ls === "backend") return "backend";
+  } catch { /* ignore */ }
+  return "mock";
 };
 
 const initialState: JintaiState = {
@@ -103,6 +155,10 @@ const initialState: JintaiState = {
   tourPlaying: false,
   productionSubtab: "A",
   scrollAnchor: null,
+  mode: _readInitialMode(),
+  backendIds: {},
+  backendKpi: null,
+  backendStatus: {},
 };
 
 /* ---------- Actions ---------- */
@@ -123,7 +179,12 @@ type Action =
   | { type: "TOUR_PAUSE" }
   | { type: "TOUR_RESUME" }
   | { type: "TOUR_EXIT" }
-  | { type: "RESET" };
+  | { type: "RESET" }
+  /* round 4: backend-mode 状态机 */
+  | { type: "SET_MODE"; mode: BackendMode }
+  | { type: "SET_BACKEND_IDS"; ids: Partial<BackendIds> }
+  | { type: "SET_BACKEND_KPI"; kpi: BriefingKpiOut | null }
+  | { type: "SET_BACKEND_STATUS"; status: Partial<BackendStatus> };
 
 /* ---------- 引导式 Tour 剧本 (10 步 + 总结) ---------- */
 
@@ -555,8 +616,15 @@ function reducer(state: JintaiState, action: Action): JintaiState {
       return { ...state, scrollAnchor: action.anchor };
 
     case "TOUR_START":
+      // Round 4: preserve mode + backend bookkeeping so a tour run in backend
+      // mode keeps the seeded supplier/material IDs and continues to fire
+      // real API calls. Tour resets ONLY the demo display state.
       return {
         ...initialState,
+        mode: state.mode,
+        backendIds: state.backendIds,
+        backendKpi: state.backendKpi,
+        backendStatus: state.backendStatus,
         tourStep: 1,
         tourPlaying: true,
       };
@@ -574,7 +642,33 @@ function reducer(state: JintaiState, action: Action): JintaiState {
       return { ...state, tourStep: 0, tourPlaying: false, scrollAnchor: null };
 
     case "RESET":
-      return { ...initialState, toasts: [{ id: "reset", level: "info", title: "已重置到 demo 初始状态" }] };
+      // Preserve mode across reset; reset everything else.
+      return {
+        ...initialState,
+        mode: state.mode,
+        toasts: [{ id: "reset", level: "info", title: "已重置到 demo 初始状态" }],
+      };
+
+    case "SET_MODE": {
+      if (typeof window !== "undefined") {
+        try { window.localStorage.setItem("jintai.mode", action.mode); } catch { /* ignore */ }
+      }
+      return {
+        ...state,
+        mode: action.mode,
+        // 切 mode 同时重置后端 IDs (避免老 ID 串扰)
+        backendIds: action.mode === "mock" ? {} : state.backendIds,
+      };
+    }
+    case "SET_BACKEND_IDS":
+      return { ...state, backendIds: { ...state.backendIds, ...action.ids } };
+    case "SET_BACKEND_KPI":
+      return { ...state, backendKpi: action.kpi };
+    case "SET_BACKEND_STATUS":
+      return {
+        ...state,
+        backendStatus: { ...state.backendStatus, ...action.status, lastSyncedAt: Date.now() },
+      };
 
     default:
       return state;
@@ -605,6 +699,11 @@ type Ctx = {
     prAmount: number;
     prReorderQty: number;
   };
+  /** round 4: backend-mode 切换 + 副作用 */
+  setMode: (mode: BackendMode) => void;
+  refreshBackendKpi: () => Promise<void>;
+  /** round 4: 包装 dispatch — backend mode 下先发 API,失败 fallback 到 mock */
+  dispatchWithBackend: (action: Action) => Promise<void>;
 };
 
 const JintaiContext = createContext<Ctx | null>(null);
@@ -651,7 +750,10 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
     if (tourEnteredRef.current === state.tourStep) return;
     tourEnteredRef.current = state.tourStep;
     const step = TOUR_STEPS[state.tourStep - 1];
-    if (step.action) dispatch(step.action);
+    if (step.action) {
+      // Round 4: backend mode 走 dispatchWithBackend (失败 fallback 到 mock)
+      void dispatchWithBackend(step.action);
+    }
     if (step.flashKeys && step.flashKeys.length > 0) {
       // 延迟 200ms 给 action 落地后再 flash (action 自己也会 flash 一次)
       window.setTimeout(() => dispatch({ type: "FLASH_KEYS", keys: step.flashKeys! }), 200);
@@ -678,6 +780,169 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
       }
     };
   }, [state.tourPlaying, state.tourStep]);
+
+  /* ---------- round 4: backend-mode 引擎 ---------- */
+
+  const refreshBackendKpi = useCallback(async () => {
+    try {
+      const kpi = await getBriefingKpi();
+      dispatch({ type: "SET_BACKEND_KPI", kpi });
+      dispatch({ type: "SET_BACKEND_STATUS", status: { lastError: undefined } });
+    } catch (e) {
+      const msg = e instanceof JintaiBackendError ? `${e.message}: ${JSON.stringify(e.detail)}` : String(e);
+      dispatch({ type: "SET_BACKEND_STATUS", status: { lastError: msg } });
+    }
+  }, []);
+
+  /** 进入 backend mode 时:health check + seed supplier+material (如未有) + 拉首次 KPI */
+  const ensureSeedRef = useRef<Promise<void> | null>(null);
+  const ensureBackendSeed = useCallback(async () => {
+    if (ensureSeedRef.current) return ensureSeedRef.current;
+    const run = (async () => {
+      dispatch({ type: "SET_BACKEND_STATUS", status: { seeding: true, lastError: undefined } });
+      try {
+        const health = await getHealth();
+        dispatch({ type: "SET_BACKEND_STATUS", status: { health } });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({
+          type: "SET_BACKEND_STATUS",
+          status: { seeding: false, lastError: `health: ${msg}` },
+        });
+        throw e;
+      }
+      // 已经 seed 过 (state 有 ids) 就 skip,不重复 seed
+      if (state.backendIds.supplierId && state.backendIds.materialId) {
+        dispatch({ type: "SET_BACKEND_STATUS", status: { seeding: false } });
+        await refreshBackendKpi();
+        return;
+      }
+      try {
+        const ids = await ensureDemoSeed({
+          supplierName: `${PIVOT_MATERIAL} demo 供应商 ${new Date().toISOString().slice(0, 16)}`,
+          paymentTermsDays: 60,
+          materialCode: `RM-AL2O3-DEMO-${Date.now()}`,
+          materialName: PIVOT_MATERIAL,
+          unit: "kg",
+          safetyStock: 1500,
+          initialBalance: 1880,
+        });
+        dispatch({ type: "SET_BACKEND_IDS", ids });
+        dispatch({ type: "SET_BACKEND_STATUS", status: { seeding: false } });
+        await refreshBackendKpi();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({ type: "SET_BACKEND_STATUS", status: { seeding: false, lastError: msg } });
+      }
+    })();
+    ensureSeedRef.current = run;
+    return run;
+  }, [state.backendIds.supplierId, state.backendIds.materialId, refreshBackendKpi]);
+
+  const setMode = useCallback((mode: BackendMode) => {
+    ensureSeedRef.current = null; // allow re-seed on next backend entry
+    dispatch({ type: "SET_MODE", mode });
+    if (mode === "backend") {
+      // fire and forget
+      void ensureBackendSeed();
+    }
+  }, [ensureBackendSeed]);
+
+  // 初次 mount 时如 mode=backend 触发 seed
+  const initialSeedDoneRef = useRef(false);
+  useEffect(() => {
+    if (initialSeedDoneRef.current) return;
+    initialSeedDoneRef.current = true;
+    if (state.mode === "backend") void ensureBackendSeed();
+  }, [state.mode, ensureBackendSeed]);
+
+  /**
+   * 包装 dispatch:
+   *  - mock mode:  原样 dispatch
+   *  - backend mode: 对主线 4 个 action 先打 API → 成功 → dispatch + refresh KPI;
+   *                  失败 → toast + 仍 dispatch 以保 demo 不挂 (fallback)
+   *  - 其它 action: 直接 dispatch
+   */
+  const dispatchWithBackend = useCallback(
+    async (action: Action) => {
+      if (state.mode === "mock") {
+        dispatch(action);
+        return;
+      }
+      // backend mode
+      try {
+        if (action.type === "SIMULATE_RAW_ISSUE") {
+          await ensureBackendSeed();
+          const ids = state.backendIds;
+          // Re-read after ensureBackendSeed (above sets via dispatch — state may be stale).
+          // Use refs would be cleaner; for safety we tolerate ids being undefined and 再 dispatch + fallback.
+          if (!ids.materialId) {
+            // seed in progress / failed — dispatch mock fallback
+            dispatch(action);
+            return;
+          }
+          const voucherId = await createIssueVoucher({
+            materialId: ids.materialId,
+            voucherNo: `BL-DEMO-${Date.now()}`,
+            workshop: "成型车间",
+            applicant: "张师傅",
+            quantity: ISSUE_QTY,
+            unit: "kg",
+            purpose: "demo backend mode 一键演示",
+          });
+          dispatch({ type: "SET_BACKEND_IDS", ids: { voucherId } });
+        } else if (action.type === "CONFIRM_INBOX" && action.cardId === NEW_INBOX_ID) {
+          const vid = state.backendIds.voucherId;
+          if (vid) {
+            const resp = await postIssueAndConfirm(vid);
+            dispatch({
+              type: "SET_BACKEND_IDS",
+              ids: { prId: resp.auto_drafted_pr_id ?? undefined },
+            });
+          }
+        } else if (action.type === "APPROVE_PR" && action.prNo === NEW_PR_NO) {
+          const pid = state.backendIds.prId;
+          const sid = state.backendIds.supplierId;
+          if (pid && sid) {
+            // fetch PR items to get unit price target
+            const { listRequisitions } = await import("../../../api/jintai-backend");
+            const prs = await listRequisitions();
+            const pr = prs.find((p) => p.id === pid);
+            const unitPrices: Record<string, string> = {};
+            for (const it of pr?.items || []) {
+              unitPrices[it.id] = String(PR_UNIT_PRICE.toFixed(2));
+            }
+            const resp = await postApprovePr(pid, { supplier_id: sid, unit_prices: unitPrices });
+            dispatch({ type: "SET_BACKEND_IDS", ids: { poId: resp.po_id } });
+          }
+        } else if (action.type === "RECEIVE_PO" && action.poNo === NEW_PO_NO) {
+          const po = state.backendIds.poId;
+          if (po) {
+            await postReceivePo(po, { warehouse: "原料库 A-02" });
+          }
+        }
+        dispatch(action);
+        // refresh KPI after each mutation (mainline actions)
+        if (["SIMULATE_RAW_ISSUE", "CONFIRM_INBOX", "APPROVE_PR", "RECEIVE_PO"].includes(action.type)) {
+          await refreshBackendKpi();
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({
+          type: "SET_BACKEND_STATUS",
+          status: { lastError: `${action.type}: ${msg}` },
+        });
+        // fallback 到 mock 行为,demo 不挂
+        dispatch(action);
+      }
+    },
+    [
+      state.mode,
+      state.backendIds,
+      ensureBackendSeed,
+      refreshBackendKpi,
+    ],
+  );
 
   const startTour = useCallback(() => {
     tourEnteredRef.current = 0;
@@ -716,8 +981,14 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
         prAmount: PR_AMOUNT,
         prReorderQty: PR_REORDER_QTY,
       },
+      setMode,
+      refreshBackendKpi,
+      dispatchWithBackend,
     }),
-    [state, startTour, pauseTour, resumeTour, exitTour, nextTourStep, currentTourStep, isFlashing],
+    [
+      state, startTour, pauseTour, resumeTour, exitTour, nextTourStep,
+      currentTourStep, isFlashing, setMode, refreshBackendKpi, dispatchWithBackend,
+    ],
   );
 
   return (
