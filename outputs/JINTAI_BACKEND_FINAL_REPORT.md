@@ -1,25 +1,30 @@
 # 锦泰耐火材料 · 后端开发 — FINAL REPORT
 
 **作者**: Claude (autonomous overnight, 2026-05-26)
-**老板早上读这一份就够**。三轮工作明细在末尾链接,但 5 分钟扫这一份能掌握全貌。
+**老板早上读这一份就够**。四轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
+
+> **Round 4 更新 (凌晨,backend-mode 端到端打通)**:见末尾 §11。前端 demo 已加 `mock/backend` 双模式,backend 模式下 90 秒一键演示真实驱动 SQLite 后端,刷新页面 KPI 持久。**3 个 draft PR (#114 / #115 / #116)** 等明早 review。
 
 ---
 
 ## 0. TL;DR (60 秒)
 
 锦泰前端 demo (`apps/win-web/src/screens/jintai/`) 客户验收满意,今晚把它的 5 步主线 +
-财务三表 + 进销存 + BOM 全部用真实后端 API 落地。**2 个 draft PR 等你 review,
-不动前端,67 个测试全绿**。
+财务三表 + 进销存 + BOM 全部用真实后端 API 落地 + **前端切 backend 模式端到端打通**。
+**3 个 draft PR 等你 review,67 个 SQLite + tsc 测试全绿**。
 
 ```
 PR #114 — jintai 主线 (采购/库存) schema + 业务规则 + API + E2E
-PR #115 — 财务三表 (会企 01/02/03) + 进销存台账 + 折旧 + BOM + auto-draft 升级 + 闭环
+PR #115 — 财务三表 (会企 01/02/03) + 进销存台账 + 折旧 + BOM + auto-draft 升级 +
+          闭环 + Round 4 决策 #1 #4 + 后端 dev launcher
+PR #116 — (round 4) 前端 mock/backend 双模式 + 端到端 backend 数据驱动
 
 共  16 张新表 / 21 个新 API / 5 个业务规则 / 67 个 SQLite 测试 全绿
-13 项决策 (7 + 6) 全部已拍板;7 ✅ 落到代码,6 ⏸ 等业务/反馈再做,0 ❌ 拒绝
+17 项决策 (7 + 6 + 4) 全部已拍板;9 ✅ 落到代码,8 ⏸ 触发条件明确,0 ❌ 拒绝
 
-不动前端 (红线) · 不动 main · do-not-merge · 全部 lightweight migration
+不动 main · do-not-merge · 全部 lightweight migration
 "AI 先填、人确认" 路径必经 confirm_writer + ActionLog + FieldProvenance
+mock 模式行为 0 影响 · backend 模式 90 秒一键演示真实驱动 SQLite
 ```
 
 ---
@@ -29,10 +34,11 @@ PR #115 — 财务三表 (会企 01/02/03) + 进销存台账 + 折旧 + BOM + au
 | PR | 范围 | 文件数 | 行数 (新+) | 测试 | 决策 | 状态 |
 |---|---|---|---|---|---|---|
 | **#114** | 主线 schema (11 表) + 3 业务规则 + 11 API + e2e | 14 | ~3550 | 9 (5 e2e + 4 listing) | 7 项 ✅ 5 ⏸ 2 | draft, do-not-merge |
-| **#115** | 财务三表 + 折旧 + 成本 + 进销存 + BOM (5 表 + 10 API) + auto-draft 升级 + 折旧闭环 + backfill | 25 | ~3900 | 27 (11 finance + 5 BOM + 11 round3 edges) | 6 项 ✅ 2 ⏸ 4 | draft, do-not-merge |
-| (PR链) | #110→#111→#112→#113→#114→#115 | stack depth 6 | | 既有 31 不破 | | |
+| **#115** | 财务三表 + 折旧 + 成本 + 进销存 + BOM (5 表 + 10 API) + auto-draft 升级 + 折旧闭环 + backfill + **后端 dev launcher** | 28 | ~4100 | 27 (11 finance + 5 BOM + 11 round3 edges) | 6 项 ✅ 2 ⏸ 4 | draft, do-not-merge |
+| **#116** (round 4) | **前端 backend mode 切换** + dispatchWithBackend + Backend Reality Check 面板 | 5 | ~750 | tsc + 端到端浏览器验证 | 4 项 0 ✅ 4 ⏸ (触发条件已记) | draft, do-not-merge |
+| (PR链) | #110→#111→#112→#113→#114→#115 backend stack;#116 base on `feat/jintai-demo` (frontend stack) | | | 67 SQLite 不破 | | |
 
-**Reviewer 推荐顺序**: 先扫 #114(主线),再看 #115(增量;在 #114 的基础上)。两个 PR description 顶部都有 "## 决策" 段,逐条拍板即可。
+**Reviewer 推荐顺序**: #114 (主线) → #115 (增量 + 决策 13 项) → #116 (前端 wire-up)。每个 PR description 顶部都有 "## 决策" 段,逐条拍板即可。**端到端 demo** 看 #116 description 的"端到端验证"段或 `outputs/JINTAI_ROUND4_E2E_VERIFICATION.md`。
 
 ---
 
@@ -295,19 +301,80 @@ Step 4 [5 min]  扫 outputs/JINTAI_BACKEND_FINAL_REPORT.md §6 (限制) + §7 (n
 
 ---
 
-## 11. 三轮历史链接
+## 11. Round 4 — backend mode 端到端 + 4 项延后决策快判 (新)
+
+老板凌晨第四次授权 (继续执行 + 解除"不动前端"红线). 这一轮把价值闭环到客户视角:demo 真的能切到 backend 模式跑真实数据。
+
+### 11.1 4 项延后决策 5 分钟过完(全部保持 ⏸,触发条件已写到 §6 表格)
+
+| 议题 | 决策 | 触发条件 |
+|---|---|---|
+| chart_of_accounts 扩科目 | ⏸ | 锦泰提供真表 OR 接入 Kingdee |
+| payments_out / cash_movements 表 | ⏸ | 现金流闭环展开时(round 5+, ~1 天) |
+| BOM version 自动累增 | ⏸ | 锦泰需要同产品多版本配方时 |
+| WAC → FIFO (lot tracking) | ⏸ | 锦泰金额大波动大物料明确诉求 |
+
+4 项都不是"低成本高价值"顺手活,无业务方反馈或客户需求,延后。
+
+### 11.2 后端 dev launcher (PR #115)
+
+- `services/platform-api/dev_jintai_backend.py` — 独立 FastAPI app,跳过 platform middleware,SQLite 落盘 `yinhu_tenant_jintai_demo.db`,CORS allow 127.0.0.1:5175,中间件 stamp 固定 `enterprise_id="jintai_demo" + actor="demo-user"`
+- `scripts/jintai/dev-backend.sh` — 一行命令起后端 (default 8000, --reload)
+- 烟雾测试通过:health 200 + 主线 4 个 mutation 全 200
+
+### 11.3 前端 backend mode wire-up (PR #116)
+
+新分支 `feat/jintai-frontend-backend-mode` (base on `feat/jintai-demo`):
+
+- 新 `apps/win-web/src/api/jintai-backend.ts` (~340 行) fetch 客户端 — 不动既有 `api/jintai.ts`
+- 新 `apps/win-web/src/screens/jintai/JintaiBackendModePanel.tsx` (~190 行) — 右上角 chip + Backend Reality Check 面板
+- `store.tsx` 加 `mode/backendIds/backendKpi/backendStatus` + `setMode/ensureBackendSeed/refreshBackendKpi/dispatchWithBackend`
+- Tour engine 改用 `dispatchWithBackend` — backend 模式下先打 API → 成功 → dispatch + KPI refresh;失败 → toast + fallback,demo 不挂
+- **修了 TOUR_START reducer bug**: 之前 `return { ...initialState, ... }` 重置了 mode
+
+### 11.4 端到端验证 (`outputs/JINTAI_ROUND4_E2E_VERIFICATION.md` 详)
+
+- 启动 `dev-backend.sh` + `npm run dev` + 浏览器 `?tab=jintai&mode=backend`
+- 点 ▶引导式演示 → **13 个 /api/win/* HTTP 调用全 200**
+- SQLite 落:1 IssueVoucher / 2 StockMovements (out 800 → in 1920, balance 1080→3000) / 1 PR (ai_autodraft → closed_to_po) / 1 PO (closed, ¥46,080) / 1 Payable (due=invoice+60 天) / 10 ActionLogs (含 `actor_kind=system:rule-engine` AI触发 + `actor_kind=user` 人确认双线)
+- `material.last_unit_cost=15.36` (WAC=(1080×0+1920×24)/3000 ✓)
+- F5 刷新页面 → KPI 仍 `payable_total=¥46,080 / count=1 / today_event_count=12` → **持久化通过**
+
+### 11.5 红线全守
+
+- mock 模式行为 0 变(默认;localStorage / URL 三重保护)
+- 不引重依赖(fetch 原生;tsc 通过)
+- "AI 先填、人确认" 必经 confirm_writer + ActionLog(SQLite 验证 actor_kind 分线)
+- 财务用元 + 会企格式保持
+- 67 SQLite 后端测试仍全绿
+
+### 11.6 Round 4 截图证据
+
+(对话历史 image content 已包含, reviewer 可在 conversation 内查看, 或本地按 §11.4 自跑 30 秒复现)
+
+1. **一键演示完成**:DEMO COMPLETE modal 显示 7 步全闭环 + 浏览器网络面板 13 个 200 请求
+2. **刷新页面后持久化**:Backend Reality Check 面板展开 — 后端 HEALTH ● ok / 已落库 supplier+material IDs / GET KPI **应付总额 ¥46080.0000 (持久!) / 应付笔数 1 / 今日事件 12**
+
+---
+
+## 12. 四轮历史链接
 
 - **Round 1 详细报告**: `outputs/JINTAI_BACKEND_REPORT.md`
   - Phase 0 discovery + Phase 1-5 P0 主线实施 (commits up to 主线 PR #114)
 - **Round 2 详细报告**: `outputs/JINTAI_BACKEND_ROUND2_REPORT.md`
   - 7 项决策落地 + P1/P2 财务三表 + 台账 + 折旧 + BOM + auto-draft 升级 (commits up to 财务 PR #115 初版)
-- **Round 3 收敛与打磨** (本文件 + PR #115 后续 commits):
+- **Round 3 收敛与打磨** (本文件 §1-10 + PR #115 后续 commits):
   - 6 项决策落地 (#1 backfill + #4 闭环);#2/#3/#5/#6 延后
   - 自审 21 API → 修了 IntegrityError 漏 500 bug → 409 处理
   - 边界测试 +11 (双 confirm 409 / 跨期 / 库存零 / WAC 极端 / period 格式)
   - 合并 demo 脚本 → scripts/jintai/full-demo.sh
   - PR #114 + #115 description 加 Reviewer Checklist
-  - **本份 FINAL_REPORT 统一总汇**
+  - 本份 FINAL_REPORT 统一总汇
+- **Round 4 端到端 + 4 项延后快判** (本文件 §11 + PR #115 dev launcher + 新 PR #116):
+  - 4 项延后决策保持 ⏸,补触发条件
+  - 后端 dev launcher (SQLite + CORS)
+  - 前端 mock/backend 双模式 + Backend Reality Check 面板
+  - 端到端浏览器验证:13 网络请求 + SQLite 真实落库 + F5 持久
 
 ---
 
