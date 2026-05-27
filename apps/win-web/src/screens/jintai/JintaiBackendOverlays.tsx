@@ -49,6 +49,44 @@ function _fmtCny(s: string | number | null | undefined): string {
 }
 
 
+/**
+ * Round 10 UX polish: take the raw fetch / HTTP error string and surface
+ * a customer-friendly short label, with the full technical message kept
+ * as a title-attribute tooltip for engineers.
+ *
+ * Categories observed in practice:
+ *  - "Failed to fetch" / "Load failed" / "NetworkError ..." → 后端不可达
+ *  - "HTTP 401" / "HTTP 403"                                → 未授权
+ *  - "HTTP 404"                                              → 接口不存在
+ *  - "HTTP 4xx"                                              → 请求被拒
+ *  - "HTTP 5xx" / "Internal Server Error"                    → 服务异常
+ *  - anything else                                           → 出错 (fallback)
+ */
+function _classifyBackendError(raw: string): string {
+  const m = raw.toLowerCase();
+  if (m.includes("failed to fetch") || m.includes("load failed")
+      || m.includes("networkerror") || m.includes("err_connection")
+      || m.includes("err_network")) {
+    return "后端不可达,请确认 dev-backend 已启动";
+  }
+  // Accept either explicit "HTTP 401" or status-code prefixes from our fetch helper.
+  if (/\b40[13]\b/.test(m) || m.includes("unauthorized") || m.includes("forbidden")) {
+    return "未授权,请先登录";
+  }
+  if (/\b404\b/.test(m) || m.includes("not found")) {
+    return "接口不存在 (后端 vs 前端版本不一致?)";
+  }
+  if (/\b4\d{2}\b/.test(m) || m.includes("bad request")) {
+    return "请求被拒";
+  }
+  if (/\b5\d{2}\b/.test(m) || m.includes("internal server")
+      || m.includes("server error")) {
+    return "后端服务异常 · ↻ 重试或查看 backend log";
+  }
+  return "拉取失败";
+}
+
+
 function OverlayChrome({
   endpoint, loadedAt, loading, error, refetch, children,
 }: {
@@ -72,7 +110,14 @@ function OverlayChrome({
             <code style={{ fontSize: 11 }}>GET {endpoint}</code>
             {" · "}拉取于 {_fmtTime(loadedAt)}
             {loading && " · 刷新中…"}
-            {error && <span style={{ color: "var(--risk-700)" }}> · ⚠ {error}</span>}
+            {error && (
+              <span
+                style={{ color: "var(--risk-700)" }}
+                title={error}
+              >
+                {" · ⚠ "}{_classifyBackendError(error)}
+              </span>
+            )}
           </span>
         </div>
         <button
