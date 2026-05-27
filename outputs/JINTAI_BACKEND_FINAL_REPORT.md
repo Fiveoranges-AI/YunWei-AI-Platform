@@ -1,9 +1,11 @@
 # 锦泰耐火材料 · 后端开发 — FINAL REPORT
 
 **作者**: Claude (autonomous overnight, 2026-05-26)
-**老板早上读这一份就够**。四轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
+**老板早上读这一份就够**。五轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
 
-> **Round 4 更新 (凌晨,backend-mode 端到端打通)**:见末尾 §11。前端 demo 已加 `mock/backend` 双模式,backend 模式下 90 秒一键演示真实驱动 SQLite 后端,刷新页面 KPI 持久。**3 个 draft PR (#114 / #115 / #116)** 等明早 review。
+> **Round 4 更新 (凌晨,backend-mode 端到端打通)**:见末尾 §11。前端 demo 已加 `mock/backend` 双模式,backend 模式下 90 秒一键演示真实驱动 SQLite 后端。
+>
+> **Round 5 更新 (深夜,真实文档上传 → AI 抽取闭环)**:见末尾 §12。把"📋 模拟"按钮升级为真实拖放上传 → parse_pipeline + DemoMockProvider → 候选字段 + 置信度色码 → 编辑 → 采纳 → confirm_writer + 主线触发。3 张端到端截图落盘到 `outputs/jintai-demo-iter21/round5-*`。**3 个 draft PR (#114 / #115 / #116)** 等 review。
 
 ---
 
@@ -16,10 +18,11 @@
 ```
 PR #114 — jintai 主线 (采购/库存) schema + 业务规则 + API + E2E
 PR #115 — 财务三表 (会企 01/02/03) + 进销存台账 + 折旧 + BOM + auto-draft 升级 +
-          闭环 + Round 4 决策 #1 #4 + 后端 dev launcher
-PR #116 — (round 4) 前端 mock/backend 双模式 + 端到端 backend 数据驱动
+          闭环 + Round 4 决策 #1 #4 + 后端 dev launcher + Round 5 /parse/upload
+PR #116 — (round 4) 前端 mock/backend 双模式 + 端到端 backend 数据驱动 +
+          (round 5) 真实文档上传 UI + 字段卡 + 采纳 wire-up + 3 个示例文档
 
-共  16 张新表 / 21 个新 API / 5 个业务规则 / 67 个 SQLite 测试 全绿
+共  16 张新表 / 22 个新 API / 5 个业务规则 / 73 个 SQLite 测试 全绿
 17 项决策 (7 + 6 + 4) 全部已拍板;9 ✅ 落到代码,8 ⏸ 触发条件明确,0 ❌ 拒绝
 
 不动 main · do-not-merge · 全部 lightweight migration
@@ -375,10 +378,102 @@ Step 4 [5 min]  扫 outputs/JINTAI_BACKEND_FINAL_REPORT.md §6 (限制) + §7 (n
   - 后端 dev launcher (SQLite + CORS)
   - 前端 mock/backend 双模式 + Backend Reality Check 面板
   - 端到端浏览器验证:13 网络请求 + SQLite 真实落库 + F5 持久
+- **Round 5 真实文档上传 → AI 抽取闭环** (本文件 §12 + PR #115 /parse/upload + PR #116 上传 UI):
+  - 把"📋 模拟"按钮升级为真实拖放上传 + parse_pipeline + DemoMockProvider
+  - 6 个新后端测试 (xlsx/pdf/jpg/oversize/unknown ext/determinism);共 **73 SQLite 测试全绿**
+  - 前端字段卡 + 置信度色码 (绿/黄/红) + 编辑标 ✎ + 采纳走 confirm_writer + 主线触发
+  - 3 个示例文档 (apps/win-web/public/samples/jintai/) + Python 生成脚本
+  - 3 张端到端截图 (outputs/jintai-demo-iter21/round5-real-upload-*) 完整链路证据
 
 ---
 
-## 12. 自评 (overall)
+## 12. Round 5 — 真实文档上传 → AI 抽取闭环 (新)
+
+### 12.1 后端 (PR #115)
+
+新 endpoint **`POST /api/win/parse/upload`** (multipart/form-data):
+- mime/ext 路由:`.xlsx/.xls/.csv → excel`,`.pdf → contract`,`.jpg/.png → wechat_screenshot`
+- 20 MB 限制 (413),未识别 ext 返 400
+- 落 `uploads/jintai/{tenant_id}/{checksum-sha256[:16]}.{ext}`(.gitignore)
+- Provider 选择:
+  - `ANTHROPIC_API_KEY` 存在 → ClaudeProvider (走 parse_pipeline 真 LLM)
+  - 否则 → **DemoMockProvider** (新 ~160 行,bypass adapters,直接 wrap CandidateJSON)
+- 每次上传写 1 条 ActionLog:actor + filename + provider + checksum + entity 数
+
+**DemoMockProvider** 设计:基于 `md5(filename + content size)` 派生 seed (deterministic),输出 IssueVoucher(8 字段)或 PurchaseRequisition(filename 含"合同/采购"时)。置信度 ±2% 抖动(0.84-0.99 范围)模拟真实 LLM。warnings 标 "demo-mock provider used (no LLM key configured)"。
+
+**EntityType Literal 扩展** (`candidate.py`):加 procurement 实体 (round 4 ontology) — Supplier/Material/IssueVoucher/PurchaseRequisition(+Item)/PurchaseOrder(+Item)/BillOfMaterials(+Line)。P0 文档允许 ADD 无需 spec bump。**`confirm_writer._ENTITY_MODEL` 同步加 PurchaseOrder + PurchaseOrderItem**(round 4 遗漏,被 `test_p0_end_to_end::test_p0_entity_type_surface_matches_writer_and_ontology` 抓出)。
+
+6 个新测试:
+- `test_upload_xlsx_returns_issue_voucher_candidate` — IssueVoucher 候选 + 文件落盘 + ActionLog
+- `test_upload_pdf_contract_returns_purchase_requisition_candidate` — filename "采购合同" → PR
+- `test_upload_jpg_returns_issue_voucher_candidate` — image → IssueVoucher
+- `test_upload_unknown_extension_returns_400` — .bin → 400
+- `test_upload_oversize_returns_413` — 21 MB → 413
+- `test_upload_is_deterministic_same_filename_same_seed` — checksum + 字段值 deterministic
+
+### 12.2 前端 (PR #116)
+
+新组件 **`JintaiRealUploadPanel.tsx`** (~290 行):
+- **仅 backend mode 渲染**(`state.mode === 'backend'`);mock 模式 return null,老"模拟"按钮 0 影响
+- HTML5 拖放区(native DataTransfer) + 点击 file input
+- XHR-based 进度跟踪(fetch 不支持 upload progress)
+- 上传完成后渲染候选字段卡:
+  - 头部 "AI 抽取了 N 个字段(整体置信度 X.X%)· 实体类型 · provider · 文件名 + 大小"
+  - DemoMockProvider 黄色 warning(透明告诉客户不是真 LLM)
+  - 字段表 grid (label / input / 置信度 chip):**颜色编码 ≥90% 绿 / 70-90% 黄 / <70% 红**
+  - 编辑过的行 background → 蓝色,label 加 "✎"
+  - 「✓ 采纳 → 走 confirm_writer + 触发主线」+「驳回」按钮
+- 采纳路径:`confirmUploadedEntity` → POST /confirm/entities → IssueVoucher 落库 → POST /procurement/issue-vouchers/{id}/confirm-and-issue → 主线触发 → "✓ 已写入 IssueVoucher (id=...);主线触发: 库存 X kg · 缺料预警 · auto-draft PR-..."
+- "📎 没有单据? 试试示例文档:" 一行小字 + 3 个 inline link(点击预填上传)
+- 失败 fallback toast,demo 不挂
+- 3 个 opt-in `?previewUpload=fields|edited|accepted` URL debug 参数(headless Chrome 截图用)
+
+**3 个示例文档**(`apps/win-web/public/samples/jintai/`):
+- `领料单.jpg`(55 KB,PIL 1024×768 模拟手写单 + "演示样本"水印)
+- `采购合同.pdf`(978 B,pure-Python 最简 PDF Helvetica 文本 "DEMO 2026-Q2")
+- `供应商对账.xlsx`(6.8 KB,openpyxl 3 sheets 月度对账/货款明细/备注)
+- `scripts/jintai/generate-sample-docs.py`(~180 行)无新依赖
+
+### 12.3 端到端验证 (3 张截图 落盘)
+
+`/Users/kobeli/Documents/Yinhu Project/outputs/jintai-demo-iter21/`:
+
+| 文件 | 内容 |
+|---|---|
+| `round5-real-upload-1-fields.png` (297 KB) / `-zoom.png` (134 KB) | 上传 .xlsx 后字段卡 + 置信度色码 (8 字段:7 绿 + 1 黄 83% purpose) |
+| `round5-real-upload-2-edited.png` (298 KB) / `-zoom.png` (135 KB) | 编辑 quantity 1200→1500 + workshop 改字 → 蓝色 highlight + ✎ 标 |
+| `round5-real-upload-3-accepted.png` (351 KB) | 采纳后 "✓ 已写入 IssueVoucher (id=93ca5be9...);主线触发: 库存 380 kg · 缺料预警 · auto-draft PR-2026-002" + Backend Reality Check 面板 KPI `low_stock_count=1 pending_pr_count=1 events=20` |
+| `round5-real-upload-CAPTIONS.md` | 完整复现命令(`chrome --headless` + `sips` 裁特写) |
+
+**SQLite 验证**:
+```sql
+SELECT voucher_no, workshop, applicant, quantity, status
+  FROM procurement_issue_vouchers ORDER BY created_at DESC LIMIT 1;
+-- BL-2026-018  成型车间  王师傅  1500  confirmed   ← edited quantity 真落库
+
+SELECT actor, action_type, substr(input_summary,1,80)
+  FROM action_logs ORDER BY executed_at DESC LIMIT 5;
+-- demo-user           other     action=receive_po po=...
+-- system:rule-engine  other     action=ai_autodraft_pr material=...
+-- system:rule-engine  escalate  action=stock_alert_trigger ...
+-- demo-user           other     action=issue_voucher_confirm voucher=BL-2026-018
+-- demo-user           create_profile  ingestion=upload-confirm-... entity=IssueVoucher
+```
+
+完整链路:**上传 .xlsx → parse_pipeline + DemoMockProvider → 候选 (was_edited=False, source_span 填充) → 客户编辑 quantity → 采纳 → confirm_writer (was_edited=True confidence=None 审计真实) → IssueVoucher 落 SQLite → confirm-and-issue 业务规则 → stock movement 出 1500 → balance 380 < safety → StockAlert(low) → ai_autodraft_requisition → PR-2026-002 pending_approval**。
+
+### 12.4 红线全守
+- mock 模式行为 0 变(默认隐藏新上传 UI,老"模拟"按钮路径完全不动)
+- 不引重依赖(原生 XHR + DataTransfer + HTML5 file input;后端 Pillow/openpyxl 已在 deps)
+- "AI 先填、人确认" 必经 confirm_writer + ActionLog(actor_kind=user 真审计)
+- 财务用元、会企三表格式不动
+- per-tenant DB:文件按 `uploads/jintai/{tenant_id}/` 隔离
+- 73 SQLite 测试全绿 (67 既有 + 6 新增 upload)
+
+---
+
+## 13. 自评 (overall)
 
 **做得好的**:
 - 三轮共 **13 项决策有 trace,每条逐项评估了客户价值/架构一致性/风险**,选了保守可回滚的方案。
