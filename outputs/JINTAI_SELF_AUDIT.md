@@ -19,14 +19,16 @@
 | P0-3 confirm_writer entity_type 越权 | P0 (验证已稳) | ✅ 测试已加 | +2 |
 | P0-4 confirm/approve/receive 并发竞态 | **P0 (真 race)** | ✅ 已修 + 测试 | +3 |
 | P0-5 PR stack rebase 兼容 | P0 (实测) | ✅ clean | doc |
-| P1-6 upload 错误路径 | P1 | 部分修 / 部分 doc | +1 |
+| P1-6 upload 错误路径 (ClaudeProvider) | P1 | ✅ **round 11 已修** (LLMCallFailed→502, 5 测试 lockdown) | +5 |
 | P1-7 DemoMockProvider 边界 | P1 | ✅ 测试已加 | +4 |
 | P1-8 backend mode fallback | P1 | ✅ 现有三态 UI 已足 | doc |
-| P2-9 UX cold-eye | P2 | doc-only | doc |
-| P3-10/11/12 架构债 | P3 | doc-only | doc |
+| P2-9 UX cold-eye 文案 | P2 | ✅ **round 10 已修** (error 分类 + tooltip) | doc |
+| P2-9 UX cold-eye 真浏览器 | P2 | ⏸ 需 Chrome MCP request_access (老板批权限) | doc |
+| P3 性能 baseline | P3 | ✅ **round 12 已 doc** (无 >1s endpoint, 全 <5ms) | doc |
+| P3-10/11/12 架构债 (mock 耦合 / Store 体积 / writer 字典) | P3 | doc-only (触发条件待) | doc |
 
-**新测试总数**: +17 (security_audit 9 + cross_tenant 3 + concurrency 3 + 部分 P1)
-**修复代码改动**: 3 commit (`e5a90bc`, `550831b`, 后续 P0-5 + report commit)
+**新测试总数**: +22 (round 9: 15 + round 11: 5 + 2 entity-gate cases)
+**修复代码改动 (round 9+10+11+12)**: 6 commits → `e5a90bc`, `550831b`, `6e15995`, `a381d68`, `97aaad7`, `40a84b1`, + 本轮 wrap-up
 
 ---
 
@@ -333,3 +335,18 @@ PG READ COMMITTED 下第二个 UPDATE 会等第一个 commit 释放 row lock,然
 
 **生成于**: round 9 / 2026-05-27
 **对应**: `outputs/JINTAI_BACKEND_FINAL_REPORT.md` §18
+
+---
+
+## E. Round 10-12 Loop (self-driving 迭代自审) 增量
+
+**老板 brief**: round 10+ self-driving 循环, 上限 3 子轮, 每轮最高 ROI / 独立可交付 / CI 全绿。
+
+| 子轮 | 挑掉的 deferred 项 | 改动 | 测试 | CI | commit |
+|------|----|------|------|----|--------|
+| R10 | P2-9 UX 文案 (round 9 deferred) | `JintaiBackendOverlays.tsx` +46 行 (`_classifyBackendError` + tooltip) | tsc + vite build | ✅ | `97aaad7` (#116) |
+| R11 | P1-6 ClaudeProvider 异常 (round 9 deferred) | `parse_upload.py` +13 行 (LLMCallFailed→502) + 新测 file 5 cases | SQLite 88→93 / PG 506→511 / smoke | ✅ | `40a84b1` (#115) |
+| R12 | P3 perf baseline (round 9 deferred) | 新 doc `outputs/JINTAI_PERF_BASELINE.md` (无业务码改) | full-demo seed + 11 endpoint 10 hits each | N/A | (本 commit) |
+
+**Loop 停止条件**: 用满 3 子轮 + 剩余候选都需 browser access (老板睡 = 没批权限) + perf 结论是"无需优化"。详见 FINAL_REPORT §22。
+
