@@ -59,6 +59,8 @@ from yunwei_win.models import (
     OrderItem,
     Payment,
     Product,
+    PurchaseOrder,
+    PurchaseOrderItem,
     PurchaseRequisition,
     PurchaseRequisitionItem,
     Supplier,
@@ -86,6 +88,8 @@ _ENTITY_MODEL: dict[str, type] = {
     "IssueVoucher": IssueVoucher,
     "PurchaseRequisition": PurchaseRequisition,
     "PurchaseRequisitionItem": PurchaseRequisitionItem,
+    "PurchaseOrder": PurchaseOrder,
+    "PurchaseOrderItem": PurchaseOrderItem,
     # BOM (配料单)
     "BillOfMaterials": BillOfMaterials,
     "BillOfMaterialsLine": BillOfMaterialsLine,
@@ -108,6 +112,8 @@ _ENTITY_TARGET: dict[str, ActionTargetType] = {
     "IssueVoucher": ActionTargetType.other,
     "PurchaseRequisition": ActionTargetType.other,
     "PurchaseRequisitionItem": ActionTargetType.other,
+    "PurchaseOrder": ActionTargetType.other,
+    "PurchaseOrderItem": ActionTargetType.other,
     "BillOfMaterials": ActionTargetType.other,
     "BillOfMaterialsLine": ActionTargetType.other,
 }
