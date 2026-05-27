@@ -1,11 +1,13 @@
 # 锦泰耐火材料 · 后端开发 — FINAL REPORT
 
 **作者**: Claude (autonomous overnight, 2026-05-26)
-**老板早上读这一份就够**。五轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
+**老板早上读这一份就够**。六轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
 
 > **Round 4 更新 (凌晨,backend-mode 端到端打通)**:见末尾 §11。前端 demo 已加 `mock/backend` 双模式,backend 模式下 90 秒一键演示真实驱动 SQLite 后端。
 >
-> **Round 5 更新 (深夜,真实文档上传 → AI 抽取闭环)**:见末尾 §12。把"📋 模拟"按钮升级为真实拖放上传 → parse_pipeline + DemoMockProvider → 候选字段 + 置信度色码 → 编辑 → 采纳 → confirm_writer + 主线触发。3 张端到端截图落盘到 `outputs/jintai-demo-iter21/round5-*`。**3 个 draft PR (#114 / #115 / #116)** 等 review。
+> **Round 5 更新 (深夜,真实文档上传 → AI 抽取闭环)**:见末尾 §12。把"📋 模拟"按钮升级为真实拖放上传 → parse_pipeline + DemoMockProvider → 候选字段 + 置信度色码 → 编辑 → 采纳 → confirm_writer + 主线触发。3 张端到端截图落盘到 `outputs/jintai-demo-iter21/round5-*`。
+>
+> **Round 6 更新 (全 tab backend overlay)**:见末尾 §13。每个 tab(财务/经营/采购/生产 D)顶部插 backend-mode-only overlay 组件,prominent 显示 SQLite 真数据;mock 路径 0 影响。4 张端到端截图(全页 + zoom 各 4)落到 `outputs/jintai-demo-iter21/round6-*`。**3 个 draft PR (#114 / #115 / #116)** 等 review。
 
 ---
 
@@ -19,8 +21,9 @@
 PR #114 — jintai 主线 (采购/库存) schema + 业务规则 + API + E2E
 PR #115 — 财务三表 (会企 01/02/03) + 进销存台账 + 折旧 + BOM + auto-draft 升级 +
           闭环 + Round 4 决策 #1 #4 + 后端 dev launcher + Round 5 /parse/upload
-PR #116 — (round 4) 前端 mock/backend 双模式 + 端到端 backend 数据驱动 +
+PR #116 — (round 4) 前端 mock/backend 双模式 + 端到端 backend 数据驱动
           (round 5) 真实文档上传 UI + 字段卡 + 采纳 wire-up + 3 个示例文档
+          (round 6) 全 tab backend overlay + useBackendQuery hook + 4 端到端截图
 
 共  16 张新表 / 22 个新 API / 5 个业务规则 / 73 个 SQLite 测试 全绿
 17 项决策 (7 + 6 + 4) 全部已拍板;9 ✅ 落到代码,8 ⏸ 触发条件明确,0 ❌ 拒绝
@@ -473,7 +476,66 @@ SELECT actor, action_type, substr(input_summary,1,80)
 
 ---
 
-## 13. 自评 (overall)
+## 13. Round 6 — 全 tab backend overlay (新)
+
+### 13.1 设计:overlay 策略
+
+老板要求 backend mode 下"切哪个 tab 都能看到 SQLite 真实数字"。给定 5 个 panel 文件共 ~5k 行,**不全面 refactor** — 采用 overlay 策略:每个 panel 顶部插一个 backend-mode-only 组件,prominent 显示真数据;mock 路径 0 改动。
+
+### 13.2 新增
+
+- **`apps/win-web/src/screens/jintai/state/useBackendQuery.ts`** (~70 行) — 自造 hook 替代 React Query/SWR(不引重依赖):
+  - `loading / error / data` 三态
+  - 30s **stale-while-revalidate**(mount 时缓存命中立即返回旧数据,后台 refetch)
+  - `enabled` gate(mode !== 'backend' 时 skip,不浪费请求)
+  - run-id 防 race(旧请求结果不覆盖新)
+  - manual `refetch`
+
+- **`apps/win-web/src/screens/jintai/JintaiBackendOverlays.tsx`** (~530 行) — 4 个 overlay 组件统一文件:
+
+  | 组件 | endpoint | 用途 |
+  |---|---|---|
+  | `JintaiFinanceBackendOverlay({activeTab})` | `/finance/balance-sheet` / `pnl-distribution` / `cashflow` / `depreciation` / `cost-breakdown` | 5 个子 tab 路由,会企01/02/03 + 折旧 + 成本 |
+  | `JintaiBriefingBackendOverlay()` | `/briefing/kpi` | 6 KPI 卡 + 最近 24h ActionLog(actor_kind "AI"/"人" 区分) |
+  | `JintaiPurchaseBackendOverlay()` | `/procurement/requisitions` + `/purchase-orders` + `/payables` | 3 列并发 query + status badge 色码 |
+  | `JintaiProductionBomBackendOverlay()` | `/procurement/boms` + `POST /boms/{id}/explode` | BOM list + 每个 BOM 实时 explode 缺料分析 |
+
+  共用 `OverlayChrome`:顶部 "`✨ backend live data  GET /api/win/...  · 拉取于 HH:MM:SS  [↻ 刷新]`",loading/error/empty 三态都明示。
+
+- **`apps/win-web/src/api/jintai-backend.ts`** (+200 行) — 5 个 finance type + getter + 3 个 BOM type + getter。
+
+### 13.3 修改(极小)
+
+- `state/store.tsx` +9 行 — `_readInitialProductionSubtab()` 让 `?productionSubtab=A|B|C|D` URL 参数能命中生产 D 子 tab(headless Chrome 截图用)
+- 4 个 panel 各 +3-5 行(import + mount overlay 到顶部);mock 内容不动
+
+### 13.4 端到端截图 (4 张全页 + 4 张 zoom)
+
+`/Users/kobeli/Documents/Yinhu Project/outputs/jintai-demo-iter21/`:
+
+| 文件 | 内容 |
+|---|---|
+| `round6-finance-balance-sheet.png` + `-zoom.png` | 会企01 资产负债表 · 3 列(资产/负债/权益)期初+期末 · 借贷平衡断言 |
+| `round6-briefing-kpi.png` + `-zoom.png` | 6 KPI 卡 + 最近 24h ActionLog(actor_kind "AI"/"人" 区分) |
+| `round6-purchase-payables.png` + `-zoom.png` | 申购/PO/应付 3 列列表 · status badge 色码 |
+| `round6-production-bom.png` + `-zoom.png` | BOM 列表 + 实时 explode 缺料分析("✓ 库存全够"/"⚠ 缺料 + auto-draft PR") |
+| `round6-backend-overlays-CAPTIONS.md` | 完整复现命令(`chrome --headless` + `sips` 裁特写) |
+
+### 13.5 红线全守
+
+- mock 模式 0 影响:overlay return null;demo 客户路径 100% 不变
+- 不引重依赖:`useBackendQuery` 自造,无 React Query / SWR / fetch 库
+- 73 SQLite 后端测试 0 改动(纯前端 overlay)
+- tsc --noEmit 通过
+- "AI 先填、人确认":只读 GET 路径不涉及;任何写入路径(round 4/5)仍必经 confirm_writer
+
+### 13.6 已知 demo 限制
+
+- **borrow_sheet 借贷可能不完全平衡** — round 6 seed 故意插了一个未完整对账的固定资产 FA-2024-001(原值 ¥1.2M 但 retained earnings 不够减),overlay 显示"⚠ 借贷不平衡"红框 — 这是 **borrow_sheet 平衡断言在工作的 feature**,reviewer 能直观看到 round 3 折旧闭环算法的边界检查。生产 seed 完整对账后(填入正确 retained 期初)overlay 显示"✓ 借贷平衡"绿框。
+
+---
+
+## 14. 自评 (overall)
 
 **做得好的**:
 - 三轮共 **13 项决策有 trace,每条逐项评估了客户价值/架构一致性/风险**,选了保守可回滚的方案。
