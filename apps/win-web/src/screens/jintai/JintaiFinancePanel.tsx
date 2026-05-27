@@ -10,6 +10,7 @@ import type {
   ReportLine,
 } from "./data";
 import { JintaiSourceCitation } from "./components";
+import { JintaiFinanceBackendOverlay } from "./JintaiBackendOverlays";
 
 type ReportId = FinanceReport["id"];
 type FinanceTabKey = ReportId | "cost" | "depreciation";
@@ -31,6 +32,9 @@ export function JintaiFinancePanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Round 6: backend mode overlay — 实时拉对应 /finance/* endpoint */}
+      <JintaiFinanceBackendOverlay activeTab={active} />
+
       {/* iter 19.1：AI-native 模式定位条 — "脱离金蝶也能跑" */}
       <AINativeBanner />
 

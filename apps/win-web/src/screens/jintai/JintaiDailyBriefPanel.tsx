@@ -3,6 +3,7 @@ import { useIsDesktop } from "../../lib/breakpoints";
 import { dailyBrief } from "./data";
 import type { DailyBriefAction, DailyBriefHistory, DailyBriefRisk } from "./data";
 import { useJintai } from "./state/store";
+import { JintaiBriefingBackendOverlay } from "./JintaiBackendOverlays";
 
 /**
  * iter 21：经营日报全面图表化 + 顶部加锦泰品牌头。
@@ -29,6 +30,9 @@ export function JintaiDailyBriefPanel() {
   const isDesktop = useIsDesktop();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Round 6: backend mode overlay — /briefing/kpi 实时 */}
+      <JintaiBriefingBackendOverlay />
+
       {/* iter 21.0：锦泰品牌头 — logo 等比放大 + 公司主标题 */}
       <JintaiBrandHeader />
 

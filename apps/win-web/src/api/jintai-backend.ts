@@ -291,16 +291,165 @@ export async function getBriefingKpi(): Promise<BriefingKpiOut> {
 
 // ============================== finance reports =========================
 
-export async function getBalanceSheet(period: string): Promise<unknown> {
-  return _fetch<unknown>(`/finance/balance-sheet?period=${period}`);
+// Round 6: finance report shapes (matches backend services/finance.py)
+
+export type FinanceRow = {
+  line: string;
+  name: string;
+  code?: string | null;
+  amount: string;
+  opening?: string | null;
+  ending?: string | null;
+  note?: string | null;
+};
+
+export type BalanceSheetOut = {
+  statement: string;
+  period: string;
+  as_of_date: string;
+  currency: string;
+  unit: string;
+  assets: FinanceRow[];
+  liabilities: FinanceRow[];
+  equity: FinanceRow[];
+  totals: { assets: string; liabilities_plus_equity: string; balanced: boolean };
+};
+
+export type PnlOut = {
+  statement: string;
+  period: string;
+  currency: string;
+  unit: string;
+  rows: FinanceRow[];
+  net_profit_period: string;
+  retained_earnings_change_period: string;
+  period_depreciation_in_admin?: string;
+  totals: { revenue: string; operating_profit: string; net_profit: string };
+};
+
+export type CashflowOut = {
+  statement: string;
+  period: string;
+  currency: string;
+  unit: string;
+  operating: FinanceRow[];
+  investing: FinanceRow[];
+  financing: FinanceRow[];
+  summary: FinanceRow[];
+  totals: {
+    operating_net: string;
+    investing_net: string;
+    financing_net: string;
+    net_increase: string;
+    cash_ending: string;
+  };
+};
+
+export type DepreciationOut = {
+  period: string;
+  as_of_date: string;
+  currency: string;
+  unit: string;
+  rows: Array<{
+    asset_no: string;
+    name: string;
+    category: string;
+    acquired_date: string;
+    original_cost: string;
+    salvage_value: string;
+    useful_life_months: number;
+    monthly_depreciation: string;
+    months_depreciated_through_period: number;
+    accumulated_depreciation: string;
+    current_period_depreciation: string;
+    net_book_value: string;
+    status: string;
+  }>;
+  totals: {
+    original_cost: string;
+    accumulated_depreciation: string;
+    current_period_depreciation: string;
+    net_book_value: string;
+  };
+};
+
+export type CostBreakdownOut = {
+  period: string;
+  currency: string;
+  unit: string;
+  by_material: Array<{
+    material_id: string; code: string; name: string; unit: string;
+    consumed_qty: string; unit_cost: string; cost_amount: string;
+  }>;
+  by_supplier: Array<{
+    supplier_id: string; name: string; po_count: number; received_amount: string;
+  }>;
+  totals: { cogs_from_material_consumption: string; procurement_received: string };
+};
+
+export async function getBalanceSheet(period: string): Promise<BalanceSheetOut> {
+  return _fetch<BalanceSheetOut>(`/finance/balance-sheet?period=${period}`);
 }
 
-export async function getPnlDistribution(period: string): Promise<unknown> {
-  return _fetch<unknown>(`/finance/pnl-distribution?period=${period}`);
+export async function getPnlDistribution(period: string): Promise<PnlOut> {
+  return _fetch<PnlOut>(`/finance/pnl-distribution?period=${period}`);
 }
 
-export async function getCashflow(period: string): Promise<unknown> {
-  return _fetch<unknown>(`/finance/cashflow?period=${period}`);
+export async function getCashflow(period: string): Promise<CashflowOut> {
+  return _fetch<CashflowOut>(`/finance/cashflow?period=${period}`);
+}
+
+export async function getDepreciation(period: string): Promise<DepreciationOut> {
+  return _fetch<DepreciationOut>(`/finance/depreciation?period=${period}`);
+}
+
+export async function getCostBreakdown(period: string): Promise<CostBreakdownOut> {
+  return _fetch<CostBreakdownOut>(`/finance/cost-breakdown?period=${period}`);
+}
+
+// Round 6: BOM listing + detail (backend already has POST explode in round 2)
+export type BomListItem = {
+  id: string; product_code: string; product_name: string;
+  version: string; output_quantity: string; output_unit: string;
+  status: string; notes?: string | null;
+};
+
+export type BomDetail = BomListItem & {
+  lines: Array<{
+    id: string; material_id: string;
+    quantity_per_output: string; unit?: string | null;
+    scrap_rate: string; sort_order: number; notes?: string | null;
+  }>;
+};
+
+export type BomExplodeResult = {
+  bom_id: string; product_code: string; product_name: string;
+  version: string; output_unit: string; batch_quantity: string;
+  lines: Array<{
+    material_id: string; code: string; name: string; unit: string;
+    quantity_per_output: string; scrap_rate: string;
+    required_qty: string; current_balance: string;
+    shortage: string; available: boolean;
+  }>;
+  fully_available: boolean;
+};
+
+export async function listBoms(status?: string): Promise<BomListItem[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return _fetch<BomListItem[]>(`/procurement/boms${q}`);
+}
+
+export async function getBomDetail(id: string): Promise<BomDetail> {
+  return _fetch<BomDetail>(`/procurement/boms/${id}`);
+}
+
+export async function explodeBom(
+  id: string, batchQuantity: string | number,
+): Promise<BomExplodeResult> {
+  return _fetch<BomExplodeResult>(`/procurement/boms/${id}/explode`, {
+    method: "POST",
+    body: JSON.stringify({ batch_quantity: String(batchQuantity) }),
+  });
 }
 
 // ============================== high-level helpers =====================

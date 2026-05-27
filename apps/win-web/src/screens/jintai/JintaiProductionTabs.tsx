@@ -6,6 +6,7 @@ import { batchRecipes, flowCards, processParameter } from "./data";
 import type { BatchRecipe, FlowCard, FlowStep, ProcessParameter, StockLedger } from "./data";
 import { JintaiRiskBadge, JintaiStatusBadge, JintaiSourceCitation } from "./components";
 import { useJintai } from "./state/store";
+import { JintaiProductionBomBackendOverlay } from "./JintaiBackendOverlays";
 
 type Tab = "A" | "B" | "C" | "D";
 
@@ -89,7 +90,13 @@ export function JintaiProductionTabs() {
       </div>
 
       {tab === "A" && <FlowCardPanel flowCards={cards} />}
-      {tab === "D" && <BatchRecipePanel recipes={batchRecipes} />}
+      {tab === "D" && (
+        <>
+          {/* Round 6: backend mode overlay — /procurement/boms + explode 实时 */}
+          <JintaiProductionBomBackendOverlay />
+          <BatchRecipePanel recipes={batchRecipes} />
+        </>
+      )}
       {tab === "B" && <ProcessParameterPanel processParameter={parameter} />}
       {tab === "C" && <ShippingPanel />}
     </div>

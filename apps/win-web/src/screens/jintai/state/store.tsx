@@ -129,6 +129,13 @@ export type JintaiState = {
   backendStatus: BackendStatus;
 };
 
+function _readInitialProductionSubtab(): ProductionSubtab {
+  if (typeof window === "undefined") return "A";
+  const q = new URLSearchParams(window.location.search).get("productionSubtab");
+  if (q === "A" || q === "B" || q === "C" || q === "D") return q;
+  return "A";
+}
+
 const _readInitialMode = (): BackendMode => {
   if (typeof window === "undefined") return "mock";
   const qp = new URLSearchParams(window.location.search);
@@ -153,7 +160,7 @@ const initialState: JintaiState = {
   step: "idle",
   tourStep: 0,
   tourPlaying: false,
-  productionSubtab: "A",
+  productionSubtab: _readInitialProductionSubtab(),
   scrollAnchor: null,
   mode: _readInitialMode(),
   backendIds: {},

@@ -12,12 +12,16 @@ import type {
 } from "./data";
 import { JintaiSourceCitation, JintaiStatusBadge } from "./components";
 import { flashStyle, useJintai } from "./state/store";
+import { JintaiPurchaseBackendOverlay } from "./JintaiBackendOverlays";
 
 export function JintaiPurchasePanel() {
   const isDesktop = useIsDesktop();
   const { state } = useJintai();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {/* Round 6: backend mode overlay — /procurement/{requisitions,POs,payables} */}
+      <JintaiPurchaseBackendOverlay />
+
       <AINativePurchaseBanner />
       <PurchaseChainHint />
 
