@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.models import (
@@ -286,18 +286,34 @@ async def confirm_and_issue(
     should treat that as a duplicate-click 409. We do NOT silently no-op so
     the audit log stays honest about what was attempted.
     """
-    voucher = await session.get(IssueVoucher, voucher_id)
-    if voucher is None:
-        raise ProcurementRuleError(f"issue voucher {voucher_id} not found")
-    if voucher.status == IssueVoucherStatus.confirmed:
+    # Atomic status transition: only one concurrent caller wins. Without
+    # this, two simultaneous confirm-and-issue calls on the same voucher
+    # both pass the status check, both decrement Material.last_balance,
+    # and we write duplicate StockMovement rows. Round 9 P0-4 fix.
+    transition = await session.execute(
+        update(IssueVoucher)
+        .where(IssueVoucher.id == voucher_id)
+        .where(IssueVoucher.status == IssueVoucherStatus.draft)
+        .values(status=IssueVoucherStatus.confirmed, updated_by=actor)
+    )
+    if transition.rowcount == 0:
+        voucher = await session.get(IssueVoucher, voucher_id)
+        if voucher is None:
+            raise ProcurementRuleError(f"issue voucher {voucher_id} not found")
+        if voucher.status == IssueVoucherStatus.confirmed:
+            raise ProcurementRuleError(
+                f"issue voucher {voucher.voucher_no} already confirmed"
+            )
+        if voucher.status == IssueVoucherStatus.cancelled:
+            raise ProcurementRuleError(
+                f"issue voucher {voucher.voucher_no} is cancelled"
+            )
         raise ProcurementRuleError(
-            f"issue voucher {voucher.voucher_no} already confirmed"
-        )
-    if voucher.status == IssueVoucherStatus.cancelled:
-        raise ProcurementRuleError(
-            f"issue voucher {voucher.voucher_no} is cancelled"
+            f"issue voucher {voucher.voucher_no} unexpected status "
+            f"{voucher.status.value}"
         )
 
+    voucher = await session.get(IssueVoucher, voucher_id)
     material = await session.get(Material, voucher.material_id)
     if material is None:
         raise ProcurementRuleError(
@@ -326,7 +342,8 @@ async def confirm_and_issue(
     session.add(movement)
 
     material.last_balance = new_balance
-    voucher.status = IssueVoucherStatus.confirmed
+    # voucher.status was already set to `confirmed` by the atomic
+    # conditional UPDATE above (P0-4 race guard).
     await session.flush()
 
     result = IssueAndDecrementResult(
@@ -523,14 +540,27 @@ async def approve_requisition(
     approve 时传入。``unit_prices`` 可选: 按 PR item id 覆盖单价 (AI auto-draft
     没填价时由审批人补)。
     """
-    pr = await session.get(PurchaseRequisition, pr_id)
-    if pr is None:
-        raise ProcurementRuleError(f"requisition {pr_id} not found")
-    if pr.status != PurchaseRequisitionStatus.pending_approval:
+    # Atomic status transition: prevent concurrent approve_requisition
+    # from creating duplicate POs for the same PR. Round 9 P0-4 fix.
+    transition = await session.execute(
+        update(PurchaseRequisition)
+        .where(PurchaseRequisition.id == pr_id)
+        .where(PurchaseRequisition.status == PurchaseRequisitionStatus.pending_approval)
+        .values(
+            status=PurchaseRequisitionStatus.approved,
+            updated_by=actor,
+        )
+    )
+    if transition.rowcount == 0:
+        pr = await session.get(PurchaseRequisition, pr_id)
+        if pr is None:
+            raise ProcurementRuleError(f"requisition {pr_id} not found")
         raise ProcurementRuleError(
             f"requisition {pr.pr_no} is in status {pr.status.value}, "
             "expected pending_approval"
         )
+
+    pr = await session.get(PurchaseRequisition, pr_id)
 
     final_supplier_id = supplier_id or pr.supplier_id
     if final_supplier_id is None:
@@ -689,15 +719,26 @@ async def receive_purchase_order(
     Resolves any open StockAlert for the same materials if balance recovers
     above safety_stock.
     """
-    po = await session.get(PurchaseOrder, po_id)
-    if po is None:
-        raise ProcurementRuleError(f"purchase order {po_id} not found")
-    if po.status not in (PurchaseOrderStatus.open, PurchaseOrderStatus.in_transit):
+    # Atomic status transition: prevent concurrent receive_purchase_order
+    # from creating duplicate goods receipts / payables. Round 9 P0-4 fix.
+    transition = await session.execute(
+        update(PurchaseOrder)
+        .where(PurchaseOrder.id == po_id)
+        .where(PurchaseOrder.status.in_(
+            (PurchaseOrderStatus.open, PurchaseOrderStatus.in_transit)
+        ))
+        .values(status=PurchaseOrderStatus.closed, updated_by=actor)
+    )
+    if transition.rowcount == 0:
+        po = await session.get(PurchaseOrder, po_id)
+        if po is None:
+            raise ProcurementRuleError(f"purchase order {po_id} not found")
         raise ProcurementRuleError(
             f"purchase order {po.po_no} is in status {po.status.value}, "
             "cannot receive"
         )
 
+    po = await session.get(PurchaseOrder, po_id)
     supplier = await session.get(Supplier, po.supplier_id)
     if supplier is None:
         raise ProcurementRuleError(f"supplier {po.supplier_id} not found")
@@ -802,7 +843,8 @@ async def receive_purchase_order(
     )
     session.add(payable)
 
-    po.status = PurchaseOrderStatus.closed
+    # po.status was already set to `closed` by the atomic conditional UPDATE
+    # at the top of this function (P0-4 race guard).
     po.warehouse = warehouse
     po.received_at = now
     po.updated_by = actor
