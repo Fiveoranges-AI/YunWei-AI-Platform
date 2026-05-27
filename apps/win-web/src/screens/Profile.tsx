@@ -151,6 +151,48 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
           </button>
         </div>
 
+        {/* External app: 超级小陈 */}
+        <a
+          href="https://agent-yinhu-super-xiaochen-production.up.railway.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "14px 18px",
+            borderRadius: 14,
+            background: "linear-gradient(135deg,#eaeefc,#d6deff)",
+            border: "1px solid #dfe5fb",
+            marginBottom: 16,
+            textDecoration: "none",
+            color: "inherit",
+          }}
+        >
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: "#fff",
+              color: "#4a60c4",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {I.spark(18, "#4a60c4")}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#2c3a78" }}>超级小陈</div>
+            <div style={{ fontSize: 11.5, color: "#4a60c4", marginTop: 2 }}>
+              银湖 · Kingdee ERP 智能体 · 新窗口打开
+            </div>
+          </div>
+          <span style={{ color: "#4a60c4" }}>{I.link(14, "#4a60c4")}</span>
+        </a>
+
         {/* Settings list */}
         <div
           style={{
