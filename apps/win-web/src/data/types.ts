@@ -493,6 +493,8 @@ export type IngestJob = {
   updated_at: string;
   started_at?: string | null;
   finished_at?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
 };
 
 export type ConfirmExtractionInvalidCell = {

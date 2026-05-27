@@ -293,3 +293,35 @@ async def test_extract_from_parse_artifact_uses_landingai_client(monkeypatch):
     schema = json.loads(captured["schema_json"])
     assert "orders" in schema["properties"]
     assert "customer_id" not in schema["properties"]["orders"]["properties"]
+
+
+@pytest.mark.asyncio
+async def test_extract_from_parse_artifact_maps_landingai_references(monkeypatch):
+    async def fake_extract_with_schema(*, schema_json: str, markdown: str):
+        return SimpleNamespace(
+            extraction={
+                "product_requirements": [
+                    {"requirement_text": "表面粗糙度 ≤ Ra1.6"}
+                ]
+            },
+            extraction_metadata={
+                "product_requirements[0].requirement_text": {
+                    "references": ["0-a"],
+                }
+            },
+            metadata={},
+        )
+
+    monkeypatch.setattr(
+        extractors_module, "extract_with_schema", fake_extract_with_schema
+    )
+
+    result = await extract_from_parse_artifact(
+        parse_artifact=_artifact(),
+        selected_tables=["product_requirements"],
+        catalog=_catalog(),
+        provider="landingai",
+    )
+
+    field = result.tables["product_requirements"][0].fields["requirement_text"]
+    assert field.source_refs[0].ref_id == "0-a"

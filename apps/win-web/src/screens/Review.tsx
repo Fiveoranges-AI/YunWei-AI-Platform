@@ -46,6 +46,8 @@ export function ReviewScreen({
   const [jobStatus, setJobStatus] = useState<IngestJobStatus | null>(null);
   const [jobContentType, setJobContentType] = useState<string | null>(null);
   const [hasFile, setHasFile] = useState<boolean>(false);
+  const [confirmedBy, setConfirmedBy] = useState<string | null>(null);
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(Boolean(jobId));
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -121,6 +123,8 @@ export function ReviewScreen({
         }
         setDraft(nextDraft);
         setReviewVersion(envelope.review_version ?? nextDraft.review_version ?? 0);
+        setConfirmedBy(envelope.confirmed_by ?? null);
+        setConfirmedAt(envelope.confirmed_at ?? null);
 
         // Acquire lock (best-effort). If draft is no longer pending or
         // someone else holds the lock we'll fall through to read-only.
@@ -460,17 +464,30 @@ export function ReviewScreen({
 
   if (draft) {
     const originalFileUrl = hasFile && jobId ? `/api/win/ingest/jobs/${jobId}/file` : null;
+    const finalizedKind: "confirmed" | "failed" | "canceled" | null =
+      jobStatus === "confirmed"
+        ? "confirmed"
+        : jobStatus === "failed"
+          ? "failed"
+          : jobStatus === "canceled"
+            ? "canceled"
+            : null;
+    const finalized = finalizedKind !== null;
     return (
       <ReviewWizard
         draft={draft}
         readOnly={isReadOnly}
+        finalized={finalized}
+        finalizedKind={finalizedKind}
+        finalizedAt={confirmedAt}
+        finalizedBy={confirmedBy}
         busy={busy}
         error={error}
         invalidCells={invalidCells}
         onCellPatch={handleCellPatch}
         onRowPatch={handleRowPatch}
         onConfirm={handleConfirm}
-        onDelete={handleDelete}
+        onDelete={finalized ? undefined : handleDelete}
         sourceText={draft.document.source_text ?? null}
         originalFileUrl={originalFileUrl}
         originalFileContentType={jobContentType}
