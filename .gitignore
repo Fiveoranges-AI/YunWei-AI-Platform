@@ -10,6 +10,9 @@ __pycache__/
 *.db-wal
 .worktrees/
 
+# Round 5: /parse/upload demo 上传文件落盘 (per-tenant), 不入仓
+/services/platform-api/uploads/
+
 # apps/win-web/ (智通客户 — served at /win/) build artifacts.
 # Railway's build context is repo root, so the Dockerfile copies from
 # apps/win-web/ in stage 1.
