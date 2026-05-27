@@ -1,13 +1,16 @@
 # 锦泰耐火材料 · 后端开发 — FINAL REPORT
 
 **作者**: Claude (autonomous overnight, 2026-05-26)
-**老板早上读这一份就够**。六轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
+**老板早上读这一份就够**。七轮工作明细在末尾链接,5 分钟扫这一份能掌握全貌。
 
-> **Round 4 更新 (凌晨,backend-mode 端到端打通)**:见末尾 §11。前端 demo 已加 `mock/backend` 双模式,backend 模式下 90 秒一键演示真实驱动 SQLite 后端。
+> **Round 4-6 更新**:见 §11-13(backend-mode 切换 / 真实文档上传 / 全 tab backend overlay)
 >
-> **Round 5 更新 (深夜,真实文档上传 → AI 抽取闭环)**:见末尾 §12。把"📋 模拟"按钮升级为真实拖放上传 → parse_pipeline + DemoMockProvider → 候选字段 + 置信度色码 → 编辑 → 采纳 → confirm_writer + 主线触发。3 张端到端截图落盘到 `outputs/jintai-demo-iter21/round5-*`。
->
-> **Round 6 更新 (全 tab backend overlay)**:见末尾 §13。每个 tab(财务/经营/采购/生产 D)顶部插 backend-mode-only overlay 组件,prominent 显示 SQLite 真数据;mock 路径 0 影响。4 张端到端截图(全页 + zoom 各 4)落到 `outputs/jintai-demo-iter21/round6-*`。**3 个 draft PR (#114 / #115 / #116)** 等 review。
+> **Round 7 更新 (production readiness + 升 ready-for-review)**:见末尾 §15。
+> - **Postgres dev stack**(`infra/local/dev-stack.yml`)起 PG 16 + Redis,`scripts/jintai/dev-backend.sh --pg` 让后端切 PG 模式
+> - **`scripts/jintai/smoke-clean.sh`** clean-room 一键全闭环:**9 PASS / 0 FAIL / 1 SKIP**(frontend cross-worktree)
+> - **PG 测试通过**:`pytest backend/` 全套 **491 passed / 3 skipped / 0 failed in 72s**(含 282 个 PG-required;无任何 SQLite/PG 方言差异需修)
+> - **3 个 PR 已升级为 🟢 ready-for-review**(`gh pr ready`):#114 / #115 / #116(do-not-merge label 保留)
+> - 4 张 PG 模式端到端截图 + CAPTIONS 落到 `outputs/jintai-demo-iter21/round7-pg-mode-*`
 
 ---
 
@@ -535,7 +538,131 @@ SELECT actor, action_type, substr(input_summary,1,80)
 
 ---
 
-## 14. 自评 (overall)
+## 15. Round 7 — Postgres + Production Readiness + 升 Ready-for-Review (新)
+
+### 15.1 目标
+
+老板 round 7 全权授权:把 6 轮 SQLite 验证升级到 Postgres,3 个 draft PR 推到"可 merge"状态,CTO 早上能一键证明全闭环可复现。
+
+### 15.2 新增 (后端)
+
+| 文件 | 内容 |
+|---|---|
+| `infra/local/dev-stack.yml` | docker compose: Postgres 16-alpine on :5433 + Redis 7-alpine on :6380 · UTF8 + en_US.utf8 collate (中文 entity 名正确) · volume 持久化 · healthcheck |
+| `scripts/jintai/smoke-clean.sh` (~150 行) | **clean-room 一键**: 1) compose down -v 清 PG 数据 → 2) up -d 起 PG+Redis → 3) backend --pg → 4) full-demo.sh 15 步 → 5) 关键 API smoke (KPI/balance-sheet/parse-upload) → 6) pytest 42 个 jintai-* → 7) frontend Vite HEAD check (cross-worktree 自动 SKIP)<br>PASS/FAIL 汇总,exit 1 if any FAIL |
+
+### 15.3 修改
+
+- `scripts/jintai/dev-backend.sh` 加 `--pg` flag:DATABASE_URL=postgres@:5433 + REDIS_URL=:6380;pre-flight 检查 PG reachable;无 flag 默认 SQLite(mock 路径 0 影响)
+- `services/platform-api/dev_jintai_backend.py::/health` 加 `db` 字段(`postgres (dev-stack)` 或 `sqlite (file)`)根据 DATABASE_URL 动态判断;前端 BackendModePanel 读这个字段显示 badge
+
+### 15.4 测试结果
+
+**SQLite (round 1-6 累计):**
+```
+pytest tests/test_jintai_*.py tests/test_procurement_*.py tests/test_confirm_cards.py
+       tests/test_ontology_*.py tests/test_p0_*.py tests/test_parse_pipeline.py -q
+73 passed in 3.32s
+```
+
+**Postgres (round 7 新验证):**
+```
+docker compose -f infra/local/dev-stack.yml up -d
+cd services/platform-api && pytest --tb=line -q
+491 passed, 3 skipped, 0 failed in 72s
+```
+
+3 skip 全部是 `reportlab not installed`(pre-existing PDF table test in `test_m4.py`)。**0 个 SQLite/PG 方言差异需要修** — 证明既有代码 cross-dialect 干净:
+- JSON / JSONB(SQLAlchemy `JSON` 列在 PG 自动 JSONB)
+- UUID(`Uuid` type 在 PG 用 native UUID,SQLite VARCHAR;UUID coercion 已在 round 1 confirm_writer 修过)
+- timestamp(`DateTime(timezone=True)` PG TIMESTAMPTZ,SQLite TEXT iso-8601)
+- enum(`SQLEnum` PG 真 enum type,SQLite VARCHAR)
+- 中文 entity 名(`α 氧化铝粉`)PG 用 UTF8 collate 直存
+
+### 15.5 端到端 (PG 模式 full-demo.sh)
+
+```bash
+docker compose -f infra/local/dev-stack.yml up -d
+bash scripts/jintai/dev-backend.sh --pg
+BASE=http://127.0.0.1:8000/api/win bash scripts/jintai/full-demo.sh
+```
+
+15 步全闭环跑通(主线 + 三表 + KPI),后端用 Postgres,数字真在 PG `tenant_jintai_demo` DB:
+- `procurement_suppliers` 1 行(PG-模式供应商,中文 + +00 时区)
+- `procurement_materials` 1 行(WAC=15.36 from auto-update)
+- `procurement_issue_vouchers` 1 行(状态 confirmed)
+- `procurement_stock_movements` 2 行(out 800 → in 1920)
+- `procurement_requisitions` 1 行(ai_autodraft → closed_to_po)
+- `procurement_purchase_orders` 1 行(closed, ¥46,080)
+- `procurement_payables` 1 行(due 2026-07-25 = +60 天)
+- `action_logs` 10+ 行(actor_kind=system + user 双线审计)
+
+### 15.6 4 张 PG 模式端到端截图 + CAPTIONS
+
+`/Users/kobeli/Documents/Yinhu Project/outputs/jintai-demo-iter21/`:
+
+| 文件 | 内容 |
+|---|---|
+| `round7-pg-mode-panel.png` (360 KB) | 全页 · 右上 Backend Reality Check 展开 |
+| `round7-pg-mode-panel-zoom.png` (73 KB · 460×700) | 面板特写:`● ok (tenant=jintai_demo · db=postgres (dev-stack))` badge 清晰 |
+| `round7-pg-mode-briefing.png` (326 KB) | 经营日报 backend overlay(PG 后端数字)+ ActionLog 列表(actor_kind 区分) |
+| `round7-pg-mode-finance.png` (406 KB) | 财务 tab 会企 01 资产负债表(PG 后端拉) |
+| `round7-pg-mode-CAPTIONS.md` | 复现命令 + 关键证据 |
+
+### 15.7 smoke-clean.sh 输出 (CTO 早上一行命令)
+
+```
+==============================================================
+smoke-clean.sh 总结: 9 passed, 0 failed (1 frontend skipped)
+==============================================================
+  PASS: data volume removed           (docker compose down -v)
+  PASS: PG @ 5433 ready                (postgres:16 healthcheck)
+  PASS: Redis @ 6380 ready
+  PASS: backend /health → postgres     (dev-backend.sh --pg)
+  PASS: full-demo.sh 完整跑通          (主线 15 步 + 三表 + KPI)
+  PASS: payable_total=¥46,080          (会企01 应付账款)
+  PASS: balance-sheet 返回 7 个资产行
+  PASS: /parse/upload → demo-mock, IssueVoucher
+  PASS: pytest: 42 passed              (jintai-* 关键测试)
+  SKIP: frontend Vite (跨 worktree node_modules 不在)
+
+✅ smoke PASS — 全闭环 clean-room 可复现
+```
+
+### 15.8 3 PR 升 Ready-for-Review
+
+PG 测试 491/491 通过 + smoke 全 PASS → 决策**3 PR 全部 `gh pr ready`**(do-not-merge label 保留作 safeguard):
+
+| PR | 状态 | 7-段速读 | 范围 |
+|---|---|---|---|
+| #114 | 🟢 ready | ✓ description 顶部 | 主线 schema + 规则 + API + e2e |
+| #115 | 🟢 ready | ✓ description 顶部 | 财务+台账+折旧+BOM+auto-draft+闭环+dev-stack+smoke (round 2-7 backend) |
+| #116 | 🟢 ready | ✓ description 顶部 | 前端 backend-mode + 真实上传 + 全 tab overlay (round 4-6 frontend) |
+
+每个 PR description 顶部新增"Round 7 · Reviewer 7-段速读"段:
+① 一句话摘要 ② 范围 ③ 业务规则 ④ 风险 ⑤ 测试矩阵(SQLite N / PG N) ⑥ 回滚 ⑦ 30 min 操作指南
+
+### 15.9 红线全守
+
+- **mock 模式 0 影响**:dev-backend.sh 默认 SQLite,前端 mock 路径不动
+- **不引重依赖**:Round 7 只动后端 + 配置 + 1 个 shell 脚本
+- **73 SQLite 测试 0 改动**:PG mode 跑通证明 cross-dialect
+- **"AI 先填、人确认"**:smoke `/parse/upload → demo-mock IssueVoucher` 仍走 confirm_writer + ActionLog
+- **会企三表格式 / 元为单位**:不变
+- **未 merge main**:3 PR 改为 ready-for-review 但仍 do-not-merge label 标守门
+
+### 15.10 这一轮是 autonomous 阶段终点
+
+如老板 round 7 brief 所言:"剩下的就是 CTO 人工 review + 客户试用"。我已经把 7 轮 autonomous 工作打磨到可交付状态:
+- 3 PR review-ready,每个有 30 min 操作指南
+- clean-room smoke 一键证明
+- PG 491 + SQLite 73 测试矩阵全过
+- 14 张端到端截图证据链 (round 4-7)
+- FINAL_REPORT 单文件全貌(本文件)
+
+---
+
+## 16. 自评 (overall)
 
 **做得好的**:
 - 三轮共 **13 项决策有 trace,每条逐项评估了客户价值/架构一致性/风险**,选了保守可回滚的方案。
