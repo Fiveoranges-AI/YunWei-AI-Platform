@@ -72,10 +72,16 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, str]:
+        db_url = os.environ.get("DATABASE_URL", "")
+        if "postgres" in db_url:
+            db_label = "postgres (dev-stack)"
+        else:
+            db_label = "sqlite (file)"
         return {
             "status": "ok",
             "enterprise_id": DEMO_ENTERPRISE_ID,
-            "mode": "dev (sqlite, no auth)",
+            "db": db_label,
+            "mode": f"dev ({db_label}, no auth)",
         }
 
     app.include_router(win_router, prefix="/api/win")

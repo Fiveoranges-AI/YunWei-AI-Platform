@@ -1,0 +1,49 @@
+# Round 7: 本地 dev stack — Postgres 16 + Redis,端口对齐 services/platform-api/tests/conftest.py
+# (DATABASE_URL=postgresql://postgres:test@localhost:5433/test, REDIS_URL=redis://localhost:6380).
+#
+# 不是生产 stack — 只为:
+#   1. pytest backend/ 跑 282 PG-required 测试
+#   2. backend dev launcher 用 --pg flag 时连接的 PG (取代 SQLite)
+#   3. round 7 smoke-clean.sh 一键 clean-room 全闭环
+#
+# Usage:
+#   docker compose -f infra/local/dev-stack.yml up -d        # 起 PG + Redis
+#   docker compose -f infra/local/dev-stack.yml down -v      # 清掉所有数据
+#   docker compose -f infra/local/dev-stack.yml logs -f      # 看日志
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jintai-dev-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+      # 让 unicode 中文 entity 名 (e.g. "α 氧化铝粉") 正确 collate
+      LANG: en_US.utf8
+    ports:
+      - "5433:5432"   # host 5433 → container 5432,匹配 conftest.py
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - jintai_dev_pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: jintai-dev-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"   # host 6380 → container 6379,匹配 conftest.py
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  jintai_dev_pg_data:
+    name: jintai_dev_pg_data
