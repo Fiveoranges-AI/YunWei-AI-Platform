@@ -69,6 +69,9 @@ jobs:
             tests/test_jintai_bom.py \
             tests/test_jintai_round3_edges.py \
             tests/test_jintai_parse_upload.py \
+            tests/test_jintai_security_audit.py \
+            tests/test_jintai_cross_tenant.py \
+            tests/test_jintai_concurrency_audit.py \
             tests/test_procurement_api_listings.py \
             tests/test_confirm_cards.py \
             tests/test_ontology_schema.py \
