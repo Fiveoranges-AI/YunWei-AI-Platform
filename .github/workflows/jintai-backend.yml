@@ -115,7 +115,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e . 2>/dev/null || true
-          pip install pytest pytest-asyncio httpx aiosqlite asyncpg psycopg[binary]
+          pip install pytest pytest-asyncio httpx respx aiosqlite asyncpg psycopg[binary]
       - name: pytest (full, PG mode)
         working-directory: services/platform-api
         env:
