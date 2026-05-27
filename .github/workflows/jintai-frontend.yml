@@ -1,0 +1,74 @@
+name: jintai-frontend
+# Round 8: CI for 锦泰耐火材料 前端 stack (PR #116 feat/jintai-frontend-backend-mode).
+#
+# 2 个并行 job:
+#   1. frontend-typecheck — tsc --noEmit (apps/win-web)
+#   2. frontend-build     — vite build (catches build-time errors that tsc misses)
+
+on:
+  push:
+    branches:
+      - 'feat/jintai-**'
+    paths:
+      - 'apps/win-web/**'
+      - '.github/workflows/jintai-frontend.yml'
+  pull_request:
+    branches:
+      - main
+      - 'feat/jintai-**'
+    paths:
+      - 'apps/win-web/**'
+      - '.github/workflows/jintai-frontend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-typecheck:
+    name: TypeScript check (apps/win-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/win-web/package-lock.json
+      - name: npm ci
+        working-directory: apps/win-web
+        run: npm ci --no-audit --no-fund
+      - name: tsc --noEmit
+        working-directory: apps/win-web
+        run: npm run check
+
+  frontend-build:
+    name: vite build (apps/win-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: frontend-typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/win-web/package-lock.json
+      - name: npm ci
+        working-directory: apps/win-web
+        run: npm ci --no-audit --no-fund
+      - name: vite build
+        working-directory: apps/win-web
+        run: npm run build
+      - name: build size summary
+        working-directory: apps/win-web
+        run: |
+          if [ -d dist ]; then
+            echo "## win-web dist size" >> $GITHUB_STEP_SUMMARY
+            du -sh dist >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Top 10 largest:" >> $GITHUB_STEP_SUMMARY
+            find dist -type f -exec du -h {} \; | sort -rh | head -10 >> $GITHUB_STEP_SUMMARY
+          fi
