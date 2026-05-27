@@ -381,6 +381,147 @@ export async function ensureDemoSeed(opts: {
   return { supplierId, materialId };
 }
 
+// ============================== round 5: parse upload ===================
+
+export type UploadFieldSpan = {
+  page?: number | null;
+  bbox?: number[] | null;
+  text?: string | null;
+  cell?: string | null;
+};
+
+export type UploadField = {
+  name: string;
+  value: unknown;
+  confidence: number;
+  source_span?: UploadFieldSpan | null;
+};
+
+export type UploadEntity = {
+  entity_type: string;
+  temp_id: string;
+  fields: UploadField[];
+  missing_required?: string[];
+};
+
+export type UploadCandidate = {
+  ingestion_id: string;
+  source: { type: string; file_ref: string; uploaded_by?: string | null };
+  entities: UploadEntity[];
+  relationships: Array<{ from_temp_id: string; to_temp_id: string; type: string }>;
+  overall_confidence: number;
+  warnings: string[];
+};
+
+export type UploadAttachment = {
+  path: string;
+  checksum: string;
+  size_bytes: number;
+  filename: string;
+  content_type: string | null;
+};
+
+export type ParseUploadResponse = {
+  candidate: UploadCandidate;
+  attachment: UploadAttachment;
+  provider: "claude" | "demo-mock" | string;
+  source_type: "excel" | "contract" | "wechat_screenshot";
+  action_log_id: string;
+};
+
+/**
+ * POST multipart /parse/upload with progress tracking via XHR (fetch's
+ * upload progress is not supported in browsers as of 2026).
+ */
+export async function uploadDocument(
+  file: File,
+  opts?: { onProgress?: (pct: number) => void },
+): Promise<ParseUploadResponse> {
+  const base = resolveBackendBase();
+  const url = `${base}/parse/upload`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && opts?.onProgress) {
+        opts.onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onerror = () => reject(new JintaiBackendError("network error", 0));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as ParseUploadResponse);
+        } catch (e) {
+          reject(new JintaiBackendError(`bad JSON: ${e}`, xhr.status));
+        }
+      } else {
+        let detail: unknown = xhr.responseText;
+        try { detail = JSON.parse(detail as string); } catch { /* ignore */ }
+        reject(new JintaiBackendError(
+          `${xhr.status} ${xhr.statusText} /parse/upload`,
+          xhr.status, detail,
+        ));
+      }
+    };
+    const fd = new FormData();
+    fd.append("file", file);
+    xhr.send(fd);
+  });
+}
+
+/**
+ * Confirm one upload-derived entity into the ontology (走 confirm_writer +
+ * ActionLog). Used by the "采纳" button on the upload review card.
+ *
+ * For IssueVoucher entities, the parse pipeline emits a `material_name_hint`
+ * field (not a real DB column). Caller should pre-resolve it to material_id
+ * via listMaterials() before calling this — the hint is dropped here.
+ */
+export async function confirmUploadedEntity(opts: {
+  entity: UploadEntity;
+  source_type: string;
+  file_ref: string;
+  edits?: Record<string, unknown>;
+  materialId?: string;
+}): Promise<ConfirmResponse> {
+  const skipNames = new Set(["material_name_hint"]);
+  const fields: ConfirmField[] = [];
+  for (const f of opts.entity.fields) {
+    if (skipNames.has(f.name)) continue;
+    const edited = opts.edits && opts.edits[f.name] !== undefined;
+    const value = edited ? opts.edits![f.name] : f.value;
+    fields.push({
+      name: f.name,
+      value,
+      confidence: f.confidence,
+      was_edited: !!edited,
+    });
+  }
+  // If material_id wasn't part of the candidate (DemoMockProvider emits hint
+  // instead of id), inject it.
+  if (opts.entity.entity_type === "IssueVoucher" && opts.materialId) {
+    fields.push({
+      name: "material_id",
+      value: opts.materialId,
+      confidence: 1.0,
+      was_edited: true,
+    });
+  }
+  return postConfirm({
+    ingestion_id: `upload-confirm-${Date.now()}`,
+    source_type: opts.source_type,
+    source_ref: opts.file_ref,
+    entities: [{
+      entity_type: opts.entity.entity_type,
+      temp_id: opts.entity.temp_id,
+      fields,
+    }],
+  });
+}
+
+// ============================== high-level helpers (existing) ===========
+
 /**
  * Create one issue voucher draft. Returns the voucher_id; the rule
  * (confirm-and-issue) is a separate call.

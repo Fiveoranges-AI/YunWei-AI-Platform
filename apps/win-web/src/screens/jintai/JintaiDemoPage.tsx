@@ -10,6 +10,7 @@ import { initialExtractionCards } from "./data";
 import type { ExtractionCard } from "./data";
 import { JintaiUploadInbox } from "./JintaiUploadInbox";
 import type { ProcessingCard } from "./JintaiUploadInbox";
+import { JintaiRealUploadPanel } from "./JintaiRealUploadPanel";
 import { JintaiWorkflowTimeline } from "./JintaiWorkflowTimeline";
 import { JintaiProductionTabs } from "./JintaiProductionTabs";
 import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
@@ -565,6 +566,8 @@ function JintaiDemoPageInner() {
               AI 抽取后人工确认入库 · AI 不直接写入业务表
             </span>
           </div>
+          {/* Round 5: 真实文档上传 (backend mode only;mock 模式整段 return null) */}
+          <JintaiRealUploadPanel />
           <JintaiUploadInbox
             cards={cards}
             processing={processing}
