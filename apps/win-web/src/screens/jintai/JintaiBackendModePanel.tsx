@@ -118,7 +118,10 @@ export function JintaiBackendModePanel() {
           <Row label="后端 health">
             {status.health ? (
               <span style={{ color: "var(--ok-700)" }}>
-                ● {status.health.status} (tenant={status.health.enterprise_id})
+                ● {status.health.status} (tenant={status.health.enterprise_id}
+                {(status.health as { db?: string }).db && (
+                  <> · <b>db={(status.health as { db?: string }).db}</b></>
+                )})
               </span>
             ) : status.seeding ? (
               <span style={{ color: "var(--warn-700)" }}>seeding...</span>
