@@ -1,0 +1,219 @@
+name: jintai-backend
+# Round 8: CI for 锦泰耐火材料 后端 stack (PR #114/#115).
+#
+# 3 个并行 job:
+#   1. backend-sqlite — jintai-* 测试 (SQLite, ~30s) 快速反馈
+#   2. backend-pg     — pytest 全套 (Postgres service container, ~2 min) 完整覆盖
+#   3. smoke-api      — clean-room API smoke (依赖 PG container,简化版 smoke-clean.sh)
+#
+# 不在此 workflow 跑前端 tsc (jintai-frontend.yml on PR #116 stack 负责).
+
+on:
+  push:
+    branches:
+      - 'feat/jintai-**'
+      - 'feat/p0-**'
+      - 'feat/ontology-**'
+      - 'feat/parse-pipeline-**'
+      - 'feat/confirm-cards-**'
+    paths:
+      - 'services/platform-api/**'
+      - 'scripts/jintai/**'
+      - 'infra/local/**'
+      - '.github/workflows/jintai-backend.yml'
+  pull_request:
+    branches:
+      - main
+      - 'feat/jintai-**'
+      - 'feat/p0-**'
+    paths:
+      - 'services/platform-api/**'
+      - 'scripts/jintai/**'
+      - 'infra/local/**'
+      - '.github/workflows/jintai-backend.yml'
+  workflow_dispatch:  # manual trigger from UI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-sqlite:
+    name: SQLite (jintai-* tests, fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+      - name: pip install
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev] 2>/dev/null || pip install -e .
+          pip install pytest pytest-asyncio httpx aiosqlite
+      - name: run jintai-* SQLite tests
+        working-directory: services/platform-api
+        env:
+          # Pure SQLite path — bypass platform conftest's PG truncate
+          DATABASE_URL: 'sqlite+aiosqlite:///./ci_sqlite.db'
+          REDIS_URL: 'redis://localhost:6380'  # unused on these test files
+          COOKIE_SECRET: 'ci-cookie-secret-32-bytes-padding====='
+        run: |
+          python -m pytest -v --tb=short --no-header \
+            tests/test_jintai_mainline_e2e.py \
+            tests/test_jintai_finance_reports.py \
+            tests/test_jintai_bom.py \
+            tests/test_jintai_round3_edges.py \
+            tests/test_jintai_parse_upload.py \
+            tests/test_procurement_api_listings.py \
+            tests/test_confirm_cards.py \
+            tests/test_ontology_schema.py \
+            tests/test_p0_end_to_end.py \
+            tests/test_parse_pipeline.py \
+            tests/test_ontology_migration_cycle.py
+
+  backend-pg:
+    name: Postgres (full pytest, 491+ tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+      - name: pip install
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . 2>/dev/null || true
+          pip install pytest pytest-asyncio httpx aiosqlite asyncpg psycopg[binary]
+      - name: pytest (full, PG mode)
+        working-directory: services/platform-api
+        env:
+          DATABASE_URL: 'postgresql://postgres:test@localhost:5433/test'
+          REDIS_URL: 'redis://localhost:6380'
+          COOKIE_SECRET: 'ci-cookie-secret-32-bytes-padding====='
+        run: |
+          python -m pytest -v --tb=short --no-header -rs
+
+  smoke-api:
+    name: API smoke (PG + dev_jintai_backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: backend-pg
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+      - name: pip install
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . 2>/dev/null || true
+          pip install pytest httpx aiosqlite asyncpg psycopg[binary] uvicorn[standard]
+      - name: install jq for smoke
+        run: sudo apt-get install -y jq
+      - name: start backend (--pg) in background
+        working-directory: services/platform-api
+        env:
+          DATABASE_URL: 'postgresql://postgres:test@localhost:5433/test'
+          REDIS_URL: 'redis://localhost:6380'
+          COOKIE_SECRET: 'ci-cookie-secret-32-bytes-padding====='
+        run: |
+          python -m uvicorn dev_jintai_backend:app --host 127.0.0.1 --port 8000 \
+            > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 20); do
+            if curl -sSf http://127.0.0.1:8000/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -sS http://127.0.0.1:8000/health
+      - name: full-demo.sh (15 步主线)
+        run: |
+          BASE=http://127.0.0.1:8000/api/win bash scripts/jintai/full-demo.sh \
+            > /tmp/full-demo.log 2>&1
+          if ! grep -q "锦泰后端全链 happy path 跑通" /tmp/full-demo.log; then
+            echo "::error::full-demo.sh did not complete"
+            tail -30 /tmp/full-demo.log
+            exit 1
+          fi
+      - name: verify key API responses
+        run: |
+          set -e
+          KPI=$(curl -sS http://127.0.0.1:8000/api/win/briefing/kpi)
+          PAY=$(echo "$KPI" | jq -r '.payable_total')
+          [[ "$PAY" == "46080.0000" ]] || { echo "::error::payable_total expected 46080.0000 got $PAY"; exit 1; }
+          echo "✓ payable_total=$PAY"
+
+          BS=$(curl -sS "http://127.0.0.1:8000/api/win/finance/balance-sheet?period=$(date -u +%Y-%m)")
+          ASSETS_COUNT=$(echo "$BS" | jq '.assets | length')
+          [[ "$ASSETS_COUNT" -gt 0 ]] || { echo "::error::balance-sheet 0 asset rows"; exit 1; }
+          echo "✓ balance-sheet returned $ASSETS_COUNT asset rows"
+
+          # /parse/upload with a synth jpg (mimics smoke-clean.sh)
+          python -c "
+          from PIL import Image
+          Image.new('RGB', (100, 100), color='white').save('/tmp/synth.jpg', 'JPEG')
+          " 2>/dev/null || echo -ne '\xff\xd8\xff\xd9placeholder' > /tmp/synth.jpg
+          UPLOAD=$(curl -sS -X POST http://127.0.0.1:8000/api/win/parse/upload \
+            -F "file=@/tmp/synth.jpg;type=image/jpeg")
+          PROVIDER=$(echo "$UPLOAD" | jq -r '.provider')
+          [[ "$PROVIDER" == "demo-mock" ]] || { echo "::error::parse/upload provider expected demo-mock got $PROVIDER"; exit 1; }
+          echo "✓ /parse/upload provider=demo-mock"
+      - name: dump backend log on failure
+        if: failure()
+        run: tail -100 /tmp/backend.log
