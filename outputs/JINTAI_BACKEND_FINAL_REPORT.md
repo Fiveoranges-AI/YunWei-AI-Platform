@@ -719,15 +719,23 @@ PG 测试 491/491 通过 + smoke 全 PASS → 决策**3 PR 全部 `gh pr ready`*
 **Concurrency**:
 - 同 ref 自动 cancel 旧 run (`cancel-in-progress: true`),避免 CI 排队
 
-**首次 CI 实跑结果** (2026-05-27 01:47 UTC):
-| Workflow | run-id | 时长 | 结果 |
-|----------|--------|------|------|
-| jintai-frontend (push) | 26485792395 | 1m07s | ✅ success |
-| jintai-frontend (PR) | 26485793886 | 1m05s | ✅ success |
-| jintai-backend (push) | 26485792281 | 1m01s | ❌ failure |
-| jintai-backend (PR) | 26485792353 | 0m57s | ❌ failure |
+**CI 实跑结果**:
 
-**Backend CI 失败原因 + 修复**:
+| 时间 (UTC) | Workflow / trigger | run-id | 时长 | 结果 |
+|-----------|--------------------|--------|------|------|
+| 01:47 | jintai-frontend / push | 26485792395 | 1m07s | ✅ success |
+| 01:47 | jintai-frontend / PR | 26485793886 | 1m05s | ✅ success |
+| 01:47 | jintai-backend / push (initial) | 26485792281 | 1m01s | ❌ respx 缺失 |
+| 01:47 | jintai-backend / PR (initial) | 26485792353 | 0m57s | ❌ respx 缺失 |
+| 01:52 | jintai-backend / push (respx fix) | 26485963332 | 4m06s | ✅ success |
+| 01:56 | jintai-backend / PR (docs 推送) | **26486082913** | 4m03s | ✅ **success** |
+
+**最后 green run (26486082913) 三 job 实际数字**:
+- `SQLite (jintai-* tests, fast)`: **73 passed in 10.74s** (jintai-* 全套)
+- `Postgres (full pytest, 491+ tests)`: **491 passed, 3 skipped, 123.70s** (PG service container,完整 platform 测试)
+- `API smoke (PG + dev_jintai_backend)`: **success in 52s** (15 步 full-demo + `payable_total=46080.0000` + `provider=demo-mock` 全部命中)
+
+**Backend CI 首次失败原因 + 修复**:
 - `backend-sqlite` 成功,只跑 jintai-* 子集 (不依赖 respx)
 - `backend-pg` 失败: 7 个 collection error,都是 `ModuleNotFoundError: No module named 'respx'`
 - 涉及 test 文件:`test_daily_report_e2e.py`, `test_daily_report_orchestrator.py`, `test_daily_report_pusher_dingtalk.py`, `test_dedicated_runtime_auth.py`, `test_mineru_ocr_provider.py`, `test_proxy.py`, `test_runtime_health.py`
