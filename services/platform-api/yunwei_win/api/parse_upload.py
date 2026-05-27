@@ -324,9 +324,19 @@ async def parse_upload(
                 uploaded_by=actor,
             )
     except Exception as e:
+        # Round 11: upstream LLM failures (call_claude → LLMCallFailed after
+        # 3 retries on 429 / 5xx / timeout) are NOT our service's fault.
+        # Surface as 502 Bad Gateway so monitoring + clients can distinguish
+        # "Claude is down" from a bug in our pipeline.
+        from yunwei_win.services.llm import LLMCallFailed
         logger.exception(
             "parse_upload failed filename=%s source_type=%s", file.filename, source_type,
         )
+        if isinstance(e, LLMCallFailed):
+            raise HTTPException(
+                status_code=502,
+                detail=f"upstream LLM unavailable: {e}",
+            ) from e
         raise HTTPException(
             status_code=500,
             detail=f"parse_pipeline failed: {type(e).__name__}: {e}",
