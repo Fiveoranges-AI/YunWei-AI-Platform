@@ -976,3 +976,131 @@ outputs/JINTAI_BACKEND_FINAL_REPORT.md  (本节 §18)
 - SELF_AUDIT.md 把修 / 未修 / 触发条件 / 工作量都写清,reviewer 不用猜
 - 修复 diff 最小、测试覆盖完整,不喧宾夺主
 
+
+---
+
+## 19. Round 10 — UX 错误文案 polish (P2-9 deferred fix)
+
+**触发**: round 9 SELF_AUDIT P2-9 列了"overlay 直接展示 fetch error stack 不友好"。round 10 在 self-driving loop 里第一个挑掉。
+
+**改动 (1 file, +46 行)**: `apps/win-web/src/screens/jintai/JintaiBackendOverlays.tsx`
+- 新增 `_classifyBackendError(raw)` — 把原始 fetch / HTTP error 字符串映射成 6 个 customer-friendly 中文类别:
+  - "Failed to fetch" / "NetworkError" → "后端不可达,请确认 dev-backend 已启动"
+  - HTTP 401/403 → "未授权,请先登录"
+  - HTTP 404 → "接口不存在 (后端 vs 前端版本不一致?)"
+  - HTTP 4xx → "请求被拒"
+  - HTTP 5xx → "后端服务异常 · ↻ 重试或查看 backend log"
+  - 其他 → "拉取失败"
+- inline `<span>` 改成显示 friendly text, **原始 raw error 保留为 `title` tooltip** — engineer 鼠标 hover 仍看得到完整错误
+- **复用现有 ↻ 刷新按钮** 作为重试 (无新 UI primitive)
+
+**Verification**:
+- `npm run check` (tsc --noEmit) clean
+- `npm run build` (vite) success, 95 modules, dist 677 KB
+- 前端 CI run 26531828257: ✅ 两 job 全绿 (typecheck 1m+, build 1m+)
+
+**纯 presentational 改动,无测试新加** — 改的是 render 路径,逻辑路径 (error 来源/refetch wiring) 都不变。
+
+**Commit**: `97aaad7` round 10 [P2-9 polish]: classify backend error → customer-friendly text + tooltip (#116)
+
+---
+
+## 20. Round 11 — ClaudeProvider 异常路径 lockdown (P1-6 deferred fix)
+
+**触发**: round 9 SELF_AUDIT P1-6 列了"真 ClaudeProvider 异常路径没 polish (无 ANTHROPIC_API_KEY 触发不了 demo)"。round 11 在 loop 里挑这个,因为 prod 接 API key 后第一个 production 故障就在这条路径。
+
+**Code change** (1 file, `parse_upload.py`, +13 行):
+- 现状: 端点 `except Exception` 一把抓 → 500. 包括 LLMCallFailed (call_claude 3 次重试都失败后抛)
+- Fix: 显式区分 `LLMCallFailed` → **502 Bad Gateway** (`upstream LLM unavailable: ...`),其他 Exception 仍 500
+- 原因: 502 让监控 + 客户端区分 "Claude 挂了" vs "我们 bug" — 后者要 page oncall, 前者只要等 upstream
+
+**Tests** (新 file `test_jintai_parse_provider_failures.py`, 5 cases):
+
+| case | 期望 | 验证什么 |
+|------|------|---------|
+| LLMCallFailed → 502 | 502 + `"upstream LLM unavailable"` detail | round 11 fix 生效 |
+| Provider returns empty entities | 200, candidate.entities=[], warnings 透出 | LLM 找不到字段 ≠ 错误 |
+| Provider returns broken JSON ("{ broken") | 200, warning 含 "JSON" | claude.py `_parse_response_json` 已有的容错验证 |
+| Generic ValueError | 仍 500 | 我们 bug 仍 page (不被 fix mask 掉) |
+| 无 ANTHROPIC_API_KEY | DemoMockProvider fallback, 200 | 锁定 demo 路径不漂移 |
+
+**测试技术**: Stub provider via `monkeypatch.setattr(pu, "_resolve_provider", ...)` 替换模块级 factory,不依赖 respx / 真 anthropic SDK。
+
+**CI 也加了**: `.github/workflows/jintai-backend.yml` SQLite job enum 新增 `test_jintai_parse_provider_failures.py`
+
+**Verification** (run 26532076594):
+- SQLite (jintai-* fast): **93 passed** in 18.57s (88 → +5)
+- PG (full pytest): **511 passed**, 3 skipped, 151.77s (506 → +5)
+- API smoke: success
+
+**Commit**: `40a84b1` round 11 [P1-6]: ClaudeProvider failure-mode lockdown + LLMCallFailed → 502 (#115)
+
+---
+
+## 21. Round 12 — 端到端 perf smoke baseline (P3 deferred)
+
+**触发**: round 9 P3 backlog 列了 "如有 >1s endpoint, 看能不能优化"。round 12 在 loop 里挑这个 — well-defined / 一个 commit / 要么找到 actionable / 要么 confirm baseline。
+
+**方法**: 起 `dev_jintai_backend` (uvicorn + SQLite file) → 跑 `full-demo.sh` seed 完整 15 步数据 → 每 GET endpoint 连打 10 次,记录 best / avg / worst (`curl %{time_total}`)。POST /parse/upload 跑 3 次 (DemoMockProvider 路径)。
+
+**关键数字**:
+
+| endpoint | avg ms | size |
+|---|---:|---:|
+| `/briefing/kpi` (fan-out 6 子查询) | **2.3** | 3.1 KB |
+| `/finance/balance-sheet?period=` | **3.0** | 1.8 KB |
+| `/finance/pnl-distribution?period=` | **1.9** | 1.4 KB |
+| `/finance/cashflow?period=` | **1.6** | 1.7 KB |
+| `/finance/depreciation?period=` | **0.8** | 0.2 KB |
+| `/finance/cost-breakdown?period=` | **1.5** | 0.5 KB |
+| `/procurement/inventory-ledger` | **0.5** | 0.2 KB |
+| `/procurement/requisitions` | **1.1** | 0.8 KB |
+| `/procurement/purchase-orders` | **1.0** | 0.5 KB |
+| `/procurement/payables` | **0.9** | 0.3 KB |
+| `/procurement/materials` | **0.8** | 0.2 KB |
+| `POST /parse/upload` (5KB JPG demo) | **2-4** | — |
+
+整体 full-demo.sh 端到端 52 秒 (含 uvicorn 启动 + 15 步, CI smoke job 数字)。
+
+**结论**: 没有 >1s endpoint,**无需 index, 无需优化**。最重的 `/briefing/kpi` (聚合应付/低库存/待审 PR 等 6 路 SQL) 也只 2.3 ms。round 9 P3 backlog 中"性能 baseline"项**直接关闭**。
+
+**注意 prod 数字会变方向 (已在 baseline 文档 §结论 写明)**:
+- PG vs SQLite: +1ms 网络 round-trip,翻 2-3x 仍 <20ms
+- 数据规模 100x: finance 聚合可能 30 ms (linear scan)
+- 真 ClaudeProvider: parse/upload 3-15s (round 11 已加 502)
+- 并发: round 9 P0-4 已加原子条件 UPDATE,worst case 是 row lock 排队
+
+**输出**: `outputs/JINTAI_PERF_BASELINE.md` (含完整方法 + 复现命令 + 结论 + 何时重测)
+
+**没动业务代码 / 没动 full-demo.sh** — 用临时工具脚本 inline 测,避免污染 round 7 stable smoke pipeline。
+
+**Commit**: (next - 跟 round 12 wrap-up 一起)
+
+---
+
+## 22. Round 10-12 Loop 总结 + 停止条件
+
+**老板 brief**: round 10+ 是 self-driving iterative loop, 上限 3 子轮。
+
+**3 子轮跑完**, 直接命中 round 9 SELF_AUDIT 里 3 个明确 deferred 项 (P2-9 UX / P1-6 ClaudeProvider / P3 perf)。
+
+**为什么停 (loop 结束)**:
+1. Round 12 perf smoke 数据给出"无需优化"结论 → P3 性能 backlog 关闭。
+2. 剩下的 candidate 都不适合自动 loop:
+   - **A (UX cold-eye 真浏览器)**: Chrome MCP `request_access` 需要老板批权限,睡 = 没批
+   - **D (用户操作手册)**: 需要 3 screenshot,同样需要 browser 启动 + access
+   - **E (confirm_writer 注册式)**: 老板明确说 "scope 太大,不要在自我循环里做"
+3. round 10 (UX) / 11 (Claude exception) / 12 (perf) 三轮都是直接关闭 round 9 已识别的 deferred 项 — **不是凑数**, 不是"找事情做"。
+4. 用满 3 子轮,触发显式停止条件。
+
+**Loop ROI 自评 (诚实)**:
+- Round 10: ✅ 高 ROI — 直接客户/CTO 可见的友好文案
+- Round 11: ✅ 中高 ROI — 防御性,prod 上 API key 后立刻有用
+- Round 12: ✅ 中 ROI — baseline 数字本身,无 actionable surface (这正是好结论)
+
+**总变化**:
+- 测试: +5 (round 11 ClaudeProvider) → SQLite 88 → 93, PG 506 → 511
+- 代码: +59 行 (parse_upload.py +13, JintaiBackendOverlays.tsx +46)
+- 文档: +1 file (PERF_BASELINE.md), FINAL_REPORT §19/20/21/22
+- Mock 路径 0 影响,前后端独立可测,业务核心 0 变化
+
