@@ -1254,3 +1254,169 @@ DATABASE_URL="sqlite+aiosqlite:///./jintai_dev_admin.db" \
 
 第一版我说"vite 没跑 = 误报"。当时确实是 false alarm (老板第一次报告时 vite 真没跑)。但**第二次报告**老板贴出确切错误文本 "✨ backend live data GET /briefing/kpi · 拉取于 — · ⚠ 后端不可达",证明 vite 在跑但 backend 没跑 + 前端默认进了 backend mode。这次是真 bug,已修。
 
+
+---
+
+## 24. Round 13 — 合同上传 end-to-end (3-tier: Customer + Contract + relationship)
+
+**触发**: 老板 round 13 brief — "继续执行后端,让我们上传合同的功能实现(参考 GitHub 目前智通客户的设置),今晚自主执行,我明天起来看".
+
+**关键过程决策**: 按 brief 要求**先做 discovery 再动手**。结果发现现状比预期好得多:
+- ✅ Contract 表 schema rich (customer_id FK + amount_total + signing/effective/expiry + payment_terms + status + 所有 mixins)
+- ✅ ContractPaymentMilestone 子表 ready (节点名 / 比例 / 触发事件 / 偏移天数)
+- ✅ confirm_writer 已支持 Contract entity_type 写入 + Customer-has-Contract relationship 解析
+- ✅ parse_pipeline contract adapter (pdfplumber + image fallback) — 228 行
+- ✅ Contract ontology field aliases (中文 + 英文,8 个核心字段)
+- ✅ `GET /api/win/contracts` + `GET /api/win/contracts/{id}` 列表 + 详情 endpoints
+- ✅ `tests/test_parse_pipeline.py` 已有 Contract+Customer mock 测试
+- ✅ 前端 `public/samples/jintai/采购合同.pdf` 示例文件已 ready
+
+完整 discovery 落 `outputs/CONTRACT_UPLOAD_GAP_ANALYSIS.md` (~7KB)。
+
+---
+
+### 真正的 gap (只 3 个, 全部修了)
+
+#### Gap 1: DemoMockProvider 把合同路由错了
+
+`providers/demo.py:65` 旧逻辑:
+
+```python
+if any(k in payload.filename for k in ("合同", "采购")):
+    entities = [_gen_purchase_requisition(rng, payload.filename)]   # ← 合同也给 PR
+```
+
+锦泰 demo 客户上传 `采购合同.pdf` 看到的是 **PurchaseRequisition** 字段 (申购号 / 部门 / 申请人), 不是合同字段 (对方 / 金额 / 到期日)。这是 round 5 写 DemoMockProvider 时的疏漏。
+
+**Fix** (`yunwei_win/services/parse_pipeline/providers/demo.py`, +110 行):
+- 加 `_gen_customer()` + `_gen_contract()` 函数
+- 关键字优先级: `"合同" in filename` → Customer + Contract + Customer-has-Contract relationship; `"采购"` (无合同) → PR
+- 客户名带 filename hash 后缀 (`容百新能源科技股份有限公司-d66f`) 避免重复上传冲突 customers.full_name unique index
+- Contract entity 9 个字段全填: external/internal contract no, amount_total, currency, signing/effective/expiry date, payment_terms, status
+- Demo seed 数据匹配锦泰业务: 容百锂电 / 横店东磁 / 东睦 / 当升 客户, 合同金额 32万-330万元
+
+#### Gap 2: `_run_demo_provider` 丢 relationships
+
+`api/parse_upload.py:267` 硬编码 `relationships=[]`, 丢掉 provider 输出的关系。Customer-has-Contract 关系到了端点就没了, 导致 contract.customer_id 不能被 confirm_writer 解析 (NULL FK)。
+
+**Fix** (`api/parse_upload.py`, +15 行): 把 `pr.relationships` (`list[dict]`) 转 `Relationship[]` model 并放进 CandidateJSON。坏数据 try/except KeyError 后 log warning 不 crash。
+
+#### Gap 3: `_contract_dict` 缺 4 个字段
+
+`api/read.py:_contract_dict` 列表序列化漏了 `status`, `payment_terms`, `human_verified`, `verified_by`。前端 overlay 想展示就拿不到。
+
+**Fix** (`api/read.py`, +4 字段, `tests/test_jintai_contract.py` 加 `'in ct'` assertions 锁定).
+
+---
+
+### 实施 (3 commits 进 #115)
+
+| commit | 范围 | diff |
+|--------|------|------|
+| `b92a9e6` | demo.py + parse_upload.py + test_jintai_parse_upload.py + test_jintai_contract.py + CI yaml + GAP doc | 6 files, +831/-7 |
+| `c940950` | read.py _contract_dict 扩展 + test 锁 | 2 files, +12/0 |
+| (next) | docs §24 + SELF_AUDIT + contract-demo.sh + PR description sync | — |
+
+### 实施 (1 commit 进 #116)
+
+| commit | 范围 | diff |
+|--------|------|------|
+| `1646ccc` | api/jintai-backend.ts (ContractListItem + listContracts + confirmUploadedCandidate) + JintaiBackendOverlays.tsx (Contracts overlay) + JintaiDemoPage.tsx (挂 overlay) + JintaiRealUploadPanel.tsx (multi-entity confirm flow) | 4 files, +260/-28 |
+
+---
+
+### 测试 (4 new + 1 rewritten + assertions added)
+
+`tests/test_jintai_contract.py` (新 file, ~330 行, 3 cases):
+- `test_contract_upload_end_to_end_via_demo_mock` — 完整链路 upload → confirm Customer+Contract → list → detail, asserts contract.customer_id 解析成功 + 字段 schema 完整
+- `test_contract_is_not_visible_across_tenants` — tenant_a 上传 confirm, tenant_b 看到 0, both HTTP 层 + 存储层
+- `test_double_confirm_same_payload_creates_two_contracts_known_gap` — 文档化已知限制 (Contract 无 status 机, 双确认产生 2 行, 不像 procurement 的 P0-4 race)
+
+`tests/test_jintai_parse_upload.py`:
+- 重写 `test_upload_pdf_contract_returns_contract_and_customer_candidate` (从 round 5 bug 行为转成 round 13 正确行为)
+- 加 `test_upload_pdf_purchase_only_filename_returns_pr_candidate` 锁定关键字优先级
+
+**全套**: 97 SQLite tests (93 → +4), 515 PG tests (511 → +4), API smoke unchanged
+
+---
+
+### CI
+
+| workflow | run | jobs | 状态 |
+|----------|-----|------|------|
+| jintai-backend (round 13 first push) | 26554235612 | sqlite 97 / pg 515 / smoke | ✅ |
+| jintai-backend (round 13.1 _contract_dict ext) | 26554606629 | sqlite ✅ / pg 跑中 / smoke 待 | (跟踪中) |
+| jintai-frontend (round 13) | 26554599650 | typecheck ✅ / vite build ✅ | ✅ |
+
+---
+
+### 端到端 demo 命令 (round 13 新增)
+
+`scripts/jintai/contract-demo.sh` (~140 行, jq + curl only, 无 python 依赖):
+
+```bash
+bash scripts/jintai/contract-demo.sh   # 默认 BASE=http://127.0.0.1:8000/api/win
+```
+
+6 步: backend /health → 上传 3 份合同 + confirm Customer+Contract → GET /contracts 数量 + 字段 schema → GET /contracts/{id} customer FK 解析 → 数据完整性 (金额合计/状态非空) → 总结。
+
+**实跑结果** (在 backend SQLite mode @ :8000, fresh DB): **14/14 PASS** in <5s。合同金额合计 ¥16,254,000 (6 contracts 包含早期 seed)。
+
+---
+
+### 截图
+
+`outputs/jintai-demo-iter21/round13-contract-upload-e2e.png` (400KB · 1500×1500):
+- AI 资料收件箱 tab active
+- 顶部: 真实文档上传 panel (拖放/选择文件区, 3 个示例按钮)
+- 中间: ✨ backend live data `GET /contracts?limit=20` overlay (green header, round 9 metadata)
+- PII 警告 banner: "💡 合同含敏感信息(对方/金额/账期),外发前请确认权限。(V2 PII 自动打码尚未上线 — 见 SELF_AUDIT P3 backlog)"
+- 合同表: 3 行 HT-2026-* / JT26-* / CNY 金额 / 签订日 / 到期日 / status='active' / ✓ demo-user 人工确认
+- 下面: 原 AI 待确认收件箱 mock 卡片不变
+- 右上: Backend Reality Check panel "● ok (tenant=jintai_demo · db=sqlite (file))"
+
+---
+
+### 我决定**不**做的事 (留 SELF_AUDIT P3 backlog)
+
+#### V2 PII 自动打码
+
+Brief 假设有 "Phase 2 PII redaction" 模块。Discovery 实地确认: **该模块不存在** (grep across main + 4 feat branches, 无 `redact_document` / `Sensitive*` / `sensitive_entities` / `document_chunks`). Brief 第 5 项假设错。
+
+**红线明确**: "如果中途发现需要修改 V2 安全核心(redaction/audit/RLS), 停下来记 SELF_AUDIT, 不要硬上 — 那是 CTO 决定的事". 通宵造一个 redaction 模块 (regex 漏 / ingest 没全挂 / 没人 review) high-risk 严重。
+
+**做了什么替代**: 前端 overlay 顶部加文案警告 "💡 合同含敏感信息..., 外发前请确认权限". 是提醒不是真打码。Backlog 触发条件: prod 接 ClaudeProvider + 合同正式录入开始 + CTO 设计 PII 模块 (regex / NER / 白名单).
+
+#### Contract 双确认去重
+
+Round 9 P0-4 给 procurement (IssueVoucher / PR / PO) 加了原子条件 UPDATE 防双扣库存。Contract 不一样 — 没下游副作用 (库存 / 应付), 双确认只是数据噪音。**已有测试文档化此行为**, 未来加 dedupe 用 UNIQUE (`tenant`, `contract_no_external`, `signing_date`) index, ~30 分钟工作量。
+
+#### 合同 RAG / 语义检索
+
+Brief 明确说 "advanced features 留下一轮". 不做。
+
+#### 智通客户主 app (win-customer-profile)
+
+不动 — 那是 win-vnext-tenant-schema 范围 (PR #107)。锦泰栈 base 在 #110-#113 之上。
+
+---
+
+### 自评 (round 13)
+
+**做得对**:
+- **先 discovery 后动手**: 80% 工作 round 1-7 已做, 真 gap 只 3 个 (各 <50 行 fix), 不重复造轮子
+- **诚实交代 PII**: 模块不存在就说不存在, 不假装造一个 high-risk 模块凑数
+- **小 commit 顺序清晰**: 后端 → 后端 fix → 前端, 各独立 + 可 review
+- **端到端真跑**: contract-demo.sh 不是说 "应该可以", 是真 14/14 PASS
+
+**做得不够**:
+- DemoMockProvider 合同 demo seed 多次上传同一文件生成不同 Customer (filename hash 抑制) — 测试环境无关, 生产场景需要 dedupe
+- Contract 详情详情页 FieldProvenance 是空的 — V1 confirm_writer 不写 FieldProvenance (V2 schema_ingest 才写), 测试已弱断言但产品意图不一致
+- 没补 ContractPaymentMilestone 子表的 demo + UI — 客户上传合同后, milestone 子表暂时是空 (DemoMockProvider 没生成 milestone), 应付台账依赖这个
+
+**判断老板会喜欢**:
+- 上传 `合同.pdf` 看到合同字段 + 真客户名 + 真金额, 不再是 "申购单" 字段了
+- 合同库 overlay 跟整个 backend overlay 体系一致 (round 6 模式), 不破坏 demo
+- contract-demo.sh 一行命令验证 + 截图 + 文档全齐
+- discovery 文档先行, gap 表清楚, P3 backlog 透明
+

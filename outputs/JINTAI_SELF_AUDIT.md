@@ -350,3 +350,33 @@ PG READ COMMITTED 下第二个 UPDATE 会等第一个 commit 释放 row lock,然
 
 **Loop 停止条件**: 用满 3 子轮 + 剩余候选都需 browser access (老板睡 = 没批权限) + perf 结论是"无需优化"。详见 FINAL_REPORT §22。
 
+
+---
+
+## F. Round 13 — 合同上传 end-to-end (新增)
+
+| 项 | 状态 |
+|----|------|
+| Contract schema (rich, 17 fields + payment milestones) | ✅ round 1-7 已有 |
+| `GET /contracts` + `GET /contracts/{id}` 列表/详情 endpoints | ✅ round 1-7 已有 |
+| confirm_writer Contract entity_type 白名单 + Customer-has-Contract FK | ✅ round 1-7 已有 |
+| parse_pipeline contract.py adapter (pdfplumber + vision fallback) | ✅ round 1-7 已有 |
+| Contract ontology field aliases (8 字段中英文) | ✅ round 1-7 已有 |
+| DemoMockProvider 合同 → Customer+Contract+relationship | ✅ round 13 fix |
+| `_run_demo_provider` forwards relationships | ✅ round 13 fix |
+| `_contract_dict` 含 status/payment_terms/human_verified | ✅ round 13 fix |
+| Frontend 合同库 overlay (table) + PII warning | ✅ round 13 new |
+| `confirmUploadedCandidate()` multi-entity helper | ✅ round 13 new |
+| Upload panel multi-entity confirm flow | ✅ round 13 new |
+| Cross-tenant Contract test | ✅ round 13 new |
+| End-to-end contract-demo.sh | ✅ round 13 new |
+| **V2 PII 自动打码** | ❌ 模块不存在,red line 留 P3 backlog (CTO 设计) |
+| Contract 双确认 dedupe (UNIQUE index) | ⏸ 文档化已知限制, ~30 min 工作量 |
+| ContractPaymentMilestone demo seed + UI | ⏸ DemoMockProvider 不出 milestone (应付台账依赖) |
+
+**新增测试 (round 13)**: +4 (3 contract end-to-end + 1 PR-only filename 锁定)
+**修复 commits**: 3 进 #115 (`b92a9e6`, `c940950`, + docs) + 1 进 #116 (`1646ccc`)
+**Discovery 文档**: `outputs/CONTRACT_UPLOAD_GAP_ANALYSIS.md` (~7KB)
+**Demo script**: `scripts/jintai/contract-demo.sh` (14/14 PASS 实跑验证)
+**截图**: `outputs/jintai-demo-iter21/round13-contract-upload-e2e.png` (400KB, full UX 链路)
+
