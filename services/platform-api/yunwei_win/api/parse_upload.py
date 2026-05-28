@@ -257,6 +257,24 @@ async def _run_demo_provider(
         sum(f.confidence for e in cand_entities for f in e.fields)
         / max(1, sum(len(e.fields) for e in cand_entities))
     )
+    # Round 13: forward provider-emitted relationships into the candidate
+    # response so confirm_writer can resolve parent FKs (e.g.
+    # Customer-has-Contract sets contract.customer_id from the seeded
+    # Customer's resolved UUID). Previously hard-coded to [], which silently
+    # dropped any cross-entity link the provider produced.
+    from yunwei_win.services.parse_pipeline.candidate import Relationship
+    cand_rels: list[Relationship] = []
+    for rel in pr.relationships:
+        try:
+            cand_rels.append(Relationship(
+                from_temp_id=rel["from_temp_id"],
+                to_temp_id=rel["to_temp_id"],
+                type=rel["type"],
+            ))
+        except KeyError:
+            # Provider produced a malformed relationship; surface as warning
+            # rather than crash the whole upload.
+            logger.warning("provider relationship missing required keys: %s", rel)
     return CandidateJSON(
         source=SourceInfo(
             type=source_type,  # type: ignore[arg-type]
@@ -264,7 +282,7 @@ async def _run_demo_provider(
             uploaded_by=uploaded_by,
         ),
         entities=cand_entities,
-        relationships=[],
+        relationships=cand_rels,
         overall_confidence=round(overall, 3),
         warnings=pr.warnings,
     )
