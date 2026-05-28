@@ -1104,3 +1104,71 @@ outputs/JINTAI_BACKEND_FINAL_REPORT.md  (本节 §18)
 - 文档: +1 file (PERF_BASELINE.md), FINAL_REPORT §19/20/21/22
 - Mock 路径 0 影响,前后端独立可测,业务核心 0 变化
 
+
+---
+
+## 23. Hotfix 投递 — 显示问题诊断 (无代码改动 / 误报)
+
+**触发**: 老板报 `http://127.0.0.1:5175/win/?tab=jintai` 什么也显示不出来。怀疑 round 8/10/11 commit 引入回归。
+
+### 诊断步骤 (按老板 brief 执行)
+
+1. **dev server 在不在**:
+   ```bash
+   lsof -iTCP:5175 -sTCP:LISTEN   # 空 → vite 没在跑
+   curl -sI http://127.0.0.1:5175/win/  # connection refused
+   ```
+   → **dev server 没在跑**。这是症状第一来源。
+
+2. **启 vite dev server**:
+   ```bash
+   cd apps/win-web && npm run dev -- --port 5175 --host 127.0.0.1
+   ```
+   142ms 起来,200 OK 返回 index.html。
+
+3. **`npm run check` (tsc --noEmit)**: ✅ 无错误。所有 round 8/10/11 的 TS 改动 (`db=` badge / `_classifyBackendError` / parse_upload 后端) 类型干净。
+
+4. **headless Chrome 真实渲染** (fresh user-data-dir 排除缓存):
+   - `?tab=jintai` (mock 默认): **DOM 275889 字节 / 可见文本 12106 字符** —— 完整渲染锦泰品牌头 / 6 张 5 模块 cards / 货币资金 ¥8.2M / 风险线索 3 张
+   - `?tab=jintai&mode=backend` (后端 OFF): DOM 282558 字节 / 12634 字符 —— **mock 内容完整 + 后端 overlay 显示友好错误** "✨ backend live data ... ⚠ 后端不可达,请确认 dev-backend 已启动" (round 10 `_classifyBackendError` 工作正常)
+   - `?tab=jintai&mode=backend&inspect=1` (Backend Reality Check 面板展开): DOM 286665 字节 —— Backend Reality Check panel 显示 "● 未连接" red dot + lastError row,主页面 mock 内容 100% 可见
+   - `/win/` (无 tab 参数,默认首页): DOM 59062 字节 / 1103 字符 —— 应是登录页 / dashboard 占位 (非锦泰)
+
+5. **JS console 扫描** (Chrome --enable-logging + fresh profile, grep Uncaught/TypeError/ReferenceError/SyntaxError/EvalError/RangeError/onerror): **0 命中**。
+
+### 截图证据 (落 `outputs/jintai-demo-iter21/`)
+
+- `hotfix-display-restored.png` (211KB · 1400×900): mock 模式默认页 — 锦泰品牌头 + 经营日报 active + 6 张今日新增 cards + 货币资金 ¥8.2M / 进行中生产量 12 / 本月应付 ¥327K / 本月回款 ¥4.8M + 风险线索 3 张
+- `hotfix-display-backend-off.png` (219KB): mode=backend & inspect=1 with backend OFF — 主 demo 完整渲染 + 右上 Backend Reality Check 面板 active "● 未连接" + overlay 友好错误 "后端不可达,请确认 dev-backend 已启动"
+
+### 根因
+
+**老板机器上 vite dev server 不在跑** (与我接收到 brief 时本地状态完全一致,我也是先 `lsof` 发现 :5175 空,然后才能开始诊断)。这不是 round 8/10/11 引入的代码回归。
+
+可能的二级诱因:
+- 之前的 vite 进程被关闭 (笔记本休眠 / 终端 close / Ctrl-C)
+- 浏览器缓存了 `connection refused` 错误页面,看起来像白屏
+- macOS 防火墙 / Little Snitch 后台拒了 127.0.0.1:5175 的入站 (不太可能但可能)
+
+### 修复
+
+**无代码改动**。给老板一行恢复命令:
+
+```bash
+cd "/Users/kobeli/Documents/Yinhu Project/jintai-frontend-mode/apps/win-web"
+npm run dev -- --port 5175 --host 127.0.0.1
+# 看到 "VITE ready in ...ms" → 浏览器 hard-refresh (Cmd+Shift+R) http://127.0.0.1:5175/win/?tab=jintai
+```
+
+### 防回归
+
+- **dev server liveness 测试** 已经在 round 7 `smoke-clean.sh` 里 — 它启动 backend + frontend 后 HEAD 200 验证。但 smoke-clean.sh 用临时 port 15175 而非 5175,不直接 catch 用户场景。
+- 真实回归测试 (round 8 frontend CI workflow): tsc + vite build 两 job, 验证 build-time 类型 + 打包成功 — 都绿。round 8-11 各次 push CI 全绿。
+- **没新加测试** — 因为没找到代码 bug。如果加"dev server 必须在跑"测试,等于测 vite 自身,过度。
+
+### 结论 (诚实)
+
+误报。1-12 轮代码所有 demo 路径都正常渲染,真测过 (DOM 字节数 / visible 文本 / 截图全有)。**最高 ROI 行动 = 老板重新跑 npm run dev**。
+
+**0 个 commit 推到 PR** —— 不做"假 hotfix"凑数。
+
