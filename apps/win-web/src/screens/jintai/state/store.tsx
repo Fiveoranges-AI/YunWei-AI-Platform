@@ -141,11 +141,12 @@ const _readInitialMode = (): BackendMode => {
   const qp = new URLSearchParams(window.location.search);
   const q = qp.get("mode");
   if (q === "backend") return "backend";
-  if (q === "mock") return "mock";
-  try {
-    const ls = window.localStorage.getItem("jintai.mode");
-    if (ls === "backend") return "backend";
-  } catch { /* ignore */ }
+  // Customer-demo default is always `mock`. Hotfix (round 13): previously
+  // we auto-restored `backend` from localStorage if a prior session had
+  // toggled it, which meant any reload after one backend session would
+  // show the red 'backend unreachable' overlay if dev-backend was not
+  // running. Now `?mode=backend` is the ONLY way to land in backend
+  // mode on page load. The in-page toggle still works per-session.
   return "mock";
 };
 
@@ -657,8 +658,13 @@ function reducer(state: JintaiState, action: Action): JintaiState {
       };
 
     case "SET_MODE": {
+      // Hotfix (round 13): no longer persist mode to localStorage. Previous
+      // behaviour caused the next page-load to land in backend mode (red
+      // overlay if dev-backend not running). Toggle is now session-only.
+      // Clear any legacy value so existing browsers self-heal on first
+      // toggle after this fix lands.
       if (typeof window !== "undefined") {
-        try { window.localStorage.setItem("jintai.mode", action.mode); } catch { /* ignore */ }
+        try { window.localStorage.removeItem("jintai.mode"); } catch { /* ignore */ }
       }
       return {
         ...state,
