@@ -18,11 +18,11 @@
 import type { ReactNode } from "react";
 import {
   getBalanceSheet, getCashflow, getCostBreakdown, getDepreciation, getPnlDistribution,
-  getBriefingKpi, listBoms, listPayables, listPurchaseOrders, listRequisitions,
-  explodeBom,
+  getBriefingKpi, listBoms, listContracts, listPayables, listPurchaseOrders,
+  listRequisitions, explodeBom,
   type BalanceSheetOut, type BomListItem, type BriefingKpiOut, type CashflowOut,
-  type CostBreakdownOut, type DepreciationOut, type FinanceRow, type PayableOut,
-  type PnlOut, type PurchaseOrderOut, type PurchaseRequisitionOut,
+  type ContractListItem, type CostBreakdownOut, type DepreciationOut, type FinanceRow,
+  type PayableOut, type PnlOut, type PurchaseOrderOut, type PurchaseRequisitionOut,
 } from "../../api/jintai-backend";
 import { useJintai } from "./state/store";
 import { useBackendQuery } from "./state/useBackendQuery";
@@ -695,5 +695,112 @@ function _BomRow({ bom }: { bom: BomListItem }) {
         </table>
       )}
     </div>
+  );
+}
+
+
+// ============================== 5. Contracts (Round 13) ===============
+
+/**
+ * 合同库 overlay — lists Contract entities written via /confirm/entities
+ * after a contract PDF upload. Backend mode only; mock mode shows a
+ * placeholder note steering the demo viewer toward backend mode.
+ *
+ * Why a separate overlay rather than reusing the Purchase one:
+ *  - Contract has a distinct lifecycle (signing → effective → expiry)
+ *    and distinct counterparties (customer, not supplier)
+ *  - Round 13 SELF_AUDIT P3 noted PII concerns — contracts carry
+ *    counterparty info + payment terms; isolating them in their own
+ *    overlay lets a future PII-redaction Phase 2 hook in cleanly
+ *  - Reviewers can verify the "AI 先填、人确认" chain end-to-end on a
+ *    single screen: upload → candidate → confirm → row in this list
+ */
+export function JintaiContractsBackendOverlay() {
+  const { state } = useJintai();
+  if (state.mode !== "backend") return null;
+  const q = useBackendQuery<ContractListItem[]>(
+    "contracts-list-r13",
+    () => listContracts(20),
+  );
+  return (
+    <OverlayChrome
+      endpoint="/contracts?limit=20"
+      loadedAt={q.loadedAt} loading={q.loading} error={q.error} refetch={q.refetch}
+    >
+      {!q.data && !q.error && <Empty msg="拉取中..." />}
+      {q.data && q.data.length === 0 && (
+        <Empty msg="后端无合同。上传一份'…合同.pdf'(AI 收件箱 → 真实上传)后回来 ↻ 刷新。" />
+      )}
+      {q.data && q.data.length > 0 && (
+        <>
+          <div
+            style={{
+              fontSize: 11, color: "var(--ink-500)", marginBottom: 8,
+              padding: "6px 10px", background: "var(--warn-100)",
+              borderLeft: "3px solid var(--warn-500)", borderRadius: 4,
+            }}
+          >
+            💡 合同含敏感信息(对方/金额/账期),外发前请确认权限。
+            (V2 PII 自动打码尚未上线 — 见 SELF_AUDIT P3 backlog)
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: "var(--ink-100)", textAlign: "left" }}>
+                <th style={{ padding: 4 }}>对方合同号</th>
+                <th style={{ padding: 4 }}>我方编号</th>
+                <th style={{ padding: 4 }}>客户</th>
+                <th style={{ padding: 4, textAlign: "right" }}>金额</th>
+                <th style={{ padding: 4 }}>币种</th>
+                <th style={{ padding: 4 }}>签订</th>
+                <th style={{ padding: 4 }}>到期</th>
+                <th style={{ padding: 4 }}>状态</th>
+                <th style={{ padding: 4 }}>人工确认</th>
+              </tr>
+            </thead>
+            <tbody>
+              {q.data.map((ct) => (
+                <_ContractRow key={ct.id} contract={ct} />
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </OverlayChrome>
+  );
+}
+
+function _ContractRow({ contract }: { contract: ContractListItem }) {
+  return (
+    <tr style={{ borderTop: "1px solid var(--ink-200)" }}>
+      <td style={{ padding: 4 }}>
+        <code style={{ fontSize: 11 }}>{contract.contract_no_external ?? "—"}</code>
+      </td>
+      <td style={{ padding: 4 }}>
+        <code style={{ fontSize: 11 }}>{contract.contract_no_internal ?? "—"}</code>
+      </td>
+      <td style={{ padding: 4, color: "var(--ink-700)" }}>
+        {contract.customer_id ? (
+          <code style={{ fontSize: 10, color: "var(--ink-500)" }}>
+            cust:{contract.customer_id.slice(0, 8)}
+          </code>
+        ) : (
+          <span style={{ color: "var(--ink-500)" }}>—</span>
+        )}
+      </td>
+      <td style={{ padding: 4, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+        {_fmtCny(contract.amount_total)}
+      </td>
+      <td style={{ padding: 4 }}>{contract.amount_currency ?? "—"}</td>
+      <td style={{ padding: 4 }}>{contract.signing_date ?? "—"}</td>
+      <td style={{ padding: 4 }}>{contract.expiry_date ?? "—"}</td>
+      <td style={{ padding: 4 }}>
+        <_Badge text={contract.status ?? "—"} />
+      </td>
+      <td style={{ padding: 4 }}>
+        {contract.human_verified
+          ? <span style={{ color: "var(--ok-700)" }}>✓ {contract.verified_by ?? "—"}</span>
+          : <span style={{ color: "var(--warn-700)" }}>待确认</span>}
+      </td>
+    </tr>
   );
 }

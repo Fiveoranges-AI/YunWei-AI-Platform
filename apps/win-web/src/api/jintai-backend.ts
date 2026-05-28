@@ -262,6 +262,53 @@ export async function listPayables(): Promise<PayableOut[]> {
   return _fetch<PayableOut[]>("/procurement/payables");
 }
 
+
+// ============================== contracts =============================
+// Round 13: list + detail for the Contract entity (uploaded via /parse/upload
+// then confirmed via /confirm/entities). Maps onto read.py:list_contracts +
+// get_contract endpoints (already shipped in main repo's read.py).
+
+export type ContractListItem = {
+  id: string;
+  customer_id: string | null;
+  order_id: string | null;
+  contract_no_external: string | null;
+  contract_no_internal: string | null;
+  amount_total: number | null;
+  amount_currency: string | null;
+  signing_date?: string | null;
+  effective_date?: string | null;
+  expiry_date?: string | null;
+  payment_terms?: string | null;
+  status?: string | null;
+  confidence_overall?: number | null;
+  human_verified?: boolean;
+  verified_by?: string | null;
+  created_at?: string;
+};
+
+export async function listContracts(limit = 20): Promise<ContractListItem[]> {
+  return _fetch<ContractListItem[]>(`/contracts?limit=${limit}`);
+}
+
+export type ContractDetail = ContractListItem & {
+  customer: { id: string; full_name: string | null } | null;
+  order: { id: string; amount_total: number | null } | null;
+  provenance: Array<{
+    field_name: string;
+    value: string | null;
+    source_page: number | null;
+    source_excerpt: string | null;
+    confidence: number | null;
+    extracted_by: string | null;
+    review_action: string | null;
+  }>;
+};
+
+export async function getContract(id: string): Promise<ContractDetail> {
+  return _fetch<ContractDetail>(`/contracts/${id}`);
+}
+
 // ============================== briefing KPI ===========================
 
 export type BriefingKpiOut = {
@@ -668,6 +715,51 @@ export async function confirmUploadedEntity(opts: {
     }],
   });
 }
+
+/**
+ * Round 13: confirm an upload whose candidate has MULTIPLE entities +
+ * relationships (e.g. Contract uploads emit Customer + Contract +
+ * Customer-has-Contract so the Contract's customer_id FK can be resolved
+ * by confirm_writer's relationship walker).
+ *
+ * The single-entity `confirmUploadedEntity` above is kept for IssueVoucher
+ * (round 5 path) because that's a simpler shape with no parent FK.
+ */
+export async function confirmUploadedCandidate(opts: {
+  candidate: UploadCandidate;
+  source_type: string;
+  file_ref: string;
+  edits?: Record<string, Record<string, unknown>>;  // entity.temp_id → field-edits
+}): Promise<ConfirmResponse> {
+  const skipNames = new Set(["material_name_hint"]);
+  const entities = opts.candidate.entities.map((ent) => {
+    const eedits = opts.edits?.[ent.temp_id] ?? {};
+    const fields: ConfirmField[] = [];
+    for (const f of ent.fields) {
+      if (skipNames.has(f.name)) continue;
+      const edited = eedits[f.name] !== undefined;
+      fields.push({
+        name: f.name,
+        value: edited ? eedits[f.name] : f.value,
+        confidence: f.confidence,
+        was_edited: !!edited,
+      });
+    }
+    return {
+      entity_type: ent.entity_type,
+      temp_id: ent.temp_id,
+      fields,
+    };
+  });
+  return postConfirm({
+    ingestion_id: `upload-confirm-multi-${Date.now()}`,
+    source_type: opts.source_type,
+    source_ref: opts.file_ref,
+    entities,
+    relationships: opts.candidate.relationships ?? [],
+  });
+}
+
 
 // ============================== high-level helpers (existing) ===========
 

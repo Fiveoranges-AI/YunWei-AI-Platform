@@ -11,6 +11,7 @@ import type { ExtractionCard } from "./data";
 import { JintaiUploadInbox } from "./JintaiUploadInbox";
 import type { ProcessingCard } from "./JintaiUploadInbox";
 import { JintaiRealUploadPanel } from "./JintaiRealUploadPanel";
+import { JintaiContractsBackendOverlay } from "./JintaiBackendOverlays";
 import { JintaiWorkflowTimeline } from "./JintaiWorkflowTimeline";
 import { JintaiProductionTabs } from "./JintaiProductionTabs";
 import { JintaiAIQueryPanel } from "./JintaiAIQueryPanel";
@@ -568,6 +569,10 @@ function JintaiDemoPageInner() {
           </div>
           {/* Round 5: 真实文档上传 (backend mode only;mock 模式整段 return null) */}
           <JintaiRealUploadPanel />
+          {/* Round 13: 上传合同 PDF → confirm 后, 合同库列表展示在这里 (backend
+              mode only). 客户/老板 1 步内看到 "刚刚上传的合同已经入库", 完整闭
+              环 "AI 先填 → 人确认 → 落 Contract 表" 一目了然. */}
+          <JintaiContractsBackendOverlay />
           <JintaiUploadInbox
             cards={cards}
             processing={processing}

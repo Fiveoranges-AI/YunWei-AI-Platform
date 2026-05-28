@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  confirmUploadedCandidate,
   confirmUploadedEntity,
   listMaterials,
   postIssueAndConfirm,
@@ -102,43 +103,70 @@ export function JintaiRealUploadPanel() {
 
   const accept = async () => {
     if (s.kind !== "candidate") return;
-    const ent = s.resp.candidate.entities[0];
-    if (!ent) { setS({ kind: "error", message: "无候选实体" }); return; }
+    const ents = s.resp.candidate.entities;
+    if (ents.length === 0) { setS({ kind: "error", message: "无候选实体" }); return; }
     setS({ kind: "submitting", message: "采纳中:写入 confirm_writer + 触发主线..." });
     try {
-      // IssueVoucher 路径:需要 material_id (DemoMockProvider 只给 hint name)
-      let materialId: string | undefined;
-      if (ent.entity_type === "IssueVoucher") {
-        const mats = await listMaterials();
-        if (mats.length > 0) {
-          materialId = state.backendIds.materialId || mats[0].id;
+      // Round 13: multi-entity candidates (e.g. Contract upload emits
+      // Customer + Contract + Customer-has-Contract relationship) must go
+      // through confirmUploadedCandidate so all entities + the relationship
+      // ship in ONE /confirm/entities call, letting confirm_writer resolve
+      // contract.customer_id from the relationship walker. Single-entity
+      // candidates (round 5 IssueVoucher path) keep their existing helper.
+      let confirmResp;
+      if (ents.length > 1 || (s.resp.candidate.relationships?.length ?? 0) > 0) {
+        confirmResp = await confirmUploadedCandidate({
+          candidate: s.resp.candidate,
+          source_type: s.resp.source_type,
+          file_ref: `upload://${s.resp.attachment.checksum}`,
+          // No edit support yet for multi-entity; round 5 single-entity edit
+          // UI doesn't disambiguate by temp_id. Acceptable for round 13.
+        });
+      } else {
+        const ent = ents[0];
+        // IssueVoucher 路径:需要 material_id (DemoMockProvider 只给 hint name)
+        let materialId: string | undefined;
+        if (ent.entity_type === "IssueVoucher") {
+          const mats = await listMaterials();
+          if (mats.length > 0) {
+            materialId = state.backendIds.materialId || mats[0].id;
+          }
         }
+        confirmResp = await confirmUploadedEntity({
+          entity: ent,
+          source_type: s.resp.source_type,
+          file_ref: `upload://${s.resp.attachment.checksum}`,
+          edits: _stringEditsToValues(s.edits, ent),
+          materialId,
+        });
       }
-      const confirmResp = await confirmUploadedEntity({
-        entity: ent,
-        source_type: s.resp.source_type,
-        file_ref: `upload://${s.resp.attachment.checksum}`,
-        edits: _stringEditsToValues(s.edits, ent),
-        materialId,
-      });
-      const written = confirmResp.written[0];
-      if (!written) throw new Error("confirm returned 0 written");
+      const written = confirmResp.written;
+      if (written.length === 0) throw new Error("confirm returned 0 written");
 
-      let triggerMessage = `✓ 已写入 ${written.entity_type} (id=${written.entity_id.slice(0, 8)}…)`;
+      // Pick the "primary" entity for the trigger message — Contract for
+      // Contract uploads, IssueVoucher for IssueVoucher uploads, else first.
+      const primary =
+        written.find((w) => w.entity_type === "Contract")
+        ?? written.find((w) => w.entity_type === "IssueVoucher")
+        ?? written[0];
+      const writtenTypes = written.map((w) => w.entity_type).join("+");
+      let triggerMessage = `✓ 已写入 ${writtenTypes} (主 entity ${primary.entity_type} id=${primary.entity_id.slice(0, 8)}…)`;
 
-      // IssueVoucher → 走主线触发
-      if (written.entity_type === "IssueVoucher") {
-        const issueResp = await postIssueAndConfirm(written.entity_id);
+      // IssueVoucher → 走主线触发. Contract / Customer 不触发主线 (单纯落表).
+      if (primary.entity_type === "IssueVoucher") {
+        const issueResp = await postIssueAndConfirm(primary.entity_id);
         dispatch({
           type: "SET_BACKEND_IDS",
           ids: {
-            voucherId: written.entity_id,
+            voucherId: primary.entity_id,
             prId: issueResp.auto_drafted_pr_id ?? undefined,
           },
         });
         triggerMessage += `;主线触发: 库存 ${issueResp.balance_after} kg`;
         if (issueResp.alert_id) triggerMessage += " · 缺料预警";
         if (issueResp.auto_drafted_pr_no) triggerMessage += ` · auto-draft ${issueResp.auto_drafted_pr_no}`;
+      } else if (primary.entity_type === "Contract") {
+        triggerMessage += ";已加入合同库 (见下方列表 · ↻ 刷新看到)";
       }
       await refreshBackendKpi();
       setS({ kind: "submitted", message: triggerMessage });
