@@ -1420,3 +1420,78 @@ Brief 明确说 "advanced features 留下一轮". 不做。
 - contract-demo.sh 一行命令验证 + 截图 + 文档全齐
 - discovery 文档先行, gap 表清楚, P3 backlog 透明
 
+
+---
+
+## 25. Hotfix · 二次"#finance 白屏" — 又是 dev server 没跑 + start-demo.sh helper
+
+老板上午报 `http://127.0.0.1:5175/win/?tab=jintai#finance` 又显示不出来。
+
+### 诊断 (per brief steps 1-2)
+
+```bash
+lsof -iTCP:5175 -sTCP:LISTEN   # 空
+lsof -iTCP:8000 -sTCP:LISTEN   # 空
+curl http://127.0.0.1:5175/win/   # connection refused
+curl http://127.0.0.1:8000/health # connection refused
+```
+
+**两个 server 都死了**, 跟 §23.1 同样根因 (laptop sleep / 终端关闭). Round 13 我留的 pid 65163 / 65164 在凌晨某个时刻被回收。
+
+### 验证 (per brief step 3-4)
+
+重启两 server → headless Chrome 真访问 `?tab=jintai#finance`:
+- DOM 283515 bytes (12015 visible chars)
+- 截图 `outputs/jintai-demo-iter21/hotfix-finance-tab-display.png`:
+  - ○ MOCK 模式 角标 (默认 mock, round 13.1 hotfix 锁定的行为, 老板没看到红色错误)
+  - 财务 tab active (绿色高亮)
+  - 资产负债表 / 利润及利润分配表 / 现金流量表 / 成本拆分 / 折旧台账 五个 subtab
+  - 资产负债表完整 (流动资产 / 应收账款 / 存货 + 数字)
+  - 右侧 AI 草稿 "本月资金净额 49,000,000 元" 卡片
+  - 上方 "AI 自动归集 → 资产负债表 / 利润 / 现金流 + 成本拆分 + 折旧 → 王会计 1 步确认"
+
+**Round 13 加的合同 overlay 没有干扰财务 tab** — overlay 只挂在 AI 收件箱 tab, 不影响其他 tab (`hidden={activeTab !== "inbox"}` 隔离).
+
+### 预防递归发生 — `scripts/jintai/start-demo.sh`
+
+这是第二次"dev server 死了"报告。给老板加一个一键脚本, 不要每次重启手动两条命令:
+
+```bash
+bash scripts/jintai/start-demo.sh              # 启 backend + vite
+bash scripts/jintai/start-demo.sh stop         # 全停
+```
+
+行为:
+- 检测两 port 已经在用就保留 (idempotent)
+- backend on :8000 (SQLite mode), vite on :5175
+- 自动找 jintai-aware `apps/win-web` (用文件存在 `JintaiDemoPage.tsx` 探针, 不是目录存在; 防止误判 `jintai-finance-reports/apps/win-web` 老的 pre-jintai win-customer app)
+- 健康检查 ≤15 秒 + 失败保留 log 路径
+- PID 落 `/tmp/jintai-demo-{backend,vite}.pid` 让 stop 干净
+- 打印复制可用 URL
+
+**实跑测试**: 三次 (stop → cold-start → idempotent-start) 全绿。
+
+### Discovery 副产品: round 13 contract-demo.sh 有一行未触发 bug
+
+写 start-demo.sh 时发现 `jintai-finance-reports/apps/win-web` **存在但不含 Jintai 屏幕** (只有老 win-customer app 的剩余目录, 没 `src/screens/jintai/`)。
+
+我之前 round 13 写的 contract-demo.sh **不会**踩这个坑 (它不启 frontend, 只 curl backend). 但是其它任何尝试 `cd $ROOT/apps/win-web && npm run dev` 的 script 都会启错 app, 给老板看到一个"长得像"但完全没 Jintai 路由的旧 UI — 就是白屏的另一种成因。
+
+start-demo.sh 用 `_has_jintai_screens()` 探针避免, 文档化此 trap.
+
+### 我决定**不**做的事
+
+- 没改任何业务/UI 代码 (round 13 stack 仍稳定)
+- 没加新测试 (没 bug, 加测试等于测 vite 自己)
+- 没用 "hotfix:" commit 前缀 (按 §23 同样诚实原则 — start-demo.sh 是预防工具, 不是 hotfix)
+
+### Round 13 + Round 25 累计 commit 链
+
+| commit | 范围 |
+|--------|------|
+| `b92a9e6` | round 13 backend (DemoMock + relationships + GAP doc) |
+| `c940950` | round 13 backend (_contract_dict + test) |
+| `1646ccc` | round 13 frontend (#116: 合同库 overlay + multi-entity confirm) |
+| `3892559` | round 13 docs (FINAL_REPORT §24 + SELF_AUDIT + contract-demo.sh) |
+| (next) | round 25 docs §25 + scripts/jintai/start-demo.sh + 截图 |
+
