@@ -209,6 +209,11 @@ async def test_contract_upload_end_to_end_via_demo_mock() -> None:
             assert ct["amount_currency"] == "CNY"
             assert ct["customer_id"] is not None
             assert ct["amount_total"] is not None and ct["amount_total"] > 0
+            # Round 13 extensions to _contract_dict — surface in jintai overlay.
+            assert "status" in ct
+            assert "payment_terms" in ct
+            assert "human_verified" in ct
+            assert "verified_by" in ct
 
             # 4. detail (includes customer + provenance)
             detail = await c.get(f"/contracts/{ct['id']}")
