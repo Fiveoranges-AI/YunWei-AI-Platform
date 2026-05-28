@@ -73,6 +73,7 @@ jobs:
             tests/test_jintai_cross_tenant.py \
             tests/test_jintai_concurrency_audit.py \
             tests/test_jintai_parse_provider_failures.py \
+            tests/test_jintai_contract.py \
             tests/test_procurement_api_listings.py \
             tests/test_confirm_cards.py \
             tests/test_ontology_schema.py \

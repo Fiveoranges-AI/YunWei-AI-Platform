@@ -170,8 +170,10 @@ async def test_upload_xlsx_returns_issue_voucher_candidate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_pdf_contract_returns_purchase_requisition_candidate() -> None:
-    """pdf with 合同/采购 in filename → PurchaseRequisition entity."""
+async def test_upload_pdf_contract_returns_contract_and_customer_candidate() -> None:
+    """Round 13 (corrected from round 5): pdf with 合同 in filename → Contract
+    + Customer entities with a Customer-has-Contract relationship. Previously
+    DemoMockProvider routed 合同 to PurchaseRequisition by mistake."""
     from httpx import ASGITransport, AsyncClient
 
     engine = await _make_engine()
@@ -186,7 +188,45 @@ async def test_upload_pdf_contract_returns_purchase_requisition_candidate() -> N
             body = resp.json()
             assert body["provider"] == "demo-mock"
             assert body["source_type"] == "contract"
-            ent = body["candidate"]["entities"][0]
+            entities = body["candidate"]["entities"]
+            types = sorted(e["entity_type"] for e in entities)
+            assert types == ["Contract", "Customer"], (
+                f"expected Contract+Customer, got {types}"
+            )
+            contract = next(e for e in entities if e["entity_type"] == "Contract")
+            names = {f["name"] for f in contract["fields"]}
+            for required in {
+                "contract_no_external", "contract_no_internal", "amount_total",
+                "amount_currency", "signing_date", "effective_date",
+                "expiry_date", "payment_terms", "status",
+            }:
+                assert required in names, f"Contract missing {required}"
+            # Customer-has-Contract relationship must be present (lets
+            # confirm_writer set contract.customer_id from the seeded Customer).
+            rels = body["candidate"]["relationships"]
+            assert any(
+                r["type"] == "Customer-has-Contract" for r in rels
+            ), f"missing Customer-has-Contract relationship: {rels}"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_upload_pdf_purchase_only_filename_returns_pr_candidate() -> None:
+    """Filename with 采购 but not 合同 (e.g. '采购单') still routes to PR.
+    Locks down the keyword-priority order added in round 13."""
+    from httpx import ASGITransport, AsyncClient
+
+    engine = await _make_engine()
+    try:
+        app = _build_app(engine)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            resp = await _post_upload(
+                c, "成型车间_采购单_20260101.pdf",
+                b"%PDF-1.4\nfake", "application/pdf",
+            )
+            assert resp.status_code == 200, resp.text
+            ent = resp.json()["candidate"]["entities"][0]
             assert ent["entity_type"] == "PurchaseRequisition"
             names = {f["name"] for f in ent["fields"]}
             assert {"pr_no", "dept", "applicant", "apply_date"}.issubset(names)
