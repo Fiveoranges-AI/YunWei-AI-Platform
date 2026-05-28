@@ -1172,3 +1172,85 @@ npm run dev -- --port 5175 --host 127.0.0.1
 
 **0 个 commit 推到 PR** —— 不做"假 hotfix"凑数。
 
+
+---
+
+## 23.1 Hotfix · 更新 — 真问题在前端默认 mode 走 backend
+
+§23 第一版结论是"误报 / 老板 vite 没跑"。错。**真问题是**: 老板打开默认 URL,但前端默认进了 backend mode (因 localStorage persist),backend 没跑 → 飘红 "后端不可达"。
+
+### 真根因
+
+`apps/win-web/src/screens/jintai/state/store.tsx:_readInitialMode()` 之前的逻辑:
+
+```typescript
+// 旧 (有 bug)
+const _readInitialMode = (): BackendMode => {
+  if (typeof window === "undefined") return "mock";
+  const qp = new URLSearchParams(window.location.search);
+  const q = qp.get("mode");
+  if (q === "backend") return "backend";
+  if (q === "mock") return "mock";
+  try {
+    const ls = window.localStorage.getItem("jintai.mode");
+    if (ls === "backend") return "backend";   // ← 罪魁
+  } catch { /* ignore */ }
+  return "mock";
+};
+```
+
+老板某次用过 `?mode=backend`,SET_MODE reducer 写 localStorage,后续每次刷新 URL 没带 mode 参数 → fallback 到 localStorage → 又进 backend → 红色 overlay。
+
+### Hotfix (commit `3f7e78f` 进 PR #116)
+
+```typescript
+// 新
+const _readInitialMode = (): BackendMode => {
+  if (typeof window === "undefined") return "mock";
+  const qp = new URLSearchParams(window.location.search);
+  if (qp.get("mode") === "backend") return "backend";
+  // Customer-demo default 永远 mock. URL 显式 ?mode=backend 才进 backend.
+  return "mock";
+};
+```
+
++ SET_MODE reducer: `localStorage.setItem` → `localStorage.removeItem` (清存量浏览器 legacy 值,下次 toggle 自愈)。
+
+In-page toggle 按钮仍工作 (per session),但 reload 不再 persist backend mode。
+
+### 操作侧 (老板侧立即恢复)
+
+我同时起了 SQLite 后端在 :8000:
+
+```bash
+cd services/platform-api
+DATABASE_URL="sqlite+aiosqlite:///./jintai_dev_admin.db" \
+  REDIS_URL="redis://localhost:6379" \
+  COOKIE_SECRET="hotfix-cookie-secret-32-bytes-padding=" \
+  python3 -m uvicorn dev_jintai_backend:app --host 127.0.0.1 --port 8000
+# /health 返回 {"status":"ok","db":"sqlite (file)"} → backend 可达
+```
+
+老板浏览器命中 backend 后,overlay 从红色 ⚠ 变绿色 ✨ + 真数字 (KPI payable_total=¥46,080 等)。
+
+### 截图 (落 `outputs/jintai-demo-iter21/`)
+
+| 文件 | 大小 | 内容 |
+|------|------|------|
+| `hotfix-default-mode-mock.png` | 211KB · 1400×900 | 缺省 URL `?tab=jintai` (无 `mode=`) → **MOCK 模式** 角标 + 6 张今日新增 cards + 货币资金 ¥8.2M + 风险线索 3 张. **零红色**. |
+| `hotfix-backend-up-overlay-green.png` | 277KB | `?mode=backend&inspect=1` + backend 跑了 → Backend Reality Check "● ok" 绿点 + GET /briefing/kpi 真数字 (¥446,400 等) + ActionLog 行可见. **零红色**. |
+
+### CI
+
+只改前端 (`store.tsx`),走 `jintai-frontend.yml` workflow (typecheck + vite build)。
+
+### 防回归
+
+加测试有点 overkill (1 行行为变化), 但有几个 follow-up 触发条件值得记:
+- 如果未来加 `?mode=mock` 的 URL 也能 force mock,需要测试这两个分支
+- 如果加新的 init 字段 (e.g., `_readInitialBackendBaseUrl`) 也读 localStorage,记得不要重蹈覆辙
+
+### 跟 §23 第一版的关系
+
+第一版我说"vite 没跑 = 误报"。当时确实是 false alarm (老板第一次报告时 vite 真没跑)。但**第二次报告**老板贴出确切错误文本 "✨ backend live data GET /briefing/kpi · 拉取于 — · ⚠ 后端不可达",证明 vite 在跑但 backend 没跑 + 前端默认进了 backend mode。这次是真 bug,已修。
+
