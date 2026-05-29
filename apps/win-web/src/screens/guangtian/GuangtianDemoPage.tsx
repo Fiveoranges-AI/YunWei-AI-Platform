@@ -14,6 +14,12 @@ import { ShortageAlertPanel } from "./panels/ShortageAlertPanel";
 import { ReplenishmentPanel } from "./panels/ReplenishmentPanel";
 import { AskInventoryPanel } from "./panels/AskInventoryPanel";
 import { DailyReportPanel } from "./panels/DailyReportPanel";
+import { readInitialMode, writeModeToUrl, type BackendMode } from "./backendMode";
+import { GuangtianBackendModePanel } from "./GuangtianBackendModePanel";
+import {
+  GuangtianKpiOverlay, GuangtianLedgerOverlay, GuangtianReplenishOverlay,
+  GuangtianShortageOverlay, GuangtianSkuOverlay,
+} from "./GuangtianBackendOverlays";
 
 type TabKey =
   | "dashboard"
@@ -120,6 +126,9 @@ function GuangtianDemoInner() {
     if (typeof window === "undefined") return "dashboard";
     return tabFromHash(window.location.hash) ?? "dashboard";
   });
+  const [mode, setModeState] = useState<BackendMode>(() => readInitialMode());
+  const setMode = (m: BackendMode) => { setModeState(m); writeModeToUrl(m); };
+  const backend = mode === "backend";
 
   // iter G12-B: demo step 推进时自动切对应 tab
   useEffect(() => {
@@ -304,6 +313,7 @@ function GuangtianDemoInner() {
         {/* Panels — kept mounted (display toggle) so each panel's internal state survives tab switches */}
 
         <div role="tabpanel" hidden={activeTab !== "dashboard"}>
+          <GuangtianKpiOverlay enabled={backend} />
           <GuangtianHero
             onGoSku={() => switchTab("sku")}
             onGoInbound={() => switchTab("inbound")}
@@ -313,6 +323,7 @@ function GuangtianDemoInner() {
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "sku"}>
+          <GuangtianSkuOverlay enabled={backend} />
           <SkuCatalogPanel />
         </div>
 
@@ -325,14 +336,17 @@ function GuangtianDemoInner() {
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "ledger"}>
+          <GuangtianLedgerOverlay enabled={backend} />
           <LedgerPanel />
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "shortage"}>
+          <GuangtianShortageOverlay enabled={backend} />
           <ShortageAlertPanel />
         </div>
 
         <div role="tabpanel" hidden={activeTab !== "replenish"}>
+          <GuangtianReplenishOverlay enabled={backend} />
           <ReplenishmentPanel onGoShortage={() => switchTab("shortage")} />
         </div>
 
@@ -378,9 +392,10 @@ function GuangtianDemoInner() {
             />
             宜兴光天耐火材料
           </span>
-          <span>定制 · v2026.05 演示版本 (纯前端 mock，不接后端)</span>
+          <span>定制 · v2026.05 演示版本 {backend ? "(真后端模式 · /api/win/guangtian)" : "(默认 mock · ?mode=backend 接真后端)"}</span>
         </div>
       </div>
+      <GuangtianBackendModePanel mode={mode} onSetMode={setMode} />
     </div>
   );
 }
