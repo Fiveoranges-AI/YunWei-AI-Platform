@@ -214,6 +214,19 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         NextAction,
         OrderItem,
     )
+    from yunwei_win.models.procurement import (
+        GoodsReceipt,
+        IssueVoucher,
+        Material,
+        Payable,
+        PurchaseOrder,
+        PurchaseOrderItem,
+        PurchaseRequisition,
+        PurchaseRequisitionItem,
+        StockAlert,
+        StockMovement,
+        Supplier,
+    )
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -236,6 +249,18 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         InvoicePaymentAllocation.__table__,
         NextAction.__table__,
         ActionLog.__table__,
+        # Procurement / inventory ontology (锦泰 主线)
+        Supplier.__table__,
+        Material.__table__,
+        StockMovement.__table__,
+        IssueVoucher.__table__,
+        PurchaseRequisition.__table__,
+        PurchaseRequisitionItem.__table__,
+        PurchaseOrder.__table__,
+        PurchaseOrderItem.__table__,
+        GoodsReceipt.__table__,
+        Payable.__table__,
+        StockAlert.__table__,
     ]
 
     async with engine.begin() as conn:

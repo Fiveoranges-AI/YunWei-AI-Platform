@@ -91,6 +91,34 @@ from yunwei_win.models.operations import (
     OrderItem,
 )
 
+# ---------------------------------------------------------------------------
+# Procurement / inventory ontology (锦泰 主线 — supplier / material /
+# stock movement / issue voucher / requisition / PO / receipt / payable /
+# stock alert).
+# ---------------------------------------------------------------------------
+from yunwei_win.models.procurement import (
+    GoodsReceipt,
+    IssueVoucher,
+    IssueVoucherStatus,
+    Material,
+    MaterialKind,
+    Payable,
+    PayableStatus,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    PurchaseOrderStatus,
+    PurchaseRequisition,
+    PurchaseRequisitionItem,
+    PurchaseRequisitionSource,
+    PurchaseRequisitionStatus,
+    StockAlert,
+    StockAlertLevel,
+    StockMovement,
+    StockMovementDirection,
+    StockMovementReferenceType,
+    Supplier,
+)
+
 __all__ = [
     # profile
     "Contact", "ContactRole",
@@ -128,4 +156,15 @@ __all__ = [
     "InvoicePaymentAllocation",
     "NextAction", "NextActionType", "NextActionStatus",
     "ActionLog", "ActionTargetType",
+    # Procurement / inventory ontology (锦泰 主线)
+    "Supplier",
+    "Material", "MaterialKind",
+    "StockMovement", "StockMovementDirection", "StockMovementReferenceType",
+    "IssueVoucher", "IssueVoucherStatus",
+    "PurchaseRequisition", "PurchaseRequisitionItem",
+    "PurchaseRequisitionStatus", "PurchaseRequisitionSource",
+    "PurchaseOrder", "PurchaseOrderItem", "PurchaseOrderStatus",
+    "GoodsReceipt",
+    "Payable", "PayableStatus",
+    "StockAlert", "StockAlertLevel",
 ]

@@ -50,11 +50,16 @@ from yunwei_win.models import (
     Contract,
     Customer,
     Invoice,
+    IssueVoucher,
+    Material,
     NextActionType,
     Order,
     OrderItem,
     Payment,
     Product,
+    PurchaseRequisition,
+    PurchaseRequisitionItem,
+    Supplier,
 )
 
 
@@ -73,6 +78,12 @@ _ENTITY_MODEL: dict[str, type] = {
     "Product": Product,
     "Invoice": Invoice,
     "Payment": Payment,
+    # Procurement / inventory ontology (锦泰 主线)
+    "Supplier": Supplier,
+    "Material": Material,
+    "IssueVoucher": IssueVoucher,
+    "PurchaseRequisition": PurchaseRequisition,
+    "PurchaseRequisitionItem": PurchaseRequisitionItem,
 }
 
 _ENTITY_TARGET: dict[str, ActionTargetType] = {
@@ -85,6 +96,13 @@ _ENTITY_TARGET: dict[str, ActionTargetType] = {
     "Product": ActionTargetType.other,
     "Invoice": ActionTargetType.invoice,
     "Payment": ActionTargetType.payment,
+    # Procurement: no native ActionTargetType — fall back to `other`,
+    # with the entity_type encoded in ActionLog.input_summary.
+    "Supplier": ActionTargetType.other,
+    "Material": ActionTargetType.other,
+    "IssueVoucher": ActionTargetType.other,
+    "PurchaseRequisition": ActionTargetType.other,
+    "PurchaseRequisitionItem": ActionTargetType.other,
 }
 
 # Fields the candidate JSON may carry but the ORM models drive via FK
@@ -190,6 +208,11 @@ _PARENT_FK_BY_RELATIONSHIP: dict[str, tuple[str, str]] = {
     "OrderLine-has-Product":  ("OrderLine", "product_id"),
     "OrderItem-has-Product":  ("OrderItem", "product_id"),
     "Invoice-has-Payment":    ("Payment", "invoice_id"),
+    # Procurement ontology
+    "Material-has-IssueVoucher":            ("IssueVoucher", "material_id"),
+    "Supplier-has-PurchaseRequisition":     ("PurchaseRequisition", "supplier_id"),
+    "PurchaseRequisition-has-Item":         ("PurchaseRequisitionItem", "pr_id"),
+    "Material-has-PurchaseRequisitionItem": ("PurchaseRequisitionItem", "material_id"),
 }
 
 
@@ -225,6 +248,8 @@ def _coerce_value(model: type, attr: str, value: Any) -> Any:
             return _parse_date(value)
         if pytype is datetime and not isinstance(value, datetime):
             return _parse_datetime(value)
+        if pytype is uuid.UUID and not isinstance(value, uuid.UUID):
+            return uuid.UUID(str(value).strip())
     except (ValueError, InvalidOperation, TypeError):
         # Surface as a typed error so the API layer can return 400.
         raise ConfirmFieldError(
