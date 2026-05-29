@@ -1495,3 +1495,109 @@ start-demo.sh 用 `_has_jintai_screens()` 探针避免, 文档化此 trap.
 | `3892559` | round 13 docs (FINAL_REPORT §24 + SELF_AUDIT + contract-demo.sh) |
 | (next) | round 25 docs §25 + scripts/jintai/start-demo.sh + 截图 |
 
+
+---
+
+## 26. Hotfix · 三次"白屏"事件 + start-demo.sh 自身有 bug
+
+老板第三次报 `http://127.0.0.1:5175/win/?tab=jintai` 白屏。
+
+### 诊断
+
+```
+lsof -iTCP:5175 -sTCP:LISTEN  → 空
+lsof -iTCP:8000 -sTCP:LISTEN  → 空
+```
+
+跟 §23 / §25 同样根因 — laptop sleep 杀掉两 server。
+
+### 但 round 25 的 start-demo.sh 救不了 — 它自己有 bug
+
+按 brief step 2 跑 `bash scripts/jintai/start-demo.sh stop && bash scripts/jintai/start-demo.sh`. Vite 起来了, **backend 起不来**:
+
+```
+==> health check
+  ✗ backend NOT reachable
+    see /tmp/jintai-demo-backend.log
+```
+
+`tail /tmp/jintai-demo-backend.log`:
+
+```
+/Library/Developer/CommandLineTools/usr/bin/python3: No module named uvicorn
+```
+
+**Root cause**: 脚本用 `python3` (= macOS 系统 Python `/usr/bin/python3` 或 `/Library/Developer/CommandLineTools/.../python3`),那个 python 没装 uvicorn。我自己手动起后端用的是 `/usr/local/bin/python3` (Homebrew),所以之前几轮我没踩到这个坑。换用户场景立刻炸。
+
+```bash
+which -a python3 | head -3
+# /usr/bin/python3              ← PATH 首选, 没 uvicorn
+# /usr/local/bin/python3        ← brew, 有 uvicorn (0.46.0)
+```
+
+### 按 brief 红线: 不硬 hack,手动起 backend 恢复服务
+
+```bash
+cd services/platform-api
+DATABASE_URL="sqlite+aiosqlite:///$(pwd)/jintai_dev_admin.db" \
+  REDIS_URL="redis://localhost:6379" \
+  COOKIE_SECRET="r29-cookie-secret-32-bytes-padding=" \
+  /usr/local/bin/python3 -m uvicorn dev_jintai_backend:app \
+    --host 127.0.0.1 --port 8000 --log-level warning > /tmp/r29-backend.log 2>&1 &
+```
+
+`/health` → 200, vite 还在 (`http://127.0.0.1:5175/win/` → 200). 截图 `outputs/jintai-demo-iter21/hotfix-2026-05-29-restart.png`: ○ MOCK 模式 + 经营日报 + 锦泰品牌头 + 货币资金 ¥8.2M / 进行中生产量 12 / 本月应付 ¥327K / 本月回款 ¥4.8M + 风险线索 + AI 待确认收件箱。完整, 零红色。
+
+### 单独 commit 修脚本 (per brief step "再单开一个 commit 修脚本")
+
+加 `PY_BIN` 探针, 按以下顺序找第一个 `import uvicorn` 成功的 python:
+
+```bash
+$JINTAI_PYTHON                              # env override (escape hatch)
+$(command -v python3)                       # PATH 首选 (兼容已有 venv)
+/usr/local/bin/python3                      # Homebrew (Intel + 老 Apple Silicon)
+/opt/homebrew/bin/python3                   # Homebrew (Apple Silicon)
+/Library/Frameworks/Python.framework/Versions/3.12/bin/python3
+/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+```
+
+找到的 python 打印到 stdout 让 reviewer 一眼看到走的哪个 (`python : /usr/local/bin/python3 (Python 3.11.0)`)。找不到时 error 出明确指引: `pip3 install uvicorn fastapi sqlalchemy aiosqlite` 或 `JINTAI_PYTHON=/path bash ...`.
+
+测试 (stop → cold-start → idempotent-rerun):
+```
+==> stopping demo
+  killed pid=... ✓ done
+    python : /usr/local/bin/python3 (Python 3.11.0)
+==> 锦泰 demo · start backend + vite
+  backend pid=... (log: /tmp/jintai-demo-backend.log)
+  vite pid=... (log: /tmp/jintai-demo-vite.log)
+==> health check
+  ✓ backend /health → sqlite (file)
+  ✓ vite /win/ → 200 OK
+```
+
+### 老板侧 — 真的"以后自己重启"命令 (贴显眼)
+
+```bash
+# 一键启 (无论 backend / vite 哪个死了, idempotent, 都不会报错)
+cd "/Users/kobeli/Documents/Yinhu Project/jintai-finance-reports"
+bash scripts/jintai/start-demo.sh
+
+# 启完打印 URL, 浏览器直接打:
+#   http://127.0.0.1:5175/win/?tab=jintai
+#   (backend overlay: 加 ?mode=backend&inspect=1)
+
+# 停 (晚上关电脑前)
+bash scripts/jintai/start-demo.sh stop
+
+# 如果一键失败, 看日志:
+tail /tmp/jintai-demo-backend.log     # backend 不通时看这个
+tail /tmp/jintai-demo-vite.log        # 5175 不通时看这个
+```
+
+### 我决定**不**做的事
+
+- 没在 start-demo.sh 里硬编码 `/usr/local/bin/python3` (脱机 / 换电脑 / venv 场景会炸)。用 probe 顺序 + `JINTAI_PYTHON` env override = 兼容 brew/framework/venv 路径漂动
+- 没改业务/UI 代码 (round 13 stack 仍稳定)
+- 没用 "hotfix:" commit 前缀 — 跟 §23/§25 一致, 仍是 script 修复 + 文档
+
