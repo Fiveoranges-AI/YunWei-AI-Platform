@@ -101,11 +101,9 @@ export function URail({ active, onChange, onAdd, avatarInitial = "?", compact: _
         })}
       </div>
 
-      {/* App switcher · 超级小陈 (external) */}
+      {/* App switcher · 超级小陈 (via platform SSO) */}
       <a
-        href="https://agent-yinhu-super-xiaochen-production.up.railway.app"
-        target="_blank"
-        rel="noopener noreferrer"
+        href="/sso/super-xiaochen"
         title="超级小陈"
         aria-label="超级小陈"
         style={{

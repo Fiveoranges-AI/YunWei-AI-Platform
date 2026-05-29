@@ -151,11 +151,9 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
           </button>
         </div>
 
-        {/* External app: 超级小陈 */}
+        {/* App switcher · 超级小陈 (via platform SSO) */}
         <a
-          href="https://agent-yinhu-super-xiaochen-production.up.railway.app"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/sso/super-xiaochen"
           style={{
             display: "flex",
             alignItems: "center",
