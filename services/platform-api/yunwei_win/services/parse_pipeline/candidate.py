@@ -19,7 +19,8 @@ EntityType = Literal[
     "Contact",
     "Contract",
     "Order",
-    "OrderLine",  # alias for OrderItem (task ① ontology)
+    "OrderLine",  # candidate-JSON / parse-pipeline canonical name
+    "OrderItem",  # task ① ontology table name — accepted as alias for forward-compat
     "Product",
     "Invoice",
     "Payment",
