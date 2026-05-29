@@ -165,6 +165,10 @@ class Material(
     )
     safety_stock: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
     last_balance: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
+    # 加权平均成本 (WAC). Receive PO 时更新:
+    #   new_cost = (old_balance × old_cost + receipt_qty × receipt_unit_price) / new_balance
+    # 用于存货价值估算 (会企01 资产负债表 "存货" 行) + 营业成本 (会企02 损益表).
+    last_unit_cost: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

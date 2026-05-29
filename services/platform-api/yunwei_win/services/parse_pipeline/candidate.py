@@ -24,6 +24,17 @@ EntityType = Literal[
     "Product",
     "Invoice",
     "Payment",
+    # Round 4: procurement ontology entities — accepted from parse-pipeline so
+    # the same candidate schema can carry 锦泰 主线 实体 too.
+    "Supplier",
+    "Material",
+    "IssueVoucher",
+    "PurchaseRequisition",
+    "PurchaseRequisitionItem",
+    "PurchaseOrder",
+    "PurchaseOrderItem",
+    "BillOfMaterials",
+    "BillOfMaterialsLine",
 ]
 
 

@@ -22,6 +22,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import ensure_schema_ingest_tables_for, get_session
@@ -403,6 +404,29 @@ async def list_stock_movements(
     ]
 
 
+@router.get("/inventory-ledger")
+async def inventory_ledger(
+    request: Request,
+    material_id: UUID = Query(...),
+    period: str = Query(..., description="YYYY-MM"),
+    session: AsyncSession = Depends(get_session),
+):
+    """进销存台账: 期初 / 入 / 出 / 期末 + 期内流水明细 (按物料 × 期)."""
+    from yunwei_win.services.finance import compute_inventory_ledger, period_bounds
+
+    await _ensure_tables(request)
+    try:
+        period_bounds(period)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        return await compute_inventory_ledger(
+            material_id=material_id, period=period, session=session,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
 # ============================== mutations ===============================
 
 
@@ -434,6 +458,11 @@ async def issue_voucher_confirm_and_issue(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return IssueVoucherConfirmResponse(
         voucher_id=result.voucher_id,
         material_id=result.material_id,
@@ -480,6 +509,11 @@ async def approve_requisition_endpoint(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return ApproveRequisitionResponse(
         pr_id=result.pr_id,
         po_id=result.po_id,
@@ -509,6 +543,11 @@ async def reject_requisition_endpoint(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return {"pr_id": str(pr_id_out), "status": "rejected"}
 
 
@@ -551,6 +590,11 @@ async def purchase_order_receive(
             )
     except ProcurementRuleError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=f"unique-key conflict: {e.orig}",
+        ) from e
     return ReceivePoResponse(
         po_id=result.po_id,
         receipt_id=result.receipt_id,

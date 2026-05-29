@@ -227,6 +227,15 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         StockMovement,
         Supplier,
     )
+    from yunwei_win.models.finance import (
+        ChartOfAccount,
+        FixedAsset,
+        PeriodOpeningBalance,
+    )
+    from yunwei_win.models.bom import (
+        BillOfMaterials,
+        BillOfMaterialsLine,
+    )
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -261,6 +270,13 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         GoodsReceipt.__table__,
         Payable.__table__,
         StockAlert.__table__,
+        # Finance (会企 01/02/03)
+        ChartOfAccount.__table__,
+        PeriodOpeningBalance.__table__,
+        FixedAsset.__table__,
+        # BOM (配料单)
+        BillOfMaterials.__table__,
+        BillOfMaterialsLine.__table__,
     ]
 
     async with engine.begin() as conn:
@@ -270,6 +286,7 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
             )
         )
         await _run_lightweight_tenant_migrations(conn)
+        await _backfill_material_unit_costs(conn)
         if conn.dialect.name == "postgresql":
             # Existing tenant DBs were provisioned before extraction_id
             # existed on ingest_jobs. ALTER ... IF NOT EXISTS
@@ -424,6 +441,10 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
         "ingest_jobs": {
             "extraction_id": "UUID",
         },
+        # Procurement / inventory (锦泰 主线 — finance reports 加 last_unit_cost)
+        "procurement_materials": {
+            "last_unit_cost": "NUMERIC(18, 4) NOT NULL DEFAULT 0",
+        },
     }
 
     for table_name, columns in migrations.items():
@@ -460,6 +481,44 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
             for col in inspect(sync_conn).get_columns(table_name)
         }
     )
+
+
+async def _backfill_material_unit_costs(conn) -> None:
+    """Cold-start backfill: 把 ``procurement_materials.last_unit_cost = 0`` 的
+    物料按它"最近一笔 received PO item.unit_price" 回填.
+
+    Idempotent — 已有 unit_cost > 0 的物料不会被覆盖. Cross-dialect (用 Python
+    端聚合最新值, 不依赖 ``DISTINCT ON`` / ``ROW_NUMBER``). 表/列缺失时安全返回.
+    """
+    if not await _table_exists(conn, "procurement_materials"):
+        return
+    if not await _table_exists(conn, "procurement_purchase_order_items"):
+        return
+    if not await _column_exists(conn, "procurement_materials", "last_unit_cost"):
+        return
+
+    rows = (await conn.execute(text("""
+        SELECT m.id AS material_id, poi.unit_price, po.received_at
+        FROM procurement_materials m
+        JOIN procurement_purchase_order_items poi ON poi.material_id = m.id
+        JOIN procurement_purchase_orders po ON po.id = poi.po_id
+        WHERE (m.last_unit_cost IS NULL OR m.last_unit_cost = 0)
+          AND poi.unit_price IS NOT NULL
+          AND po.received_at IS NOT NULL
+        ORDER BY po.received_at DESC
+    """))).all()
+
+    latest_by_material: dict = {}
+    for row in rows:
+        mid = row.material_id
+        if mid not in latest_by_material:
+            latest_by_material[mid] = row.unit_price
+
+    for mid, price in latest_by_material.items():
+        await conn.execute(
+            text("UPDATE procurement_materials SET last_unit_cost = :p WHERE id = :id"),
+            {"p": price, "id": mid},
+        )
 
 
 async def ensure_schema_ingest_tables_for(enterprise_id: str) -> None:

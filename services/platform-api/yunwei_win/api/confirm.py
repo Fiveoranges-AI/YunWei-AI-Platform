@@ -23,6 +23,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import get_session
@@ -177,6 +178,14 @@ async def confirm_entities(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except IntegrityError as e:
+        # Duplicate unique key (e.g. voucher_no / pr_no / sku) → 409 Conflict
+        # with a useful detail. Without this the IntegrityError bubbles to
+        # the ASGI app and surfaces as 500 (round 3 self-audit fix).
+        raise HTTPException(
+            status_code=409,
+            detail=f"entity already exists or violates unique constraint: {e.orig}",
+        ) from e
 
     logger.info(
         "confirm.entities.done ingestion=%s actor=%s written=%d action_logs=%d",
