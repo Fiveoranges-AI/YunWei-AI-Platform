@@ -151,11 +151,9 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
           </button>
         </div>
 
-        {/* External app: 超级小陈 */}
+        {/* App switcher · 超级小陈 (via platform HMAC proxy) */}
         <a
-          href="https://agent-yinhu-super-xiaochen-production.up.railway.app"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/yinhu/super-xiaochen/"
           style={{
             display: "flex",
             alignItems: "center",
@@ -187,7 +185,7 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#2c3a78" }}>超级小陈</div>
             <div style={{ fontSize: 11.5, color: "#4a60c4", marginTop: 2 }}>
-              银湖 · Kingdee ERP 智能体 · 新窗口打开
+              银湖 · Kingdee ERP 智能体
             </div>
           </div>
           <span style={{ color: "#4a60c4" }}>{I.link(14, "#4a60c4")}</span>
