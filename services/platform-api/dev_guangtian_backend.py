@@ -56,10 +56,10 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:5175", "http://localhost:5175",
-            "http://127.0.0.1:5173", "http://localhost:5173",
-        ],
+        # Dev launcher: allow any localhost vite port (5173/5175/5180/... ) — this
+        # is a no-auth SQLite demo runner, not production. Regex covers
+        # 127.0.0.1 / localhost on any port.
+        allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?",
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Demo-Actor"],
