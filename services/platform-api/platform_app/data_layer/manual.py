@@ -186,10 +186,11 @@ def record_manual_entry(
     try:
         col_names = [c.name for c in table.columns]
         placeholders = ", ".join("?" for _ in col_names)
+        quoted_cols = ", ".join(f'"{n}"' for n in col_names)
         # DuckDB INSERT OR REPLACE → single-statement upsert keyed on PK
         con.execute(
             f"INSERT OR REPLACE INTO \"{silver_table}\" "
-            f"({', '.join(f'\"{n}\"' for n in col_names)}) "
+            f"({quoted_cols}) "
             f"VALUES ({placeholders})",
             [silver_row[n] for n in col_names],
         )
