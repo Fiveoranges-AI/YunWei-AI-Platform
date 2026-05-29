@@ -84,8 +84,38 @@ if [[ "${1:-}" == "stop" || "${1:-}" == "--stop" ]]; then
 fi
 
 # Pre-flight
-command -v python3 >/dev/null 2>&1 || { echo "ERR: python3 missing"; exit 1; }
 command -v npm >/dev/null 2>&1 || { echo "ERR: npm missing"; exit 1; }
+
+# Find a python3 that can actually `import uvicorn`. macOS users frequently
+# have multiple python3 binaries on PATH (system /usr/bin/python3, brew
+# /usr/local/bin/python3, framework, venv, ...). The first one on PATH is
+# often the bare system python with no third-party packages. Probe in
+# preference order; stop at the first one with uvicorn importable. This
+# fixes the round-29 regression where the script started a no-uvicorn
+# python and 8000 was unreachable forever.
+PY_BIN=""
+for cand in \
+  "${JINTAI_PYTHON:-}" \
+  "$(command -v python3 2>/dev/null)" \
+  /usr/local/bin/python3 \
+  /opt/homebrew/bin/python3 \
+  /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 \
+  /Library/Frameworks/Python.framework/Versions/3.11/bin/python3 \
+  ; do
+  [[ -z "$cand" ]] && continue
+  [[ -x "$cand" ]] || continue
+  if "$cand" -c "import uvicorn" >/dev/null 2>&1; then
+    PY_BIN="$cand"
+    break
+  fi
+done
+if [[ -z "$PY_BIN" ]]; then
+  echo "ERR: no python3 with uvicorn found."
+  echo "     Install with: pip3 install uvicorn fastapi sqlalchemy aiosqlite"
+  echo "     Or set: JINTAI_PYTHON=/path/to/python3 bash $0"
+  exit 1
+fi
+echo "    python : $PY_BIN ($("$PY_BIN" --version 2>&1))"
 
 echo "==> 锦泰 demo · start backend + vite"
 echo "    backend: $BACKEND_DIR"
@@ -101,7 +131,7 @@ else
   DATABASE_URL="sqlite+aiosqlite:///$(pwd)/jintai_dev_admin.db" \
     REDIS_URL="redis://localhost:6379" \
     COOKIE_SECRET="start-demo-cookie-secret-32-bytes-padding=" \
-    python3 -m uvicorn dev_jintai_backend:app \
+    "$PY_BIN" -m uvicorn dev_jintai_backend:app \
       --host 127.0.0.1 --port "$BACKEND_PORT" --log-level warning \
       > "$BACKEND_LOG" 2>&1 &
   BACKEND_PID=$!
