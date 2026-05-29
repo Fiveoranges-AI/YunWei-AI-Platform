@@ -7,6 +7,7 @@ import { InboxScreen } from "./screens/Inbox";
 import { ReviewScreen } from "./screens/Review";
 import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
+import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
 
 export type ScreenName =
   | "list"
@@ -15,8 +16,9 @@ export type ScreenName =
   | "inbox"
   | "review"
   | "ask"
-  | "profile";
-export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile";
+  | "profile"
+  | "jintai";
+export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -33,6 +35,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
   review: undefined,
   ask: "ask",
   profile: "profile",
+  jintai: "jintai",
 };
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
@@ -41,6 +44,7 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
   upload: "upload",
   ask: "ask",
   profile: "profile",
+  jintai: "jintai",
 };
 
 export function App() {
@@ -87,5 +91,7 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
       return <AskScreen go={go} params={entry.params ?? {}} />;
     case "profile":
       return <ProfileScreen go={go} />;
+    case "jintai":
+      return <JintaiDemoPage />;
   }
 }
