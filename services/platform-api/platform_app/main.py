@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import admin_api, api, context as _context, db, enterprise_api
+from . import admin_api, api, context as _context, db, enterprise_api, sso
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 # yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /api/win/.
@@ -34,6 +34,7 @@ app.include_router(data_api.router)
 app.include_router(admin_api.router)
 app.include_router(enterprise_api.router)
 app.include_router(daily_report_api.router)
+app.include_router(sso.router)
 # /api/win/* — 智通客户 routes. The middleware below stamps
 # request.state.enterprise_id from the app_session cookie, which
 # yunwei_win.db.get_session reads to pick the right per-tenant DB.
