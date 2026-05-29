@@ -8,13 +8,28 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yunwei_win.db import Base
 from yunwei_win.models._base import TimestampMixin
+from yunwei_win.models._mixins import (
+    HumanVerificationMixin,
+    OwnershipMixin,
+    RowAuditMixin,
+    RowProvenanceMixin,
+    SoftDeleteMixin,
+)
 
 if TYPE_CHECKING:
     from yunwei_win.models.contact import Contact
     from yunwei_win.models.order import Order
 
 
-class Customer(Base, TimestampMixin):
+class Customer(
+    Base,
+    TimestampMixin,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     __tablename__ = "customers"
 
     id: Mapped[uuid.UUID] = mapped_column(

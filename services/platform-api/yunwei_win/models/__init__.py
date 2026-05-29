@@ -76,6 +76,21 @@ from yunwei_win.models.document_parse import (
     DocumentParseStatus,
 )
 
+# ---------------------------------------------------------------------------
+# Customer-operations ontology (P0 task ①).
+# ---------------------------------------------------------------------------
+from yunwei_win.models.operations import (
+    ActionLog,
+    ActionTargetType,
+    Delivery,
+    DeliveryStatus,
+    InvoicePaymentAllocation,
+    NextAction,
+    NextActionStatus,
+    NextActionType,
+    OrderItem,
+)
+
 __all__ = [
     # profile
     "Contact", "ContactRole",
@@ -107,4 +122,10 @@ __all__ = [
     "DocumentExtraction", "DocumentExtractionStatus",
     # Parse record
     "DocumentParse", "DocumentParseStatus",
+    # Customer-operations ontology (P0 task ①)
+    "OrderItem",
+    "Delivery", "DeliveryStatus",
+    "InvoicePaymentAllocation",
+    "NextAction", "NextActionType", "NextActionStatus",
+    "ActionLog", "ActionTargetType",
 ]

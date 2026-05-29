@@ -33,6 +33,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from yunwei_win.db import Base
+from yunwei_win.models._mixins import (
+    HumanVerificationMixin,
+    OwnershipMixin,
+    RowAuditMixin,
+    RowProvenanceMixin,
+    SoftDeleteMixin,
+)
 
 
 def _utcnow() -> datetime:
@@ -62,7 +69,15 @@ class _StampedColumns:
     )
 
 
-class Product(Base, _StampedColumns):
+class Product(
+    Base,
+    _StampedColumns,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     """产品 / SKU 主表。"""
 
     __tablename__ = "products"
@@ -73,6 +88,10 @@ class Product(Base, _StampedColumns):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     specification: Mapped[str | None] = mapped_column(Text, nullable=True)
     unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 参考单价 (reference unit price) — used when no order-line price is set.
+    reference_unit_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4), nullable=True
+    )
 
 
 class ProductRequirement(Base, _StampedColumns):
@@ -125,7 +144,15 @@ class ContractPaymentMilestone(Base, _StampedColumns):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
-class Invoice(Base, _StampedColumns):
+class Invoice(
+    Base,
+    _StampedColumns,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     """开票主表。"""
 
     __tablename__ = "invoices"
@@ -148,10 +175,27 @@ class Invoice(Base, _StampedColumns):
     amount_total: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     amount_currency: Mapped[str] = mapped_column(String(8), nullable=False, default="CNY")
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    # 客户税号 (buyer tax id) — separate from customer.tax_id because invoices
+    # sometimes go to a different legal entity (e.g. parent company).
+    buyer_tax_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    contract_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("contracts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
-class InvoiceItem(Base, _StampedColumns):
+class InvoiceItem(
+    Base,
+    _StampedColumns,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     """开票行项。"""
 
     __tablename__ = "invoice_items"
@@ -174,8 +218,21 @@ class InvoiceItem(Base, _StampedColumns):
     amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
 
-class Payment(Base, _StampedColumns):
-    """收 / 付款记录。"""
+class Payment(
+    Base,
+    _StampedColumns,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
+    """收 / 付款记录。
+
+    Legacy 单一 ``invoice_id`` 仍保留 (兼容老读路径). 新的多对多核销关系通过
+    ``invoice_payment_allocations`` 中间表表达,允许一笔回款核销多张发票、
+    或一张发票被多笔回款分批核销。
+    """
 
     __tablename__ = "payments"
 
@@ -197,9 +254,24 @@ class Payment(Base, _StampedColumns):
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="CNY")
     method: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reference_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # AR / 收款额度 — 应收金额 (receivable amount). amount above is actual
+    # received; amount_due tracks what was originally invoiced/expected.
+    amount_due: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4), nullable=True
+    )
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
-class Shipment(Base, _StampedColumns):
+class Shipment(
+    Base,
+    _StampedColumns,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     """发货 / 物流记录主表。"""
 
     __tablename__ = "shipments"
@@ -226,7 +298,15 @@ class Shipment(Base, _StampedColumns):
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
-class ShipmentItem(Base, _StampedColumns):
+class ShipmentItem(
+    Base,
+    _StampedColumns,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     """发货行项。"""
 
     __tablename__ = "shipment_items"

@@ -10,6 +10,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yunwei_win.db import Base
 from yunwei_win.models._base import TimestampMixin
+from yunwei_win.models._mixins import (
+    HumanVerificationMixin,
+    OwnershipMixin,
+    RowAuditMixin,
+    RowProvenanceMixin,
+    SoftDeleteMixin,
+)
 
 if TYPE_CHECKING:
     from yunwei_win.models.customer import Customer
@@ -24,7 +31,15 @@ class ContactRole(str, enum.Enum):
     other = "other"
 
 
-class Contact(Base, TimestampMixin):
+class Contact(
+    Base,
+    TimestampMixin,
+    RowProvenanceMixin,
+    HumanVerificationMixin,
+    RowAuditMixin,
+    OwnershipMixin,
+    SoftDeleteMixin,
+):
     __tablename__ = "contacts"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -49,5 +64,10 @@ class Contact(Base, TimestampMixin):
     address: Mapped[str | None] = mapped_column(String, nullable=True)
     wechat_id: Mapped[str | None] = mapped_column(String, nullable=True)
     needs_review: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # 是否关键决策人 (key decision maker) — surfaced for sales rep to
+    # prioritise; default false so existing inserts keep working.
+    is_key_decision_maker: Mapped[bool] = mapped_column(
+        default=False, nullable=False
+    )
 
     customer: Mapped[Customer | None] = relationship(back_populates="contacts")
