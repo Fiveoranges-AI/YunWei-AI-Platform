@@ -1,0 +1,80 @@
+{
+  "ingestion_id": "b08e5824-21e1-4340-9b5e-cee1bb7ec415",
+  "source": {
+    "type": "wechat_screenshot",
+    "file_ref": "storage://demo/sample_screenshot.png",
+    "uploaded_by": "demo-user",
+    "uploaded_at": "2026-05-21T12:07:35.097343Z"
+  },
+  "entities": [
+    {
+      "entity_type": "Contact",
+      "temp_id": "contact-1",
+      "fields": [
+        {
+          "name": "name",
+          "value": "李伟",
+          "confidence": 0.88,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "李总",
+            "cell": null
+          }
+        },
+        {
+          "name": "mobile",
+          "value": "13900002222",
+          "confidence": 0.92,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "13900002222",
+            "cell": null
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Order",
+      "temp_id": "order-1",
+      "fields": [
+        {
+          "name": "amount_total",
+          "value": "95000",
+          "confidence": 0.7,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "先打 9.5 万定金",
+            "cell": null
+          }
+        },
+        {
+          "name": "delivery_promised_date",
+          "value": "6月10日前",
+          "confidence": 0.55,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "6月10号前货能到吧",
+            "cell": null
+          }
+        }
+      ],
+      "missing_required": []
+    }
+  ],
+  "relationships": [
+    {
+      "from_temp_id": "contact-1",
+      "to_temp_id": "order-1",
+      "type": "Contact-mentions-Order"
+    }
+  ],
+  "overall_confidence": 0.762,
+  "warnings": [
+    "交期为口头表达 '6月10号前',账期未提及,需要人工与客户确认"
+  ]
+}
