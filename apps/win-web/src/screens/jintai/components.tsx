@@ -24,6 +24,8 @@ const STATUS_META: Record<
   { fg: string; bg: string }
 > = {
   待确认: { fg: "var(--ai-700)", bg: "var(--ai-100)" },
+  已确认: { fg: "var(--ok-700)", bg: "var(--ok-100)" },
+  已驳回: { fg: "var(--risk-700)", bg: "var(--risk-100)" },
   订单已生成: { fg: "var(--ok-700)", bg: "var(--ok-100)" },
   流转单已生成: { fg: "var(--ok-700)", bg: "var(--ok-100)" },
   出货已记录: { fg: "var(--ok-700)", bg: "var(--ok-100)" },
