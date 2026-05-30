@@ -1,0 +1,100 @@
+{
+  "ingestion_id": "d0b3fbbc-b9fb-4f09-ba93-51501a81f088",
+  "source": {
+    "type": "contract",
+    "file_ref": "storage://demo/sample_contract.txt",
+    "uploaded_by": "demo-user",
+    "uploaded_at": "2026-05-21T12:07:35.097016Z"
+  },
+  "entities": [
+    {
+      "entity_type": "Customer",
+      "temp_id": "customer-1",
+      "fields": [
+        {
+          "name": "full_name",
+          "value": "上海建工集团股份有限公司",
+          "confidence": 0.95,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "甲方（买方）：上海建工集团股份有限公司",
+            "cell": null
+          }
+        },
+        {
+          "name": "tax_id",
+          "value": "91310000132206289X",
+          "confidence": 0.92,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "统一社会信用代码：91310000132206289X",
+            "cell": null
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Contract",
+      "temp_id": "contract-1",
+      "fields": [
+        {
+          "name": "contract_no_external",
+          "value": "HT-2026-0042",
+          "confidence": 0.92,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "采购合同（编号：HT-2026-0042）",
+            "cell": null
+          }
+        },
+        {
+          "name": "amount_total",
+          "value": "128000",
+          "confidence": 0.88,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "合同金额",
+            "cell": null
+          }
+        },
+        {
+          "name": "signing_date",
+          "value": "2026-04-20",
+          "confidence": 0.93,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "签订日期：2026-04-20",
+            "cell": null
+          }
+        },
+        {
+          "name": "payment_terms",
+          "value": "货到验收合格后 30 天电汇",
+          "confidence": 0.8,
+          "source_span": {
+            "page": 1,
+            "bbox": null,
+            "text": "账期",
+            "cell": null
+          }
+        }
+      ],
+      "missing_required": []
+    }
+  ],
+  "relationships": [
+    {
+      "from_temp_id": "customer-1",
+      "to_temp_id": "contract-1",
+      "type": "Customer-has-Contract"
+    }
+  ],
+  "overall_confidence": 0.9,
+  "warnings": []
+}

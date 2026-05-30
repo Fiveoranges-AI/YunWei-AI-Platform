@@ -1,0 +1,253 @@
+{
+  "ingestion_id": "0d230f0a-d274-447a-9597-d76e76dc7def",
+  "source": {
+    "type": "excel",
+    "file_ref": "storage://demo/sample_orders.csv",
+    "uploaded_by": "demo-user",
+    "uploaded_at": "2026-05-21T12:07:35.096220Z"
+  },
+  "entities": [
+    {
+      "entity_type": "Customer",
+      "temp_id": "customer-sample_orders-r2",
+      "fields": [
+        {
+          "name": "full_name",
+          "value": "上海建工集团股份有限公司",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "上海建工集团股份有限公司",
+            "cell": "sheet:sample_orders!R2C1"
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Contact",
+      "temp_id": "contact-sample_orders-r2",
+      "fields": [
+        {
+          "name": "name",
+          "value": "张三",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "张三",
+            "cell": "sheet:sample_orders!R2C2"
+          }
+        },
+        {
+          "name": "mobile",
+          "value": "13800001111",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "13800001111",
+            "cell": "sheet:sample_orders!R2C3"
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Order",
+      "temp_id": "order-sample_orders-r2",
+      "fields": [
+        {
+          "name": "order_no",
+          "value": "PO-2026-0017",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "PO-2026-0017",
+            "cell": "sheet:sample_orders!R2C4"
+          }
+        },
+        {
+          "name": "order_date",
+          "value": "2026-04-12",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "2026-04-12",
+            "cell": "sheet:sample_orders!R2C5"
+          }
+        },
+        {
+          "name": "amount_total",
+          "value": "128000",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "128000",
+            "cell": "sheet:sample_orders!R2C6"
+          }
+        },
+        {
+          "name": "amount_currency",
+          "value": "CNY",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "CNY",
+            "cell": "sheet:sample_orders!R2C7"
+          }
+        },
+        {
+          "name": "delivery_promised_date",
+          "value": "2026-05-30",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "2026-05-30",
+            "cell": "sheet:sample_orders!R2C8"
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Customer",
+      "temp_id": "customer-sample_orders-r3",
+      "fields": [
+        {
+          "name": "full_name",
+          "value": "浙江沪杭甬高速公路股份有限公司",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "浙江沪杭甬高速公路股份有限公司",
+            "cell": "sheet:sample_orders!R3C1"
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Contact",
+      "temp_id": "contact-sample_orders-r3",
+      "fields": [
+        {
+          "name": "name",
+          "value": "李四",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "李四",
+            "cell": "sheet:sample_orders!R3C2"
+          }
+        },
+        {
+          "name": "mobile",
+          "value": "13900002222",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "13900002222",
+            "cell": "sheet:sample_orders!R3C3"
+          }
+        }
+      ],
+      "missing_required": []
+    },
+    {
+      "entity_type": "Order",
+      "temp_id": "order-sample_orders-r3",
+      "fields": [
+        {
+          "name": "order_no",
+          "value": "PO-2026-0018",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "PO-2026-0018",
+            "cell": "sheet:sample_orders!R3C4"
+          }
+        },
+        {
+          "name": "order_date",
+          "value": "2026-04-15",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "2026-04-15",
+            "cell": "sheet:sample_orders!R3C5"
+          }
+        },
+        {
+          "name": "amount_total",
+          "value": "95800",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "95800",
+            "cell": "sheet:sample_orders!R3C6"
+          }
+        },
+        {
+          "name": "amount_currency",
+          "value": "CNY",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "CNY",
+            "cell": "sheet:sample_orders!R3C7"
+          }
+        },
+        {
+          "name": "delivery_promised_date",
+          "value": "2026-06-10",
+          "confidence": 1.0,
+          "source_span": {
+            "page": null,
+            "bbox": null,
+            "text": "2026-06-10",
+            "cell": "sheet:sample_orders!R3C8"
+          }
+        }
+      ],
+      "missing_required": []
+    }
+  ],
+  "relationships": [
+    {
+      "from_temp_id": "customer-sample_orders-r2",
+      "to_temp_id": "order-sample_orders-r2",
+      "type": "Customer-has-Order"
+    },
+    {
+      "from_temp_id": "customer-sample_orders-r2",
+      "to_temp_id": "contact-sample_orders-r2",
+      "type": "Customer-has-Contact"
+    },
+    {
+      "from_temp_id": "customer-sample_orders-r3",
+      "to_temp_id": "order-sample_orders-r3",
+      "type": "Customer-has-Order"
+    },
+    {
+      "from_temp_id": "customer-sample_orders-r3",
+      "to_temp_id": "contact-sample_orders-r3",
+      "type": "Customer-has-Contact"
+    }
+  ],
+  "overall_confidence": 1.0,
+  "warnings": []
+}
