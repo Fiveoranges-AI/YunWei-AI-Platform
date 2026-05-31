@@ -70,6 +70,47 @@ _EXT_TO_SOURCE_TYPE: dict[str, str] = {
 
 UPLOAD_ROOT = Path(os.environ.get("JINTAI_UPLOAD_ROOT", "uploads/jintai"))
 
+# Canonical on-disk ext per source_type — never trust the client-provided
+# filename ext when picking the disk filename, otherwise an attacker can
+# stage `evil.php` (with a benign content-type) and land it at
+# `uploads/jintai/<tenant>/<sha>.php`. Round 9 self-audit P0-2.
+_DISK_EXT_BY_SOURCE_TYPE: dict[str, str] = {
+    "excel": ".xlsx",
+    "contract": ".pdf",
+    "wechat_screenshot": ".jpg",
+}
+
+# Allowed exts when the filename's ext IS recognized — preserve it to keep
+# variant-specific bytes (.xls vs .xlsx, .png vs .jpg) round-trippable.
+_ALLOWED_DISK_EXTS: set[str] = set(_EXT_TO_SOURCE_TYPE.keys())
+
+
+def _safe_tenant_segment(tenant_id: str) -> str:
+    """Return a path-safe tenant directory name.
+
+    `tenant_id` reaches us via ``request.state.enterprise_id`` (server-set
+    after auth, never user-controlled) — but defense in depth: refuse anything
+    that could escape ``UPLOAD_ROOT`` if upstream ever passes through a bad
+    value. Mirrors ``yunwei_win.db._tenant_db_name`` sanitisation.
+    """
+    if not tenant_id:
+        return "default"
+    safe = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in tenant_id)
+    return safe or "default"
+
+
+def _safe_disk_ext(filename: str, source_type: str) -> str:
+    """Return the on-disk ext to use for the persisted file.
+
+    Prefer the filename's ext when it is in the allow-list; otherwise fall
+    back to the canonical ext for the resolved source_type. Never echoes
+    arbitrary client-supplied ext to disk (`.php`, `.sh`, `.html`, ...).
+    """
+    candidate = Path(filename or "blob").suffix.lower()
+    if candidate in _ALLOWED_DISK_EXTS:
+        return candidate
+    return _DISK_EXT_BY_SOURCE_TYPE.get(source_type, ".bin")
+
 
 def _actor_from_request(request: Request) -> str:
     actor = getattr(request.state, "actor", None)
@@ -127,14 +168,17 @@ def _resolve_provider() -> tuple[ExtractionProvider, str]:
     return DemoMockProvider(), "demo-mock"
 
 
-async def _save_upload(file: UploadFile, tenant_id: str) -> tuple[Path, str, int]:
+async def _save_upload(
+    file: UploadFile, tenant_id: str, source_type: str,
+) -> tuple[Path, str, int]:
     """Stream upload to disk, return (path, sha256-checksum[:16], size_bytes).
 
-    Enforces MAX_FILE_BYTES; raises 413 if exceeded.
+    Enforces MAX_FILE_BYTES; raises 413 if exceeded. Filename ext is
+    constrained to the allow-list — see ``_safe_disk_ext``.
     """
-    tenant_dir = UPLOAD_ROOT / tenant_id
+    tenant_dir = UPLOAD_ROOT / _safe_tenant_segment(tenant_id)
     tenant_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename or "blob").suffix.lower() or ".bin"
+    ext = _safe_disk_ext(file.filename or "blob", source_type)
 
     # Stream to tmp then rename to checksum-named final path
     tmp_path = tenant_dir / f".upload-{uuid4().hex}{ext}"
@@ -213,6 +257,24 @@ async def _run_demo_provider(
         sum(f.confidence for e in cand_entities for f in e.fields)
         / max(1, sum(len(e.fields) for e in cand_entities))
     )
+    # Round 13: forward provider-emitted relationships into the candidate
+    # response so confirm_writer can resolve parent FKs (e.g.
+    # Customer-has-Contract sets contract.customer_id from the seeded
+    # Customer's resolved UUID). Previously hard-coded to [], which silently
+    # dropped any cross-entity link the provider produced.
+    from yunwei_win.services.parse_pipeline.candidate import Relationship
+    cand_rels: list[Relationship] = []
+    for rel in pr.relationships:
+        try:
+            cand_rels.append(Relationship(
+                from_temp_id=rel["from_temp_id"],
+                to_temp_id=rel["to_temp_id"],
+                type=rel["type"],
+            ))
+        except KeyError:
+            # Provider produced a malformed relationship; surface as warning
+            # rather than crash the whole upload.
+            logger.warning("provider relationship missing required keys: %s", rel)
     return CandidateJSON(
         source=SourceInfo(
             type=source_type,  # type: ignore[arg-type]
@@ -220,7 +282,7 @@ async def _run_demo_provider(
             uploaded_by=uploaded_by,
         ),
         entities=cand_entities,
-        relationships=[],
+        relationships=cand_rels,
         overall_confidence=round(overall, 3),
         warnings=pr.warnings,
     )
@@ -254,7 +316,9 @@ async def parse_upload(
     source_type = _infer_source_type(file.filename, file.content_type)
     provider, provider_name = _resolve_provider()
 
-    final_path, checksum, size_bytes = await _save_upload(file, enterprise_id)
+    final_path, checksum, size_bytes = await _save_upload(
+        file, enterprise_id, source_type,
+    )
 
     try:
         if provider_name == "demo-mock":
@@ -278,9 +342,19 @@ async def parse_upload(
                 uploaded_by=actor,
             )
     except Exception as e:
+        # Round 11: upstream LLM failures (call_claude → LLMCallFailed after
+        # 3 retries on 429 / 5xx / timeout) are NOT our service's fault.
+        # Surface as 502 Bad Gateway so monitoring + clients can distinguish
+        # "Claude is down" from a bug in our pipeline.
+        from yunwei_win.services.llm import LLMCallFailed
         logger.exception(
             "parse_upload failed filename=%s source_type=%s", file.filename, source_type,
         )
+        if isinstance(e, LLMCallFailed):
+            raise HTTPException(
+                status_code=502,
+                detail=f"upstream LLM unavailable: {e}",
+            ) from e
         raise HTTPException(
             status_code=500,
             detail=f"parse_pipeline failed: {type(e).__name__}: {e}",
