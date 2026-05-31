@@ -14,6 +14,26 @@ import {
   ledgerRows as seedLedger,
   skuRows,
 } from "./data";
+import { readInitialMode } from "./backendMode";
+import { listSkus, postInbound, postOutbound } from "../../api/guangtian-backend";
+
+// --- backend mirror-write (only fires in ?mode=backend; mock path untouched) ---
+// The 入库/出库 forms keep their instant local-state update for demo UX; when
+// the demo runs against the real backend we ALSO POST the movement so it
+// persists (and the live overlays / KPIs reflect it). Mirrors the proven
+// listSkus → find-by-code → post pattern from GuangtianBackendModePanel.
+let _skuMapPromise: Promise<Record<string, string>> | null = null;
+function _skuCodeToId(): Promise<Record<string, string>> {
+  if (!_skuMapPromise) {
+    _skuMapPromise = listSkus()
+      .then((skus) => Object.fromEntries(skus.map((s) => [s.code, s.id])))
+      .catch((e) => {
+        _skuMapPromise = null; // allow retry on next write
+        throw e;
+      });
+  }
+  return _skuMapPromise;
+}
 
 // ============================================================================
 // iter G10: lifted state — toast + 数字联动
@@ -223,6 +243,46 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
     [showToast],
   );
 
+  const mirrorInbound = useCallback(
+    (entry: AddInboundInput) => {
+      if (readInitialMode() !== "backend") return;
+      void (async () => {
+        try {
+          const id = (await _skuCodeToId())[entry.sku];
+          if (!id) {
+            showToast(`后端无 SKU ${entry.sku}，仅本地登记`, "warn");
+            return;
+          }
+          await postInbound({ sku_id: id, quantity: entry.qty, source_ref: entry.source });
+          showToast(`✓ 已写入真后端 · 入库 ${entry.name} +${entry.qty}`, "ai");
+        } catch (e) {
+          showToast(`后端写入失败（已本地登记）：${e instanceof Error ? e.message : String(e)}`, "warn");
+        }
+      })();
+    },
+    [showToast],
+  );
+
+  const mirrorOutbound = useCallback(
+    (entry: AddOutboundInput) => {
+      if (readInitialMode() !== "backend") return;
+      void (async () => {
+        try {
+          const id = (await _skuCodeToId())[entry.sku];
+          if (!id) {
+            showToast(`后端无 SKU ${entry.sku}，仅本地登记`, "warn");
+            return;
+          }
+          await postOutbound({ sku_id: id, quantity: entry.qty, customer: entry.customer, order_no: entry.order });
+          showToast(`✓ 已写入真后端 · 出库 ${entry.name} -${entry.qty}`, "ai");
+        } catch (e) {
+          showToast(`后端写入失败（已本地登记）：${e instanceof Error ? e.message : String(e)}`, "warn");
+        }
+      })();
+    },
+    [showToast],
+  );
+
   const addInbound = useCallback(
     (entry: AddInboundInput) => {
       const time = nowStamp();
@@ -268,8 +328,9 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
         return { ...prev, [entry.sku]: after };
       });
       setTodayInboundCount((c) => c + 1);
+      mirrorInbound(entry);
     },
-    [showToast],
+    [showToast, mirrorInbound],
   );
 
   const addOutbound = useCallback(
@@ -323,10 +384,13 @@ export function GuangtianProvider({ children }: { children: ReactNode }) {
         );
         return { ...prev, [entry.sku]: after };
       });
-      if (ok) setTodayOutboundCount((c) => c + 1);
+      if (ok) {
+        setTodayOutboundCount((c) => c + 1);
+        mirrorOutbound(entry);
+      }
       return ok;
     },
-    [showToast],
+    [showToast, mirrorOutbound],
   );
 
   const value = useMemo<GTContextValue>(
