@@ -210,6 +210,19 @@ async def catch_all(full_path: str, request: Request):
     agent_id = m.group("agent")
     subpath = m.group("sub") or "/"
 
+    # Unauthenticated top-level browser navigation to an agent entrypoint
+    # lands on the login page — consistent with /, /dashboard, /admin, /win —
+    # instead of surfacing a raw {"detail": {"error": "not_logged_in"}} JSON
+    # body to a visitor who pasted the URL. API/XHR callers (non-GET, or a
+    # request that does not Accept text/html) keep the JSON 401 so clients can
+    # handle auth programmatically.
+    if (
+        request.method in ("GET", "HEAD")
+        and not request.cookies.get("app_session")
+        and "text/html" in request.headers.get("accept", "")
+    ):
+        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+
     user = api._user_from_request(request)
 
     if not db.has_acl(user["id"], client_id, agent_id):
