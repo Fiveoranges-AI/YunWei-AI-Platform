@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 _DB_FILE = Path(__file__).resolve().parent / "guangtian_dev_admin.db"
@@ -42,6 +44,19 @@ from yunwei_win.routes import router as win_router  # noqa: E402
 
 DEMO_ENTERPRISE_ID = "guangtian_demo"
 DEMO_ACTOR = "demo-user"
+
+# Observability parity with the jintai stack (PR #129): a pollable /api/health
+# + a request-id / commit-sha trail on every response. Self-contained here —
+# the shared platform_app.observability helper isn't on this branch yet.
+_COMMIT_ENV_VARS = ("GIT_SHA", "RAILWAY_GIT_COMMIT_SHA", "SOURCE_COMMIT", "COMMIT_SHA")
+
+
+def _commit_sha() -> str:
+    for var in _COMMIT_ENV_VARS:
+        v = os.environ.get(var, "").strip()
+        if v:
+            return v[:12]
+    return "unknown"
 
 
 def create_app() -> FastAPI:
@@ -71,6 +86,18 @@ def create_app() -> FastAPI:
         request.state.actor = request.headers.get("x-demo-actor") or DEMO_ACTOR
         return await call_next(request)
 
+    # Registered after the tenant stamp → wraps outermost. Stamps a request-id
+    # (propagates an upstream X-Request-ID if present) and echoes it + the
+    # deployed commit sha on every response, so a prod log line is traceable.
+    @app.middleware("http")
+    async def _request_context(request: Request, call_next):
+        rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:16]
+        request.state.request_id = rid
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = rid
+        response.headers["X-Commit-SHA"] = _commit_sha()
+        return response
+
     @app.on_event("startup")
     async def _seed_on_startup() -> None:
         # provision tenant DB + tables, then seed demo data (idempotent).
@@ -91,6 +118,23 @@ def create_app() -> FastAPI:
             "enterprise_id": DEMO_ENTERPRISE_ID,
             "db": db_label,
             "mode": f"dev ({db_label}, no auth)",
+        }
+
+    @app.api_route("/api/health", methods=["GET", "HEAD"])
+    async def api_health():
+        """Canonical self-health (same shape as jintai #129's /api/health) so an
+        uptime monitor hits one path across both demos. dev backend is always a
+        live local DB file → status ok."""
+        db_url = os.environ.get("DATABASE_URL", "")
+        db_label = "postgres (dev-stack)" if "postgres" in db_url else "sqlite (file)"
+        return {
+            "status": "ok",
+            "version": "guangtian-dev",
+            "commit": _commit_sha(),
+            "checks": {"db": db_label, "tenant": DEMO_ENTERPRISE_ID},
+            "deployment": "dev-backend",
+            "auth": "bypassed",
+            "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
 
     app.include_router(win_router, prefix="/api/win")
