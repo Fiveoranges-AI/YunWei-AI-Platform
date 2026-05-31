@@ -15,15 +15,18 @@ customer-memory table. Documents are intentionally preserved (audit trail) with
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yunwei_win.db import get_session
 from yunwei_win.models import (
+    ActionLog,
+    ActionTargetType,
     Contact,
     ContactRole,
     Contract,
@@ -37,10 +40,62 @@ from yunwei_win.models import (
     Document,
     EntityType,
     FieldProvenance,
+    NextActionType,
     Order,
 )
 
 router = APIRouter()
+
+
+# ---------- audit helpers -------------------------------------------------
+#
+# These maintenance endpoints mutate / delete operator-confirmed records, so
+# every change must leave an ActionLog trail (the "AI 先填、人确认" red line
+# extends to manual edits). FieldProvenance is NOT used here: its document_id
+# is a required FK, so it can only describe document-extracted fields, not a
+# hand edit — the field-level detail lives in the ActionLog input_summary.
+
+
+def _actor_from_request(request: Request) -> str:
+    actor = getattr(request.state, "actor", None)
+    if isinstance(actor, str) and actor:
+        return actor
+    user = getattr(request.state, "user", None)
+    if isinstance(user, dict):
+        for key in ("id", "username", "display_name"):
+            val = user.get(key)
+            if isinstance(val, str) and val:
+                return val
+    return "unknown"
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _log_customer_action(
+    session: AsyncSession,
+    *,
+    customer_id: UUID,
+    actor: str,
+    input_summary: str,
+    output_summary: str,
+) -> None:
+    session.add(
+        ActionLog(
+            target_entity_type=ActionTargetType.customer,
+            target_entity_id=customer_id,
+            action_type=NextActionType.other,
+            actor=actor,
+            actor_kind="user",
+            input_summary=input_summary,
+            output_summary=output_summary,
+            executed_at=_now(),
+            succeeded=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+    )
 
 
 # ---------- response/request shapes --------------------------------------
@@ -106,6 +161,7 @@ class ContactsPutRequest(BaseModel):
 async def patch_customer(
     customer_id: UUID,
     payload: CustomerPatchRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     customer = (
@@ -131,6 +187,19 @@ async def patch_customer(
     if "notes" in updates:
         customer.notes = updates["notes"]
 
+    changed = sorted(
+        k for k in updates
+        if k in ("full_name", "short_name", "address", "tax_id", "industry", "notes")
+    )
+    if changed:
+        await _log_customer_action(
+            session,
+            customer_id=customer_id,
+            actor=_actor_from_request(request),
+            input_summary=f"action=patch_customer fields={','.join(changed)}",
+            output_summary=f"customer_id={customer_id}",
+        )
+
     await session.commit()
     await session.refresh(customer)
     return _customer_dict(customer)
@@ -143,6 +212,7 @@ async def patch_customer(
 async def put_contacts(
     customer_id: UUID,
     payload: ContactsPutRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     customer = (
@@ -203,6 +273,17 @@ async def put_contacts(
         )
         await session.execute(delete(Contact).where(Contact.id.in_(deleted_ids)))
 
+    await _log_customer_action(
+        session,
+        customer_id=customer_id,
+        actor=_actor_from_request(request),
+        input_summary=(
+            f"action=put_contacts upserted={len(final_contacts)} "
+            f"deleted={len(deleted_ids)}"
+        ),
+        output_summary=f"customer_id={customer_id} contacts={len(final_contacts)}",
+    )
+
     await session.commit()
     # Refresh newly-inserted ones to surface generated ids.
     for ct in final_contacts:
@@ -218,13 +299,21 @@ async def put_contacts(
 
 
 async def _delete_customer_cascade(
-    session: AsyncSession, customer_id: UUID
+    session: AsyncSession, customer_id: UUID, *, actor: str
 ) -> dict[str, int]:
     """Delete customer + cascading entities; return per-table delete counts.
 
     Caller is responsible for the final commit. All deletions run in the
-    caller's session so the whole cascade lives in one transaction.
+    caller's session so the whole cascade lives in one transaction. An
+    append-only ActionLog row is written per deleted customer (it has no FK to
+    customers, so it outlives the cascade and preserves the audit trail).
     """
+    customer_name = (
+        await session.execute(
+            select(Customer.full_name).where(Customer.id == customer_id)
+        )
+    ).scalar_one_or_none()
+
     contacts = (
         await session.execute(select(Contact).where(Contact.customer_id == customer_id))
     ).scalars().all()
@@ -369,7 +458,7 @@ async def _delete_customer_cascade(
         await session.execute(delete(Contact).where(Contact.id.in_(contact_ids)))
     await session.execute(delete(Customer).where(Customer.id == customer_id))
 
-    return {
+    counts = {
         "contacts": len(contact_ids),
         "orders": len(order_ids),
         "contracts": len(contract_ids),
@@ -380,6 +469,14 @@ async def _delete_customer_cascade(
         "memory_items": memory_count,
         "inbox_items": inbox_count,
     }
+    await _log_customer_action(
+        session,
+        customer_id=customer_id,
+        actor=actor,
+        input_summary=f"action=delete_customer name={customer_name!r}",
+        output_summary=f"deleted_counts={counts}",
+    )
+    return counts
 
 
 # ---------- DELETE /api/win/customers (bulk) — declared BEFORE the {id} route -
@@ -387,6 +484,7 @@ async def _delete_customer_cascade(
 
 @router.delete("/customers")
 async def delete_all_customers(
+    request: Request,
     confirm: str = Query(default=""),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
@@ -396,6 +494,7 @@ async def delete_all_customers(
             "must pass ?confirm=DELETE_ALL_IMPORTED_CUSTOMERS to wipe all customers",
         )
 
+    actor = _actor_from_request(request)
     customer_ids = (
         await session.execute(select(Customer.id))
     ).scalars().all()
@@ -412,7 +511,7 @@ async def delete_all_customers(
         "inbox_items": 0,
     }
     for cid in customer_ids:
-        counts = await _delete_customer_cascade(session, cid)
+        counts = await _delete_customer_cascade(session, cid, actor=actor)
         for k, v in counts.items():
             totals[k] += v
 
@@ -429,6 +528,7 @@ async def delete_all_customers(
 @router.delete("/customers/{customer_id}")
 async def delete_customer(
     customer_id: UUID,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     customer = (
@@ -437,7 +537,9 @@ async def delete_customer(
     if customer is None:
         raise HTTPException(404, "customer not found")
 
-    counts = await _delete_customer_cascade(session, customer_id)
+    counts = await _delete_customer_cascade(
+        session, customer_id, actor=_actor_from_request(request)
+    )
     await session.commit()
     return {
         "customer_id": str(customer_id),
