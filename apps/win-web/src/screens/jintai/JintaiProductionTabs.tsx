@@ -63,15 +63,19 @@ export function JintaiProductionTabs() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
+              aria-current={active ? "true" : undefined}
               style={{
                 padding: "8px 14px",
                 borderRadius: 8,
                 border: "none",
                 background: active ? "var(--surface)" : "transparent",
-                boxShadow: active ? "var(--shadow-card-soft)" : "none",
-                color: active ? "var(--ink-900)" : "var(--ink-600)",
+                // 与近白容器底色拉开：jintai-red inset 环 + 较实阴影，选中态一眼可见。
+                boxShadow: active
+                  ? "0 1px 3px rgba(11,34,50,0.12), inset 0 0 0 1.5px var(--jintai-red)"
+                  : "none",
+                color: active ? "var(--jintai-red)" : "var(--ink-600)",
                 fontSize: 13,
-                fontWeight: 600,
+                fontWeight: active ? 700 : 600,
                 cursor: "pointer",
                 display: "flex",
                 flexDirection: "column",
@@ -81,7 +85,7 @@ export function JintaiProductionTabs() {
               }}
             >
               <span>{t.label}</span>
-              <span style={{ fontSize: 10.5, color: "var(--ink-500)", fontWeight: 500 }}>
+              <span style={{ fontSize: 10.5, color: active ? "var(--ink-600)" : "var(--ink-500)", fontWeight: 500 }}>
                 {t.sub}
               </span>
             </button>
@@ -251,7 +255,7 @@ function BatchRecipePanel({ recipes }: { recipes: BatchRecipe[] }) {
                   display: "grid",
                   gridTemplateColumns: "1.4fr 1.2fr 70px 110px 110px 110px 130px",
                   padding: "9px 12px",
-                  borderTop: "1px solid var(--ink-50)",
+                  borderTop: "1px solid var(--ink-100)",
                   fontSize: 11.5,
                   background: ing.shortage ? "var(--warn-100)" : undefined,
                   alignItems: "center",

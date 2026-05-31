@@ -340,7 +340,7 @@ function RequisitionCard({ req }: { req: PurchaseRequisition }) {
               gridTemplateColumns: "1.6fr 1.4fr 60px 90px 110px 1fr",
             columnGap: 10,
               padding: "8px 10px",
-              borderTop: idx > 0 ? "1px solid var(--ink-50)" : "none",
+              borderTop: idx > 0 ? "1px solid var(--ink-100)" : "none",
               fontSize: 11.5,
               color: "var(--ink-800)",
             }}
@@ -515,7 +515,7 @@ function StockRow({ row: r, isRaw }: { row: StockLedger["rows"][number]; isRaw: 
   return (
                 <tr
                   style={{
-                    borderTop: "1px solid var(--ink-50)",
+                    borderTop: "1px solid var(--ink-100)",
                     background: flashing
                       ? "rgba(245,158,11,0.18)"
                       : lowStock
@@ -801,7 +801,7 @@ function PayableLedgerTable({ rows }: { rows: PayableRow[] }) {
             {rows.map((r) => {
               const aging = AGING_META[r.aging];
               return (
-                <tr key={r.supplier + r.invoiceDate} style={{ borderTop: "1px solid var(--ink-50)" }}>
+                <tr key={r.supplier + r.invoiceDate} style={{ borderTop: "1px solid var(--ink-100)" }}>
                   <SLTd bold>{r.supplier}</SLTd>
                   <SLTd>{r.source}</SLTd>
                   <SLTd align="right" mono bold>

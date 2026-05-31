@@ -86,6 +86,11 @@ function JintaiBrandHeader() {
             flexShrink: 0,
             borderRadius: 8,
           }}
+          onError={(e) => {
+            // Graceful degrade if the asset is ever missing again — the title
+            // beside it carries the brand, so hide rather than show a broken box.
+            e.currentTarget.style.display = "none";
+          }}
         />
         <div style={{ flex: 1, minWidth: 200 }}>
           <div
