@@ -44,6 +44,7 @@ import {
   postApprovePr,
   postIssueAndConfirm,
   postReceivePo,
+  postRejectPr,
   type BriefingKpiOut,
   type HealthOut,
 } from "../../../api/jintai-backend";
@@ -178,6 +179,7 @@ type Action =
   | { type: "REJECT_PR"; prNo: string }
   | { type: "RECEIVE_PO"; poNo: string }
   | { type: "DISMISS_TOAST"; id: string }
+  | { type: "PUSH_TOAST"; toast: Omit<Toast, "id"> }
   | { type: "CLEAR_FLASH"; key: string }
   | { type: "FLASH_KEYS"; keys: string[] }
   | { type: "SET_PRODUCTION_SUBTAB"; subtab: ProductionSubtab }
@@ -205,7 +207,7 @@ export type TourStep = {
   narration: string;
   badge?: string;
   /** 进入此步触发的 action (副作用动作: 模拟领料 / 确认 / 批准 / 入库) */
-  action?: Exclude<Action, { type: "DISMISS_TOAST" } | { type: "CLEAR_FLASH" } | { type: "FLASH_KEYS" } | { type: "SET_PRODUCTION_SUBTAB" } | { type: "SET_SCROLL_ANCHOR" } | { type: "TOUR_START" } | { type: "TOUR_SET_STEP" } | { type: "TOUR_PAUSE" } | { type: "TOUR_RESUME" } | { type: "TOUR_EXIT" } | { type: "RESET" }>;
+  action?: Exclude<Action, { type: "DISMISS_TOAST" } | { type: "PUSH_TOAST" } | { type: "CLEAR_FLASH" } | { type: "FLASH_KEYS" } | { type: "SET_PRODUCTION_SUBTAB" } | { type: "SET_SCROLL_ANCHOR" } | { type: "TOUR_START" } | { type: "TOUR_SET_STEP" } | { type: "TOUR_PAUSE" } | { type: "TOUR_RESUME" } | { type: "TOUR_EXIT" } | { type: "RESET" }>;
   /** 重新激活的 flash 高亮 key (让 4s 之后切回来还能看到飘黄) */
   flashKeys?: string[];
   /** 本步停留时长 (ms) */
@@ -608,6 +610,9 @@ function reducer(state: JintaiState, action: Action): JintaiState {
     case "DISMISS_TOAST":
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
 
+    case "PUSH_TOAST":
+      return withToast(state, action.toast);
+
     case "CLEAR_FLASH": {
       const next = { ...state.flash };
       delete next[action.key];
@@ -940,6 +945,11 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
             const resp = await postApprovePr(pid, { supplier_id: sid, unit_prices: unitPrices });
             dispatch({ type: "SET_BACKEND_IDS", ids: { poId: resp.po_id } });
           }
+        } else if (action.type === "REJECT_PR" && action.prNo === NEW_PR_NO) {
+          const pid = state.backendIds.prId;
+          if (pid) {
+            await postRejectPr(pid, { reason: "demo backend mode 驳回" });
+          }
         } else if (action.type === "RECEIVE_PO" && action.poNo === NEW_PO_NO) {
           const po = state.backendIds.poId;
           if (po) {
@@ -948,7 +958,7 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
         }
         dispatch(action);
         // refresh KPI after each mutation (mainline actions)
-        if (["SIMULATE_RAW_ISSUE", "CONFIRM_INBOX", "APPROVE_PR", "RECEIVE_PO"].includes(action.type)) {
+        if (["SIMULATE_RAW_ISSUE", "CONFIRM_INBOX", "APPROVE_PR", "REJECT_PR", "RECEIVE_PO"].includes(action.type)) {
           await refreshBackendKpi();
         }
       } catch (e) {
@@ -957,7 +967,16 @@ export function JintaiProvider({ children }: { children: ReactNode }) {
           type: "SET_BACKEND_STATUS",
           status: { lastError: `${action.type}: ${msg}` },
         });
-        // fallback 到 mock 行为,demo 不挂
+        // Surface the failure (gap #7: errors used to fail silently) then
+        // fall back to the mock behaviour so the demo never hard-breaks.
+        dispatch({
+          type: "PUSH_TOAST",
+          toast: {
+            level: "warn",
+            title: "后端写入失败 · 已回退本地演示",
+            body: msg,
+          },
+        });
         dispatch(action);
       }
     },

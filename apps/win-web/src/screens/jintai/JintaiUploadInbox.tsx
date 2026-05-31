@@ -174,11 +174,11 @@ export function JintaiUploadInbox({
 
 /* iter 22: 主线领料单 kickoff 按钮 (调 store dispatch) */
 function MainlineKickoffButton() {
-  const { dispatch, state, consts } = useJintai();
+  const { dispatchWithBackend, state, consts } = useJintai();
   const alreadyTriggered = state.inboxCards.some((c) => c.id === consts.newInboxId);
   return (
     <button
-      onClick={() => dispatch({ type: "SIMULATE_RAW_ISSUE" })}
+      onClick={() => void dispatchWithBackend({ type: "SIMULATE_RAW_ISSUE" })}
       style={{
         width: "100%",
         padding: "10px 14px",
@@ -201,7 +201,7 @@ function MainlineKickoffButton() {
 
 /* iter 22: 渲染 store-managed 收件箱草稿 (来自主线 dispatch) */
 function StoreInboxCards() {
-  const { state, dispatch, isFlashing } = useJintai();
+  const { state, dispatchWithBackend, isFlashing } = useJintai();
   const pending = state.inboxCards.filter((c) => c.status === "待确认");
   if (pending.length === 0) return null;
   return (
@@ -256,7 +256,7 @@ function StoreInboxCards() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <button
-                onClick={() => dispatch({ type: "CONFIRM_INBOX", cardId: c.id })}
+                onClick={() => void dispatchWithBackend({ type: "CONFIRM_INBOX", cardId: c.id })}
                 style={{
                   padding: "6px 14px",
                   fontSize: 11.5,
@@ -272,7 +272,7 @@ function StoreInboxCards() {
                 ✓ 王仓管 确认入账
               </button>
               <button
-                onClick={() => dispatch({ type: "REJECT_INBOX", cardId: c.id })}
+                onClick={() => void dispatchWithBackend({ type: "REJECT_INBOX", cardId: c.id })}
                 style={{
                   padding: "6px 14px",
                   fontSize: 11.5,
