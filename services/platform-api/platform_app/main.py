@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from . import admin_api, api, context as _context, db, enterprise_api, firewall, proxy
+from . import admin_api, api, context as _context, db, enterprise_api, firewall, observability, proxy
 from .data_layer import api as data_api
 from .daily_report import api as daily_report_api
 # yunwei_win (智通客户) — vendored from yunwei-tools, mounted at /api/win/.
@@ -84,6 +84,24 @@ async def _attach_enterprise(request: Request, call_next):
         request.state.enterprise_id = ctx.enterprise_id
         request.state.user_id = ctx.user_id
     return await call_next(request)
+
+
+# Registered after _attach_enterprise so it wraps outermost: every request
+# (incl. /api/win/*) gets a request-id + the response carries it back along
+# with the deployed commit sha. Unhandled errors are logged against that id.
+app.middleware("http")(observability.add_request_context)
+
+
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+def health(request: Request):
+    """Self-health for uptime monitors / load balancers. Unauthenticated:
+    sits above the /api/win/* auth gate. 503 when the platform DB is
+    unreachable so the instance is taken out of rotation."""
+    payload, status = observability.build_health_payload(
+        db_ok=observability.ping_platform_db()
+    )
+    return JSONResponse(payload, status_code=status)
+
 
 _STATIC = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
