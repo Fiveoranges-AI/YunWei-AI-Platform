@@ -9,6 +9,7 @@ import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
 import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
 import { ConfirmDemoScreen } from "./screens/ConfirmDemo";
+import { GuangtianDemoPage } from "./screens/guangtian/GuangtianDemoPage";
 
 export type ScreenName =
   | "list"
@@ -19,8 +20,9 @@ export type ScreenName =
   | "ask"
   | "profile"
   | "jintai"
+  | "guangtian"
   | "confirmDemo";
-export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
+export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai" | "guangtian";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -38,6 +40,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
   ask: "ask",
   profile: "profile",
   jintai: "jintai",
+  guangtian: "guangtian",
   confirmDemo: undefined,
 };
 
@@ -48,6 +51,7 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
   ask: "ask",
   profile: "profile",
   jintai: "jintai",
+  guangtian: "guangtian",
 };
 
 function readInitialScreen(): ScreenStackEntry {
@@ -120,6 +124,8 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
       return <ProfileScreen go={go} />;
     case "jintai":
       return <JintaiDemoPage />;
+    case "guangtian":
+      return <GuangtianDemoPage />;
     case "confirmDemo":
       return <ConfirmDemoScreen go={go} />;
   }
