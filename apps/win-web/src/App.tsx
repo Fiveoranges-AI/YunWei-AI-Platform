@@ -58,6 +58,13 @@ function readInitialScreen(): ScreenStackEntry {
   const params = new URLSearchParams(window.location.search);
   const name = params.get("screen");
   if (name === "confirmDemo") return { name: "confirmDemo" };
+  // Deep-link straight into the 锦泰 pilot demo. The client demo link
+  // (`/win/?tab=jintai#briefing`) and our docs already assume this works;
+  // previously it silently fell back to the customer list. Additive only —
+  // the default (no matching param) is unchanged.
+  if (params.get("tab") === "jintai" || name === "jintai") {
+    return { name: "jintai" };
+  }
   return { name: "list" };
 }
 

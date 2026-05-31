@@ -58,15 +58,20 @@ export function JintaiFinancePanel() {
             <button
               key={k}
               onClick={() => setActive(k)}
+              aria-current={isActive ? "true" : undefined}
               style={{
                 padding: "8px 14px",
                 borderRadius: 8,
                 border: "none",
                 background: isActive ? "var(--surface)" : "transparent",
-                boxShadow: isActive ? "var(--shadow-card-soft)" : "none",
-                color: isActive ? "var(--ink-900)" : "var(--ink-600)",
+                // iter: active 子 tab 与近白容器底色几乎无差 → 加 jintai-green inset
+                // 环 + 较实阴影，选中态一眼可见（无 1px border 的布局位移）。
+                boxShadow: isActive
+                  ? "0 1px 3px rgba(11,34,50,0.12), inset 0 0 0 1.5px var(--jintai-green)"
+                  : "none",
+                color: isActive ? "var(--jintai-green-dark)" : "var(--ink-600)",
                 fontSize: 13,
-                fontWeight: 600,
+                fontWeight: isActive ? 700 : 600,
                 cursor: "pointer",
                 display: "flex",
                 flexDirection: "column",
@@ -77,7 +82,7 @@ export function JintaiFinancePanel() {
               }}
             >
               <span>{meta.label}</span>
-              <span style={{ fontSize: 10.5, color: "var(--ink-500)", fontWeight: 500 }}>
+              <span style={{ fontSize: 10.5, color: isActive ? "var(--ink-600)" : "var(--ink-500)", fontWeight: 500 }}>
                 {meta.sub}
               </span>
             </button>
@@ -245,11 +250,11 @@ function BSTableHead({ title }: { title: string }) {
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 44px 110px 110px",
-        background: "var(--surface-2)",
-        borderBottom: "1px solid var(--ink-200)",
+        background: "var(--surface-3)",
+        borderBottom: "1.5px solid var(--ink-300)",
         fontSize: 11,
         fontWeight: 700,
-        color: "var(--ink-700)",
+        color: "var(--ink-800)",
         letterSpacing: "0.04em",
       }}
     >
@@ -269,7 +274,7 @@ function BSRow({ line }: { line: ReportLine }) {
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 44px 110px 110px",
-        borderTop: line.underline ? "1px solid var(--ink-200)" : "1px solid var(--ink-50)",
+        borderTop: line.underline ? "1px solid var(--ink-200)" : "1px solid var(--ink-100)",
         background: isSection ? "rgba(15,69,42,0.04)" : line.bold ? "rgba(199,228,210,0.18)" : "transparent",
         fontSize: 11.5,
       }}
@@ -473,7 +478,7 @@ function ISRow({ line, highlight }: { line: ReportLine; highlight?: boolean }) {
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 44px 130px 130px",
-        borderTop: "1px solid var(--ink-50)",
+        borderTop: "1px solid var(--ink-100)",
         background: highlight
           ? "rgba(199,228,210,0.35)"
           : line.bold
@@ -643,7 +648,7 @@ function CFRow({ line, highlight }: { line: ReportLine; highlight?: boolean }) {
       style={{
         display: "grid",
         gridTemplateColumns: "1fr 44px 120px 120px",
-        borderTop: line.underline ? "1px solid var(--ink-200)" : "1px solid var(--ink-50)",
+        borderTop: line.underline ? "1px solid var(--ink-200)" : "1px solid var(--ink-100)",
         background: highlight
           ? "rgba(199,228,210,0.35)"
           : isSection
@@ -1222,7 +1227,7 @@ function CostBreakdownView() {
                 display: "grid",
                 gridTemplateColumns: "1.4fr 100px 70px 1.8fr 1fr",
                 padding: "10px 12px",
-                borderTop: "1px solid var(--ink-50)",
+                borderTop: "1px solid var(--ink-100)",
                 fontSize: 11.5,
                 color: "var(--ink-800)",
                 alignItems: "center",
@@ -1322,7 +1327,7 @@ function CostBreakdownView() {
                   display: "grid",
                   gridTemplateColumns: isDesktop ? "1.6fr 1fr 130px 130px 1.4fr 60px" : "1fr 60px",
                   padding: "10px 12px",
-                  borderTop: "1px solid var(--ink-50)",
+                  borderTop: "1px solid var(--ink-100)",
                   fontSize: 11.5,
                   color: "var(--ink-800)",
                   alignItems: "center",
@@ -1520,7 +1525,7 @@ function DepreciationLedgerView() {
           </thead>
           <tbody>
             {depreciationLedger.items.map((it) => (
-              <tr key={it.name} style={{ borderTop: "1px solid var(--ink-50)" }}>
+              <tr key={it.name} style={{ borderTop: "1px solid var(--ink-100)" }}>
                 <DepTd bold>{it.name}</DepTd>
                 <DepTd>
                   <span

@@ -646,6 +646,9 @@ function JintaiDemoPageInner() {
               src={`${import.meta.env.BASE_URL}jintai-logo.png`}
               alt="锦泰耐火材料"
               style={{ height: 16, width: "auto" }}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
             />
             宜兴市锦泰耐火材料
           </span>
