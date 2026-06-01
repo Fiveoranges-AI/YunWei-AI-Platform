@@ -8,8 +8,12 @@
 #             所以 ?tab=jintai&mode=backend 打 :8000, ?tab=guangtian&mode=backend 打 :8001.
 #
 # Usage:
-#   bash scripts/start-platform.sh         # 启动两者
-#   bash scripts/start-platform.sh stop    # 停止
+#   bash scripts/start-platform.sh           # 启动两者 (默认 127.0.0.1, 仅本机)
+#   bash scripts/start-platform.sh --public  # vite 绑 0.0.0.0 (Tailscale/LAN 对端可看)
+#   bash scripts/start-platform.sh stop      # 停止
+#
+# --public 安全: vite 绑 0.0.0.0 → Tailscale 对端 + 同网段 LAN 都能访问;
+# 后端仍只在 127.0.0.1 不暴露 (demo 默认 mock 模式无后端调用)。演示完 stop。
 #
 # Notes:
 #   - 纯 SQLite, 无 docker/PG. 失败看 /tmp/platform-{jintai,guangtian,vite}.log
@@ -43,6 +47,16 @@ _stop() {
   echo "✓ done"; exit 0
 }
 [[ "${1:-}" == "stop" || "${1:-}" == "--stop" ]] && _stop
+
+# --public: bind vite to 0.0.0.0 so a Tailscale / LAN peer can open the demo.
+# Backends stay on 127.0.0.1 (NOT exposed). The demo default is mock mode →
+# no backend calls, so a remote viewer sees the full demo without the backends.
+# (?mode=backend stays local-only by design; remote backend-mode would need a
+# vite proxy — see scripts/README.md.)
+VITE_HOST="127.0.0.1"
+if [[ "${1:-}" == "--public" ]]; then
+  VITE_HOST="0.0.0.0"
+fi
 
 command -v npm >/dev/null 2>&1 || { echo "ERR: npm missing"; exit 1; }
 
@@ -98,8 +112,8 @@ else
   [[ -d node_modules ]] || { echo "  npm install (one-time)..."; npm install --silent; }
   VITE_JINTAI_BACKEND="http://127.0.0.1:$JINTAI_PORT/api/win" \
     VITE_GUANGTIAN_BACKEND="http://127.0.0.1:$GUANGTIAN_PORT/api/win" \
-    npm run dev -- --port "$VITE_PORT" --host 127.0.0.1 > "$V_LOG" 2>&1 &
-  echo "$!" > "$V_PID"; echo "  vite pid=$(cat "$V_PID") → :$VITE_PORT (log: $V_LOG)"
+    npm run dev -- --port "$VITE_PORT" --host "$VITE_HOST" > "$V_LOG" 2>&1 &
+  echo "$!" > "$V_PID"; echo "  vite pid=$(cat "$V_PID") → $VITE_HOST:$VITE_PORT (log: $V_LOG)"
   cd "$ROOT"
 fi
 
@@ -114,9 +128,23 @@ curl -sS -m1 -I "http://127.0.0.1:$VITE_PORT/win/" 2>/dev/null | grep -q "200 OK
 
 echo
 echo "============================================================"
-echo "  锦泰 : http://127.0.0.1:$VITE_PORT/win/?tab=jintai"
-echo "         http://127.0.0.1:$VITE_PORT/win/?tab=jintai&mode=backend&inspect=1"
-echo "  光天 : http://127.0.0.1:$VITE_PORT/win/?tab=guangtian"
-echo "         http://127.0.0.1:$VITE_PORT/win/?tab=guangtian&mode=backend&inspect=1"
+if [[ "$VITE_HOST" == "0.0.0.0" ]]; then
+  TS_IP=$(command -v tailscale >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | head -1)
+  LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+  HOST_FOR_URL="${TS_IP:-${LAN_IP:-<this-mac-ip>}}"
+  echo "  ⚠ PUBLIC 模式: vite 绑 0.0.0.0 — Tailscale 对端 + 同网段 LAN 都能访问。"
+  echo "    后端仍只在 127.0.0.1(不暴露)。演示完务必 stop。"
+  echo
+  echo "  赵博士打开(默认 mock 模式,无需后端):"
+  echo "    锦泰 : http://$HOST_FOR_URL:$VITE_PORT/win/?tab=jintai"
+  echo "    光天 : http://$HOST_FOR_URL:$VITE_PORT/win/?tab=guangtian"
+  [[ -n "$TS_IP" ]] && echo "    (Tailscale IP: $TS_IP)" || echo "    (未检测到 tailscale; 上面用 LAN IP)"
+else
+  echo "  锦泰 : http://127.0.0.1:$VITE_PORT/win/?tab=jintai"
+  echo "         http://127.0.0.1:$VITE_PORT/win/?tab=jintai&mode=backend&inspect=1"
+  echo "  光天 : http://127.0.0.1:$VITE_PORT/win/?tab=guangtian"
+  echo "         http://127.0.0.1:$VITE_PORT/win/?tab=guangtian&mode=backend&inspect=1"
+  echo "  公开(给 Tailscale 对端看): bash scripts/start-platform.sh --public"
+fi
 echo "  stop : bash scripts/start-platform.sh stop"
 echo "============================================================"

@@ -8,6 +8,7 @@
 | **只启锦泰** | `bash scripts/jintai/start-demo.sh` |
 | **只启光天** | `bash scripts/guangtian/start-demo.sh` |
 | **两个一起启**（推荐） | `bash scripts/start-platform.sh` |
+| **公开给 Tailscale/LAN 对端看** | `bash scripts/start-platform.sh --public` |
 | **停掉**（按你启的那个） | `bash scripts/jintai/start-demo.sh stop` / `…/guangtian/… stop` / `bash scripts/start-platform.sh stop` |
 | **失败看日志** | `tail -40 /tmp/jintai-demo-backend.log` · `tail -40 /tmp/guangtian-demo-backend.log` · `tail -40 /tmp/platform-*.log` |
 
@@ -25,6 +26,22 @@
 | 前端 vite | :5175 | :5175 |
 
 单独脚本各用 :8000，**不能同时跑两个 backend mode**（端口冲突）；要两个真后端同时在线就用 `start-platform.sh`（它给前端注入 `VITE_JINTAI_BACKEND` / `VITE_GUANGTIAN_BACKEND` 分别指向两端口）。mock 模式两个 tab 随时都能看，不依赖后端。
+
+## 公开模式 `--public`（让赵博士通过 Tailscale 看）
+
+```bash
+bash scripts/start-platform.sh --public   # vite 绑 0.0.0.0
+bash scripts/start-platform.sh            # 默认私有 (127.0.0.1, 仅本机)
+```
+
+- `--public` 只把 **vite** 绑到 `0.0.0.0:5175`；**两个后端仍只在 `127.0.0.1`**（不暴露）。
+- demo 默认是 **mock 模式**（不调后端），所以远端访客直接看到完整演示，**不需要后端**。脚本结尾会打印 Tailscale IP + 完整 URL（如 `http://<ts-ip>:5175/win/?tab=jintai`）。
+- 赵博士：装 Tailscale 进同一 tailnet → 打开 `http://<老板-mac-tailscale-ip>:5175/win/?tab=jintai`（或 `?tab=guangtian`）。
+- 切私有/公开要先 `stop` 再换模式起（脚本对已在跑的 vite 会"放过不动"）。
+
+### ⚠ 安全
+- `0.0.0.0` 不止 Tailscale 可见，**同网段 LAN 也可见**。Tailscale 是私有 VPN、可控，但公共 WiFi 下 LAN 内别人也能打到 :5175。demo 数据无敏感信息，但**演示完 `bash scripts/start-platform.sh stop`**。
+- `?mode=backend`（真后端 inspect 视图）**远端用不了**：后端故意没暴露，远端浏览器打 `127.0.0.1:8000` 是访客自己的机器。要远端也能看真后端数据，需给统一前端 `guangtian-frontend` 的 `vite.config.ts` 加 `/jintai-api`→:8000、`/guangtian-api`→:8001 代理（strip-prefix rewrite）+ 把 `VITE_*_BACKEND` 设成 `/jintai-api/api/win`、`/guangtian-api/api/win`（这样浏览器只跟 vite 同源说话、后端仍不暴露）。**本轮未做**：该 vite.config 在 `feat/guangtian-frontend-backend-mode`(#123) 分支,而该分支 local 与 origin 已分叉,贸然提交有 force-push 风险 → 留给老板定夺。
 
 ## 前提 / 排错
 
