@@ -54,8 +54,15 @@ _stop() {
 # (?mode=backend stays local-only by design; remote backend-mode would need a
 # vite proxy — see scripts/README.md.)
 VITE_HOST="127.0.0.1"
+# Frontend backend base. Private: absolute 127.0.0.1 (direct). Public (方案 A):
+# relative prefixes → vite proxies to the 127.0.0.1 backends (which stay
+# unexposed). The vite.config.ts of the served frontend defines those proxies.
+J_BASE="http://127.0.0.1:$JINTAI_PORT/api/win"
+G_BASE="http://127.0.0.1:$GUANGTIAN_PORT/api/win"
 if [[ "${1:-}" == "--public" ]]; then
   VITE_HOST="0.0.0.0"
+  J_BASE="/jintai-api/api/win"
+  G_BASE="/guangtian-api/api/win"
 fi
 
 command -v npm >/dev/null 2>&1 || { echo "ERR: npm missing"; exit 1; }
@@ -110,8 +117,10 @@ if [[ -n "$existing" ]]; then
 else
   cd "$WEB_DIR"
   [[ -d node_modules ]] || { echo "  npm install (one-time)..."; npm install --silent; }
-  VITE_JINTAI_BACKEND="http://127.0.0.1:$JINTAI_PORT/api/win" \
-    VITE_GUANGTIAN_BACKEND="http://127.0.0.1:$GUANGTIAN_PORT/api/win" \
+  VITE_JINTAI_BACKEND="$J_BASE" \
+    VITE_GUANGTIAN_BACKEND="$G_BASE" \
+    GUANGTIAN_API_PROXY_TARGET="http://127.0.0.1:$GUANGTIAN_PORT" \
+    JINTAI_API_PROXY_TARGET="http://127.0.0.1:$JINTAI_PORT" \
     npm run dev -- --port "$VITE_PORT" --host "$VITE_HOST" > "$V_LOG" 2>&1 &
   echo "$!" > "$V_PID"; echo "  vite pid=$(cat "$V_PID") → $VITE_HOST:$VITE_PORT (log: $V_LOG)"
   cd "$ROOT"
