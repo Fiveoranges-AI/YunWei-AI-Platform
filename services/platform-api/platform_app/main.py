@@ -213,17 +213,22 @@ async def catch_all(full_path: str, request: Request):
     # Unauthenticated top-level browser navigation to an agent entrypoint
     # lands on the login page — consistent with /, /dashboard, /admin, /win —
     # instead of surfacing a raw {"detail": {"error": "not_logged_in"}} JSON
-    # body to a visitor who pasted the URL. API/XHR callers (non-GET, or a
+    # body to a visitor who pasted the URL or whose session has expired. This
+    # covers both a missing app_session cookie and a present-but-stale one (a
+    # browser still holding an expired session). API/XHR callers (non-GET, or a
     # request that does not Accept text/html) keep the JSON 401 so clients can
-    # handle auth programmatically.
-    if (
+    # handle auth programmatically. V2 auth core is unchanged — a valid session
+    # is still required to actually reach the agent.
+    is_browser_nav = (
         request.method in ("GET", "HEAD")
-        and not request.cookies.get("app_session")
         and "text/html" in request.headers.get("accept", "")
-    ):
-        return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
-
-    user = api._user_from_request(request)
+    )
+    try:
+        user = api._user_from_request(request)
+    except HTTPException as exc:
+        if exc.status_code == 401 and is_browser_nav:
+            return FileResponse(_STATIC / "login.html", headers=_NO_STORE)
+        raise
 
     if not db.has_acl(user["id"], client_id, agent_id):
         raise HTTPException(403, {"error": "not_authorized_for_tenant", "message": "无权访问"})
