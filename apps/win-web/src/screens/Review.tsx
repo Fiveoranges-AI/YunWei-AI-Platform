@@ -21,6 +21,7 @@ import type {
 } from "../data/types";
 import { I } from "../icons";
 import { markCustomersChanged } from "../lib/customerRefresh";
+import { MOCK_REVIEW_DRAFT, applyMockReviewPatch } from "../data/mockReview";
 
 type LockState = {
   mode: ReviewLockMode;
@@ -39,6 +40,10 @@ export function ReviewScreen({
   params?: Record<string, string>;
 }) {
   const jobId = params?.jobId;
+  // DEV-only offline harness: go("review", { jobId: "demo" }) renders the
+  // wizard against a local mock draft so the review UX (incl. Slice ②) can
+  // be exercised without a backend. Never active in production builds.
+  const isMock = import.meta.env.DEV && jobId === "demo";
   const [draft, setDraft] = useState<ReviewDraft | null>(null);
   const [extractionId, setExtractionId] = useState<string | null>(null);
   const [reviewVersion, setReviewVersion] = useState<number>(0);
@@ -84,6 +89,16 @@ export function ReviewScreen({
     let cancelled = false;
 
     async function load() {
+      if (isMock) {
+        setDraft(MOCK_REVIEW_DRAFT);
+        setExtractionId("demo");
+        setReviewVersion(1);
+        setLock({ mode: "edit", token: "demo", expiresAt: null, lockedBy: null });
+        setJobStatus("extracted");
+        setHasFile(false);
+        setLoading(false);
+        return;
+      }
       if (!jobId) {
         setLoading(false);
         setError("没有可复核的上传任务");
@@ -186,6 +201,7 @@ export function ReviewScreen({
     (draft !== null && draft.status !== "pending_review");
 
   useEffect(() => {
+    if (isMock) return;
     if (!extractionId || !lock || lock.mode !== "edit" || !lock.token) return;
 
     const timer = window.setInterval(() => {
@@ -323,14 +339,24 @@ export function ReviewScreen({
   );
 
   function handleCellPatch(patch: ReviewCellPatch) {
+    if (isMock) {
+      setDraft((d) => (d ? applyMockReviewPatch(d, patch) : d));
+      return;
+    }
     enqueueAutosave({ cell: patch });
   }
   function handleRowPatch(patch: ReviewRowDecisionPatch) {
+    if (isMock) return;
     enqueueAutosave({ row: patch });
   }
 
   async function handleConfirm(): Promise<void> {
     if (!draft || !extractionId || busy) return;
+    if (isMock) {
+      markCustomersChanged();
+      setDone(true);
+      return;
+    }
     if (!lock || lock.mode !== "edit" || !lock.token) {
       setError("当前为只读，无法提交。");
       return;
