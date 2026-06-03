@@ -14,6 +14,7 @@ from yunwei_win.services.schema_ingest.parsers.docx import DocxParser
 from yunwei_win.services.schema_ingest.parsers.landingai import LandingAIParser
 from yunwei_win.services.schema_ingest.parsers.spreadsheet import SpreadsheetParser
 from yunwei_win.services.schema_ingest.parsers.text import TextParser
+from yunwei_win.services.schema_ingest.parsers.transcribe import TranscribeParser
 
 
 async def parse_file(
@@ -47,6 +48,13 @@ async def parse_file(
     if detected.parser_provider == "text":
         text = path.read_text(encoding="utf-8")
         return await TextParser().parse_text(text, filename=filename)
+    if detected.parser_provider == "transcribe":
+        return await TranscribeParser().parse_file(
+            path,
+            filename=filename,
+            content_type=content_type,
+            source_type=detected.source_type,
+        )
     raise ValueError(f"no parser for provider {detected.parser_provider!r}")
 
 

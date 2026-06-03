@@ -19,6 +19,7 @@ import { createIngestJobs, listIngestJobs } from "../api/ingest";
 import { getMe, listCustomers } from "../api/client";
 import type { CustomerDetail, IngestJob } from "../data/types";
 import { I } from "../icons";
+import { VoiceRecorder } from "../components/VoiceRecorder";
 import { useIsDesktop, useIsTablet } from "../lib/breakpoints";
 import { onCustomersChanged, markCustomersChanged } from "../lib/customerRefresh";
 import { fmtCNY, fmtRelative } from "../lib/format";
@@ -222,6 +223,7 @@ function CaptureHero({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [recording, setRecording] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<HTMLInputElement>(null);
@@ -298,7 +300,7 @@ function CaptureHero({
   const sources: { key: string; icon: JSX.Element; label: string; onClick: () => void }[] = [
     { key: "file", icon: I.cloud(18), label: "文件", onClick: () => fileRef.current?.click() },
     { key: "camera", icon: I.camera(18), label: "拍照", onClick: () => cameraRef.current?.click() },
-    { key: "voice", icon: I.mic(18), label: "语音", onClick: () => voiceRef.current?.click() },
+    { key: "voice", icon: I.mic(18), label: "语音", onClick: () => setRecording(true) },
     { key: "ask", icon: I.ask(18), label: "提问", onClick: () => go("ask") },
   ];
 
@@ -322,6 +324,20 @@ function CaptureHero({
         onChange={(e) => onPicked(e, "camera")} style={{ display: "none" }} />
       <input ref={voiceRef} type="file" accept="audio/*"
         onChange={(e) => onPicked(e, "voice")} style={{ display: "none" }} />
+
+      {recording && (
+        <VoiceRecorder
+          onRecorded={(file) => {
+            addFile(file, "voice");
+            setRecording(false);
+          }}
+          onClose={() => setRecording(false)}
+          onUseFile={() => {
+            setRecording(false);
+            voiceRef.current?.click();
+          }}
+        />
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <span className="pill pill-ai" style={{ gap: 5 }}>

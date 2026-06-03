@@ -99,6 +99,7 @@ _SOURCE_TYPE_TO_DOCUMENT_TYPE: dict[str, DocumentType] = {
     "text": DocumentType.text_note,
     "docx": DocumentType.other,
     "spreadsheet": DocumentType.other,
+    "audio": DocumentType.other,
 }
 
 _SOURCE_TYPE_TO_MODALITY: dict[str, InputModality] = {
@@ -108,6 +109,7 @@ _SOURCE_TYPE_TO_MODALITY: dict[str, InputModality] = {
     "text": InputModality.text,
     "docx": InputModality.text,
     "spreadsheet": InputModality.text,
+    "audio": InputModality.voice,
 }
 
 
@@ -171,6 +173,12 @@ async def auto_ingest(
             document=document,
             error_message=_public_error_message(parse_error_message),
         )
+
+    # Surface parser-emitted warnings (e.g. "语音转写未配置") to the reviewer.
+    _artifact_meta = parse_artifact.metadata if isinstance(parse_artifact.metadata, dict) else {}
+    for _w in _artifact_meta.get("warnings") or []:
+        if isinstance(_w, str) and _w:
+            parse_warnings.append(_public_error_message(_w))
 
     parse = DocumentParse(
         document_id=document.id,

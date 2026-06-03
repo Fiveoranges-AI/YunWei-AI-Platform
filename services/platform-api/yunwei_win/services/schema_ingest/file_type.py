@@ -13,8 +13,8 @@ import os
 from dataclasses import dataclass
 from typing import Literal
 
-SourceType = Literal["pdf", "image", "pptx", "text", "docx", "spreadsheet"]
-ParserProvider = Literal["landingai", "text", "docx", "spreadsheet"]
+SourceType = Literal["pdf", "image", "pptx", "text", "docx", "spreadsheet", "audio"]
+ParserProvider = Literal["landingai", "text", "docx", "spreadsheet", "transcribe"]
 ExtractorProvider = Literal["landingai", "deepseek"]
 
 
@@ -49,6 +49,8 @@ _PPTX_MIMES = {
 _PDF_EXTS = {".pdf"}
 _PDF_MIMES = {"application/pdf"}
 
+_AUDIO_EXTS = {".webm", ".m4a", ".mp3", ".wav", ".ogg", ".oga", ".aac", ".amr", ".weba"}
+
 
 def detect_source_type(
     *,
@@ -77,6 +79,9 @@ def detect_source_type(
 
     if ext in _DOCX_EXTS or ct in _DOCX_MIMES:
         return DetectedSourceType("docx", "docx", "deepseek")
+
+    if ct.startswith("audio/") or ext in _AUDIO_EXTS:
+        return DetectedSourceType("audio", "transcribe", "deepseek")
 
     if ext in _PPTX_EXTS or ct in _PPTX_MIMES:
         return DetectedSourceType("pptx", "landingai", "landingai")
