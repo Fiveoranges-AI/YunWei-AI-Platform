@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "r
 import type { GoFn } from "../App";
 import { createIngestJobs } from "../api/ingest";
 import { I } from "../icons";
+import { VoiceRecorder } from "../components/VoiceRecorder";
 import { useIsDesktop, useIsTablet } from "../lib/breakpoints";
 import { markCustomersChanged } from "../lib/customerRefresh";
 
@@ -24,6 +25,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -174,6 +176,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
           <SourceGrid
             onFile={() => fileInputRef.current?.click()}
             onCamera={() => cameraInputRef.current?.click()}
+            onVoice={() => setRecording(true)}
             dragActive={dragActive}
           />
 
@@ -221,6 +224,15 @@ export function UploadScreen({ go }: { go: GoFn }) {
         </div>
 
         <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
+        {recording && (
+          <VoiceRecorder
+            onRecorded={(file) => {
+              addFile(file, "file");
+              setRecording(false);
+            }}
+            onClose={() => setRecording(false)}
+          />
+        )}
       </div>
     );
   }
@@ -272,6 +284,7 @@ export function UploadScreen({ go }: { go: GoFn }) {
         <SourceGrid
           onFile={() => fileInputRef.current?.click()}
           onCamera={() => cameraInputRef.current?.click()}
+          onVoice={() => setRecording(true)}
           dragActive={dragActive}
         />
         <Divider />
@@ -317,6 +330,15 @@ export function UploadScreen({ go }: { go: GoFn }) {
       </div>
 
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
+      {recording && (
+        <VoiceRecorder
+          onRecorded={(file) => {
+            addFile(file, "file");
+            setRecording(false);
+          }}
+          onClose={() => setRecording(false)}
+        />
+      )}
     </div>
   );
 }
@@ -357,10 +379,12 @@ function HiddenInputs({
 function SourceGrid({
   onFile,
   onCamera,
+  onVoice,
   dragActive,
 }: {
   onFile: () => void;
   onCamera: () => void;
+  onVoice?: () => void;
   dragActive: boolean;
 }) {
   const sources = [
@@ -383,7 +407,7 @@ function SourceGrid({
       icon: I.mic(22),
       label: "录音",
       hint: "通话 · 会议 · 语音备忘",
-      onClick: onFile,
+      onClick: onVoice ?? onFile,
     },
   ];
   return (
