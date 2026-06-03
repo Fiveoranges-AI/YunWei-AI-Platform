@@ -62,6 +62,11 @@ function readInitialScreen(): ScreenStackEntry {
   const params = new URLSearchParams(window.location.search);
   const name = params.get("screen");
   if (name === "confirmDemo") return { name: "confirmDemo" };
+  // DEV-only: ?screen=review opens the review wizard against a local mock
+  // draft (jobId "demo") so the review UX can be exercised without a backend.
+  if (import.meta.env.DEV && name === "review") {
+    return { name: "review", params: { jobId: params.get("job") ?? "demo" } };
+  }
   return { name: "home" };
 }
 

@@ -12,6 +12,9 @@ import { ReviewCard } from "./ReviewCard";
 import { ReviewDetailTable } from "./ReviewDetailTable";
 import { ReviewSourcePanel } from "./ReviewSourcePanel";
 import { ReviewSummary } from "./ReviewSummary";
+import { ReviewHealthBar } from "./ReviewHealthBar";
+import { ReviewFocusOverlay } from "./ReviewFocusOverlay";
+import { analyzeReview } from "../../lib/reviewProgress";
 import type {
   ConfirmExtractionInvalidCell,
   ReviewCellPatch,
@@ -104,6 +107,7 @@ export function ReviewWizard({
   const [activeCell, setActiveCell] = useState<
     { tableName: string; rowId: string; field: string } | null
   >(null);
+  const [focusOpen, setFocusOpen] = useState(false);
 
   // Step navigation is purely client-side state — flipping between wizard
   // tabs must not bump the server's review_version. The autosave PATCH is
@@ -115,6 +119,7 @@ export function ReviewWizard({
   }
 
   const invalidByTable = useMemo(() => buildInvalidMap(invalidCells), [invalidCells]);
+  const progress = useMemo(() => analyzeReview(draft), [draft]);
   const activeSrc = activeCellRefs(draft, activeCell);
 
   const tablesForStep = useMemo(
@@ -205,6 +210,12 @@ export function ReviewWizard({
           {error}
         </div>
       ) : null}
+
+      <ReviewHealthBar
+        progress={progress}
+        readOnly={readOnly}
+        onStartFocus={() => setFocusOpen(true)}
+      />
 
       <nav
         style={{
@@ -393,6 +404,16 @@ export function ReviewWizard({
           />
         </div>
       </div>
+
+      {focusOpen && (
+        <ReviewFocusOverlay
+          draft={draft}
+          attention={progress.attention}
+          readOnly={readOnly}
+          onCellPatch={onCellPatch}
+          onClose={() => setFocusOpen(false)}
+        />
+      )}
     </div>
   );
 }
