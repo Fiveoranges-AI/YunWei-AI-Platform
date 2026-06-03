@@ -231,4 +231,39 @@ export const I = {
       <path d="M10 19v-5h4v5" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  grid: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <rect x="4" y="4" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+    </svg>
+  ),
+  inbox: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M3 13l3-8h12l3 8v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6z" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 13h5l1.5 3h5L16 13h5" stroke={c} strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  ),
+  factory: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M3 21V11l5 3V11l5 3V9l8 5v7H3z" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 21h18M7 17v2M11 17v2M15 17v2M19 17v2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  pkg: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 7l9 4 9-4M12 11v10M7.5 5.2l9 4" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  ),
+  calendar: (s = 14, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="5" width="18" height="16" rx="2" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />
+      <path d="M3 10h18M8 3v4M16 3v4" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="15" r="1.2" fill={c} />
+      <circle cx="12" cy="15" r="1.2" fill={c} />
+      <circle cx="16" cy="15" r="1.2" fill={c} />
+    </svg>
+  ),
 } as const satisfies Record<string, IconFn>;

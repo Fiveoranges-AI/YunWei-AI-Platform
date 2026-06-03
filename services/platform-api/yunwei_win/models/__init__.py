@@ -76,6 +76,73 @@ from yunwei_win.models.document_parse import (
     DocumentParseStatus,
 )
 
+# ---------------------------------------------------------------------------
+# Customer-operations ontology (P0 task ①).
+# ---------------------------------------------------------------------------
+from yunwei_win.models.operations import (
+    ActionLog,
+    ActionTargetType,
+    Delivery,
+    DeliveryStatus,
+    InvoicePaymentAllocation,
+    NextAction,
+    NextActionStatus,
+    NextActionType,
+    OrderItem,
+)
+
+# ---------------------------------------------------------------------------
+# Procurement / inventory ontology (锦泰 主线 — supplier / material /
+# stock movement / issue voucher / requisition / PO / receipt / payable /
+# stock alert).
+# ---------------------------------------------------------------------------
+from yunwei_win.models.procurement import (
+    GoodsReceipt,
+    IssueVoucher,
+    IssueVoucherStatus,
+    Material,
+    MaterialKind,
+    Payable,
+    PayableStatus,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    PurchaseOrderStatus,
+    PurchaseRequisition,
+    PurchaseRequisitionItem,
+    PurchaseRequisitionSource,
+    PurchaseRequisitionStatus,
+    StockAlert,
+    StockAlertLevel,
+    StockMovement,
+    StockMovementDirection,
+    StockMovementReferenceType,
+    Supplier,
+)
+
+# ---------------------------------------------------------------------------
+# Finance (会企 01/02/03 — chart of accounts + opening balances + fixed assets)
+# ---------------------------------------------------------------------------
+from yunwei_win.models.finance import (
+    AccountClass,
+    ChartOfAccount,
+    DEFAULT_CHART_OF_ACCOUNTS,
+    FixedAsset,
+    FixedAssetCategory,
+    FixedAssetStatus,
+    NormalBalance,
+    PeriodOpeningBalance,
+    StatementSection,
+)
+
+# ---------------------------------------------------------------------------
+# BOM (配料单) — 锦泰 demo "配料单 D" 用
+# ---------------------------------------------------------------------------
+from yunwei_win.models.bom import (
+    BillOfMaterials,
+    BillOfMaterialsLine,
+    BomStatus,
+)
+
 __all__ = [
     # profile
     "Contact", "ContactRole",
@@ -107,4 +174,28 @@ __all__ = [
     "DocumentExtraction", "DocumentExtractionStatus",
     # Parse record
     "DocumentParse", "DocumentParseStatus",
+    # Customer-operations ontology (P0 task ①)
+    "OrderItem",
+    "Delivery", "DeliveryStatus",
+    "InvoicePaymentAllocation",
+    "NextAction", "NextActionType", "NextActionStatus",
+    "ActionLog", "ActionTargetType",
+    # Procurement / inventory ontology (锦泰 主线)
+    "Supplier",
+    "Material", "MaterialKind",
+    "StockMovement", "StockMovementDirection", "StockMovementReferenceType",
+    "IssueVoucher", "IssueVoucherStatus",
+    "PurchaseRequisition", "PurchaseRequisitionItem",
+    "PurchaseRequisitionStatus", "PurchaseRequisitionSource",
+    "PurchaseOrder", "PurchaseOrderItem", "PurchaseOrderStatus",
+    "GoodsReceipt",
+    "Payable", "PayableStatus",
+    "StockAlert", "StockAlertLevel",
+    # Finance (会企 01/02/03)
+    "ChartOfAccount", "AccountClass", "StatementSection", "NormalBalance",
+    "PeriodOpeningBalance",
+    "FixedAsset", "FixedAssetCategory", "FixedAssetStatus",
+    "DEFAULT_CHART_OF_ACCOUNTS",
+    # BOM (配料单)
+    "BillOfMaterials", "BillOfMaterialsLine", "BomStatus",
 ]

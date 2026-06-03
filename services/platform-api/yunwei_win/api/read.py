@@ -103,10 +103,17 @@ def _contract_dict(k: Contract) -> dict:
         "payment_milestones": k.payment_milestones,
         "delivery_terms": k.delivery_terms,
         "penalty_terms": k.penalty_terms,
+        # Round 13: surface payment_terms + status + AI/人确认 audit trail so
+        # the 锦泰 contracts overlay can show what the user typically wants to
+        # scan first (账期, 履行状态, 谁确认的).
+        "payment_terms": k.payment_terms,
+        "status": k.status,
         "signing_date": k.signing_date.isoformat() if k.signing_date else None,
         "effective_date": k.effective_date.isoformat() if k.effective_date else None,
         "expiry_date": k.expiry_date.isoformat() if k.expiry_date else None,
         "confidence_overall": k.confidence_overall,
+        "human_verified": bool(getattr(k, "human_verified", False)),
+        "verified_by": getattr(k, "verified_by", None),
         "created_at": k.created_at.isoformat(),
     }
 

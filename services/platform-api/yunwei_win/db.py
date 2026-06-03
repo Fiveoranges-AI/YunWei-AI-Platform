@@ -207,6 +207,35 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
     )
     from yunwei_win.models.document_extraction import DocumentExtraction
     from yunwei_win.models.document_parse import DocumentParse
+    from yunwei_win.models.operations import (
+        ActionLog,
+        Delivery,
+        InvoicePaymentAllocation,
+        NextAction,
+        OrderItem,
+    )
+    from yunwei_win.models.procurement import (
+        GoodsReceipt,
+        IssueVoucher,
+        Material,
+        Payable,
+        PurchaseOrder,
+        PurchaseOrderItem,
+        PurchaseRequisition,
+        PurchaseRequisitionItem,
+        StockAlert,
+        StockMovement,
+        Supplier,
+    )
+    from yunwei_win.models.finance import (
+        ChartOfAccount,
+        FixedAsset,
+        PeriodOpeningBalance,
+    )
+    from yunwei_win.models.bom import (
+        BillOfMaterials,
+        BillOfMaterialsLine,
+    )
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -223,6 +252,31 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         CustomerJournalItem.__table__,
         DocumentParse.__table__,
         DocumentExtraction.__table__,
+        # Customer-operations ontology (P0 task ①)
+        OrderItem.__table__,
+        Delivery.__table__,
+        InvoicePaymentAllocation.__table__,
+        NextAction.__table__,
+        ActionLog.__table__,
+        # Procurement / inventory ontology (锦泰 主线)
+        Supplier.__table__,
+        Material.__table__,
+        StockMovement.__table__,
+        IssueVoucher.__table__,
+        PurchaseRequisition.__table__,
+        PurchaseRequisitionItem.__table__,
+        PurchaseOrder.__table__,
+        PurchaseOrderItem.__table__,
+        GoodsReceipt.__table__,
+        Payable.__table__,
+        StockAlert.__table__,
+        # Finance (会企 01/02/03)
+        ChartOfAccount.__table__,
+        PeriodOpeningBalance.__table__,
+        FixedAsset.__table__,
+        # BOM (配料单)
+        BillOfMaterials.__table__,
+        BillOfMaterialsLine.__table__,
     ]
 
     async with engine.begin() as conn:
@@ -232,6 +286,7 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
             )
         )
         await _run_lightweight_tenant_migrations(conn)
+        await _backfill_material_unit_costs(conn)
         if conn.dialect.name == "postgresql":
             # Existing tenant DBs were provisioned before extraction_id
             # existed on ingest_jobs. ALTER ... IF NOT EXISTS
@@ -259,6 +314,34 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
     idempotent column migration before ORM queries touch those mappers.
     """
 
+    # Cross-cutting columns added by the customer-operations ontology (P0
+    # task ①). The same shape lands on every "core business" table: row-level
+    # provenance / human verification / audit / ownership / soft delete.
+    # ``RowProvenanceMixin.confidence`` is omitted from tables that already
+    # have their own ``confidence`` column (e.g. customer_risk_signals).
+    ONTOLOGY_FULL_MIXINS: dict[str, str] = {
+        "source_type": "VARCHAR(32)",
+        "source_ref": "VARCHAR(255)",
+        "source_span": "JSON",
+        "confidence": "NUMERIC(3, 2)",
+        "extracted_by": "VARCHAR(64)",
+        "human_verified": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "verified_by": "VARCHAR(128)",
+        "verified_at": "TIMESTAMP WITH TIME ZONE",
+        "created_by": "VARCHAR(128)",
+        "updated_by": "VARCHAR(128)",
+        "owner_user_id": "VARCHAR(128)",
+        "team_id": "VARCHAR(128)",
+        "is_deleted": "BOOLEAN NOT NULL DEFAULT FALSE",
+    }
+    # Same set with ``confidence`` stripped — for tables that already have a
+    # ``confidence`` column (e.g. customer_risk_signals) we keep the existing
+    # column and add only the source / verification / audit / ownership /
+    # soft-delete columns. See ``yunwei_win/models/_mixins.py``.
+    ONTOLOGY_MIXINS_NO_CONFIDENCE: dict[str, str] = {
+        k: v for k, v in ONTOLOGY_FULL_MIXINS.items() if k != "confidence"
+    }
+
     migrations: dict[str, dict[str, str]] = {
         "company_schema_fields": {
             "field_role": "VARCHAR(32) NOT NULL DEFAULT 'extractable'",
@@ -267,6 +350,7 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
         "customers": {
             "industry": "VARCHAR",
             "notes": "TEXT",
+            **ONTOLOGY_FULL_MIXINS,
         },
         "contacts": {
             "title": "VARCHAR",
@@ -274,6 +358,8 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
             "address": "VARCHAR",
             "wechat_id": "VARCHAR",
             "needs_review": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "is_key_decision_maker": "BOOLEAN NOT NULL DEFAULT FALSE",
+            **ONTOLOGY_FULL_MIXINS,
         },
         "contracts": {
             "customer_id": "UUID",
@@ -281,6 +367,46 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
             "amount_currency": "VARCHAR(8)",
             "delivery_terms": "TEXT",
             "penalty_terms": "TEXT",
+            "payment_terms": "TEXT",
+            "status": "VARCHAR(32)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "orders": {
+            "order_no": "VARCHAR(128)",
+            "contract_id": "UUID",
+            "order_date": "DATE",
+            "status": "VARCHAR(32)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "products": {
+            "reference_unit_price": "NUMERIC(18, 4)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "invoices": {
+            "buyer_tax_id": "VARCHAR(32)",
+            "contract_id": "UUID",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "invoice_items": {
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "payments": {
+            "amount_due": "NUMERIC(18, 4)",
+            "due_date": "DATE",
+            "status": "VARCHAR(32)",
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "shipments": {
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "shipment_items": {
+            **ONTOLOGY_FULL_MIXINS,
+        },
+        "customer_risk_signals": {
+            "risk_score": "NUMERIC(5, 2)",
+            "target_entity_type": "VARCHAR(32)",
+            "target_entity_id": "UUID",
+            **ONTOLOGY_MIXINS_NO_CONFIDENCE,
         },
         "customer_tasks": {
             "document_id": "UUID",
@@ -314,6 +440,10 @@ async def _run_lightweight_tenant_migrations(conn) -> None:
         },
         "ingest_jobs": {
             "extraction_id": "UUID",
+        },
+        # Procurement / inventory (锦泰 主线 — finance reports 加 last_unit_cost)
+        "procurement_materials": {
+            "last_unit_cost": "NUMERIC(18, 4) NOT NULL DEFAULT 0",
         },
     }
 
@@ -351,6 +481,44 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
             for col in inspect(sync_conn).get_columns(table_name)
         }
     )
+
+
+async def _backfill_material_unit_costs(conn) -> None:
+    """Cold-start backfill: 把 ``procurement_materials.last_unit_cost = 0`` 的
+    物料按它"最近一笔 received PO item.unit_price" 回填.
+
+    Idempotent — 已有 unit_cost > 0 的物料不会被覆盖. Cross-dialect (用 Python
+    端聚合最新值, 不依赖 ``DISTINCT ON`` / ``ROW_NUMBER``). 表/列缺失时安全返回.
+    """
+    if not await _table_exists(conn, "procurement_materials"):
+        return
+    if not await _table_exists(conn, "procurement_purchase_order_items"):
+        return
+    if not await _column_exists(conn, "procurement_materials", "last_unit_cost"):
+        return
+
+    rows = (await conn.execute(text("""
+        SELECT m.id AS material_id, poi.unit_price, po.received_at
+        FROM procurement_materials m
+        JOIN procurement_purchase_order_items poi ON poi.material_id = m.id
+        JOIN procurement_purchase_orders po ON po.id = poi.po_id
+        WHERE (m.last_unit_cost IS NULL OR m.last_unit_cost = 0)
+          AND poi.unit_price IS NOT NULL
+          AND po.received_at IS NOT NULL
+        ORDER BY po.received_at DESC
+    """))).all()
+
+    latest_by_material: dict = {}
+    for row in rows:
+        mid = row.material_id
+        if mid not in latest_by_material:
+            latest_by_material[mid] = row.unit_price
+
+    for mid, price in latest_by_material.items():
+        await conn.execute(
+            text("UPDATE procurement_materials SET last_unit_cost = :p WHERE id = :id"),
+            {"p": price, "id": mid},
+        )
 
 
 async def ensure_schema_ingest_tables_for(enterprise_id: str) -> None:
