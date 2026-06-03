@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AppShell } from "./components/AppShell";
+import { HomeScreen } from "./screens/Home";
 import { CustomerListScreen } from "./screens/CustomerList";
 import { CustomerDetailScreen } from "./screens/CustomerDetail";
 import { UploadScreen } from "./screens/Upload";
@@ -9,6 +10,7 @@ import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
 
 export type ScreenName =
+  | "home"
   | "list"
   | "detail"
   | "upload"
@@ -16,7 +18,7 @@ export type ScreenName =
   | "review"
   | "ask"
   | "profile";
-export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile";
+export type TabName = "home" | "customers" | "inbox" | "upload" | "ask" | "profile";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -26,6 +28,7 @@ export type ScreenStackEntry = {
 export type GoFn = (name: ScreenName, params?: Record<string, string>) => void;
 
 const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
+  home: "home",
   list: "customers",
   detail: undefined,
   upload: "upload",
@@ -36,6 +39,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
 };
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
+  home: "home",
   customers: "list",
   inbox: "inbox",
   upload: "upload",
@@ -44,8 +48,8 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabName>("customers");
-  const [stack, setStack] = useState<ScreenStackEntry[]>([{ name: "list" }]);
+  const [activeTab, setActiveTab] = useState<TabName>("home");
+  const [stack, setStack] = useState<ScreenStackEntry[]>([{ name: "home" }]);
 
   const go: GoFn = (name, params = {}) => {
     const tab = SCREEN_TO_TAB[name];
@@ -73,6 +77,8 @@ export function App() {
 
 function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
   switch (entry.name) {
+    case "home":
+      return <HomeScreen go={go} />;
     case "list":
       return <CustomerListScreen go={go} />;
     case "detail":

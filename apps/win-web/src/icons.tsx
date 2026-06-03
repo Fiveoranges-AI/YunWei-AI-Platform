@@ -224,4 +224,11 @@ export const I = {
       <path d="M12 7v5l3 2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   ),
+  home: (s = 22, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M4 11l8-6 8 6" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 10v9h12v-9" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 19v-5h4v5" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 } as const satisfies Record<string, IconFn>;
