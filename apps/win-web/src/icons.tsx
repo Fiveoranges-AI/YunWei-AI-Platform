@@ -224,6 +224,13 @@ export const I = {
       <path d="M12 7v5l3 2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   ),
+  home: (s = 22, c = "currentColor") => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+      <path d="M4 11l8-6 8 6" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 10v9h12v-9" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 19v-5h4v5" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   grid: (s = 14, c = "currentColor") => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
       <rect x="4" y="4" width="7" height="7" rx="1.5" fill={c} fillOpacity="0.18" stroke={c} strokeWidth="1.6" />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
+import { HomeScreen } from "./screens/Home";
 import { CustomerListScreen } from "./screens/CustomerList";
 import { CustomerDetailScreen } from "./screens/CustomerDetail";
 import { UploadScreen } from "./screens/Upload";
@@ -11,6 +12,7 @@ import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
 import { ConfirmDemoScreen } from "./screens/ConfirmDemo";
 
 export type ScreenName =
+  | "home"
   | "list"
   | "detail"
   | "upload"
@@ -20,7 +22,7 @@ export type ScreenName =
   | "profile"
   | "jintai"
   | "confirmDemo";
-export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
+export type TabName = "home" | "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -30,6 +32,7 @@ export type ScreenStackEntry = {
 export type GoFn = (name: ScreenName, params?: Record<string, string>) => void;
 
 const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
+  home: "home",
   list: "customers",
   detail: undefined,
   upload: "upload",
@@ -42,6 +45,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
 };
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
+  home: "home",
   customers: "list",
   inbox: "inbox",
   upload: "upload",
@@ -53,18 +57,18 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
 function readInitialScreen(): ScreenStackEntry {
   // Allow `?screen=confirmDemo` for the P0 task ③ demo page so it can be
   // exercised without adding a permanent tab. Anything else falls back to
-  // the customer list.
+  // the home capture desk.
   if (typeof window === "undefined") return { name: "list" };
   const params = new URLSearchParams(window.location.search);
   const name = params.get("screen");
   if (name === "confirmDemo") return { name: "confirmDemo" };
-  return { name: "list" };
+  return { name: "home" };
 }
 
 export function App() {
   const initial = readInitialScreen();
   const [activeTab, setActiveTab] = useState<TabName>(
-    SCREEN_TO_TAB[initial.name] ?? "customers",
+    SCREEN_TO_TAB[initial.name] ?? "home",
   );
   const [stack, setStack] = useState<ScreenStackEntry[]>([initial]);
 
@@ -72,7 +76,7 @@ export function App() {
     function onPop() {
       const next = readInitialScreen();
       setStack([next]);
-      setActiveTab(SCREEN_TO_TAB[next.name] ?? "customers");
+      setActiveTab(SCREEN_TO_TAB[next.name] ?? "home");
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -104,6 +108,8 @@ export function App() {
 
 function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
   switch (entry.name) {
+    case "home":
+      return <HomeScreen go={go} />;
     case "list":
       return <CustomerListScreen go={go} />;
     case "detail":

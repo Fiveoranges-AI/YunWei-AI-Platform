@@ -8,7 +8,7 @@ type SideItem = {
 };
 
 const LEFT: SideItem[] = [
-  { id: "customers", sub: "客户", icon: I.customers },
+  { id: "home", sub: "首页", icon: I.home },
   { id: "inbox", sub: "上传记录", icon: I.layers },
 ];
 

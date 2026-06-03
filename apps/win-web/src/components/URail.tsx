@@ -8,6 +8,7 @@ type Item = {
 };
 
 const ITEMS: Item[] = [
+  { id: "home", label: "首页", icon: I.home },
   { id: "customers", label: "客户", icon: I.customers },
   { id: "inbox", label: "上传记录", icon: I.layers },
   { id: "ask", label: "AI 助手", icon: I.ask },
