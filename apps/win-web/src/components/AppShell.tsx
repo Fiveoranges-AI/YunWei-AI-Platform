@@ -17,6 +17,7 @@ type Props = {
 type ViewMeta = { title: string; sub: string };
 
 const VIEW_META: Record<TabName, ViewMeta> = {
+  home: { title: "首页", sub: "捕捉资料 · AI 待确认 · 今日简报" },
   customers: { title: "客户经营档案", sub: "AI 客户摘要 · 风险 · 规格记忆" },
   inbox: { title: "上传记录", sub: "AI 抽取队列 · 待确认 · 历史" },
   upload: { title: "添加资料", sub: "AI 自动归类匹配" },
@@ -122,8 +123,8 @@ export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, childre
 }
 
 function detailLikeBackground(screen: ScreenName): string {
-  // Upload + profile + ask use a softer surface; list/detail/inbox are white.
-  if (screen === "upload" || screen === "profile") return "var(--surface-2)";
+  // Home + upload + profile + ask use a softer surface; list/detail/inbox are white.
+  if (screen === "home" || screen === "upload" || screen === "profile") return "var(--surface-2)";
   if (screen === "ask") return "var(--surface-2)";
   if (screen === "jintai") return "var(--bg)";
   if (screen === "guangtian") return "var(--bg)";

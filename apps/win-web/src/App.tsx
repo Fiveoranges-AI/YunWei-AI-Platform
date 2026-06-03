@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AppShell } from "./components/AppShell";
+import { HomeScreen } from "./screens/Home";
 import { CustomerListScreen } from "./screens/CustomerList";
 import { CustomerDetailScreen } from "./screens/CustomerDetail";
 import { UploadScreen } from "./screens/Upload";
@@ -11,6 +12,7 @@ import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
 import { GuangtianDemoPage } from "./screens/guangtian/GuangtianDemoPage";
 
 export type ScreenName =
+  | "home"
   | "list"
   | "detail"
   | "upload"
@@ -20,7 +22,7 @@ export type ScreenName =
   | "profile"
   | "jintai"
   | "guangtian";
-export type TabName = "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai" | "guangtian";
+export type TabName = "home" | "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai" | "guangtian";
 
 export type ScreenStackEntry = {
   name: ScreenName;
@@ -30,6 +32,7 @@ export type ScreenStackEntry = {
 export type GoFn = (name: ScreenName, params?: Record<string, string>) => void;
 
 const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
+  home: "home",
   list: "customers",
   detail: undefined,
   upload: "upload",
@@ -42,6 +45,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
 };
 
 const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
+  home: "home",
   customers: "list",
   inbox: "inbox",
   upload: "upload",
@@ -52,9 +56,9 @@ const TAB_TO_SCREEN: Record<TabName, ScreenName> = {
 };
 
 function initialTabFromUrl(): TabName {
-  if (typeof window === "undefined") return "customers";
+  if (typeof window === "undefined") return "home";
   const requested = new URLSearchParams(window.location.search).get("tab") ?? window.location.hash.slice(1);
-  return requested && requested in TAB_TO_SCREEN ? (requested as TabName) : "customers";
+  return requested && requested in TAB_TO_SCREEN ? (requested as TabName) : "home";
 }
 
 export function App() {
@@ -89,6 +93,8 @@ export function App() {
 
 function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
   switch (entry.name) {
+    case "home":
+      return <HomeScreen go={go} />;
     case "list":
       return <CustomerListScreen go={go} />;
     case "detail":
