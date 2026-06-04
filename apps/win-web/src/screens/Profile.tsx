@@ -3,6 +3,23 @@ import type { GoFn } from "../App";
 import { getMe, type CurrentUser } from "../api/client";
 import { I } from "../icons";
 import { useIsDesktop, useIsTablet } from "../lib/breakpoints";
+import {
+  autoSyncLabel,
+  loadPrefs,
+  reminderSummary,
+  type SettingsPrefs,
+} from "../lib/settingsPrefs";
+import {
+  AccountSecurityPanel,
+  AutoSyncPanel,
+  ClearExtractionsPanel,
+  DataExportPanel,
+  EditProfilePanel,
+  RemindersPanel,
+  TeamPanel,
+} from "../components/settings/SettingsPanels";
+
+type PanelKey = "edit" | "account" | "team" | "reminders" | "autosync" | "export" | "clear";
 
 export function ProfileScreen({ go: _go }: { go: GoFn }) {
   const isDesktop = useIsDesktop();
@@ -10,12 +27,17 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
   const isWide = isDesktop || isTablet;
   const [me, setMe] = useState<CurrentUser | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
+  const [prefs, setPrefs] = useState<SettingsPrefs>(() => loadPrefs(""));
 
   useEffect(() => {
     let cancelled = false;
     getMe()
       .then((user) => {
-        if (!cancelled) setMe(user);
+        if (!cancelled) {
+          setMe(user);
+          setPrefs(loadPrefs(user.id));
+        }
       })
       .catch((e) => {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "账号信息加载失败");
@@ -24,6 +46,9 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
       cancelled = true;
     };
   }, []);
+
+  const userId = me?.id ?? "";
+  const refreshPrefs = () => setPrefs(loadPrefs(userId));
 
   async function handleLogout() {
     try {
@@ -53,13 +78,50 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
         ? "未绑定企业"
         : "正在读取真实账号";
 
-  const settings: { icon: ReactNode; label: string; sub?: string }[] = [
-    { icon: I.shield(16), label: "账号与安全", sub: me?.username },
-    { icon: I.layers(16), label: "团队 · 权限", sub: enterpriseName ? `${enterpriseName}` : "未绑定企业" },
-    { icon: I.bookmark(14), label: "提醒设置", sub: "回款 · 风险 · 续约 · 规格" },
-    { icon: I.cloud(16), label: "自动同步", sub: "每 4 小时" },
-    { icon: I.doc(16), label: "数据导出", sub: "导出 CSV · PDF · 备份" },
-    { icon: I.warn(16), label: "清理 AI 提取记录" },
+  const settings: {
+    icon: ReactNode;
+    label: string;
+    sub?: string;
+    onClick: () => void;
+    disabled?: boolean;
+  }[] = [
+    {
+      icon: I.shield(16),
+      label: "账号与安全",
+      sub: me?.username,
+      onClick: () => me && setOpenPanel("account"),
+      disabled: !me,
+    },
+    {
+      icon: I.layers(16),
+      label: "团队 · 权限",
+      sub: enterpriseName || "未绑定企业",
+      onClick: () => me && setOpenPanel("team"),
+      disabled: !me,
+    },
+    {
+      icon: I.bookmark(14),
+      label: "提醒设置",
+      sub: reminderSummary(prefs.reminders),
+      onClick: () => setOpenPanel("reminders"),
+    },
+    {
+      icon: I.cloud(16),
+      label: "自动同步",
+      sub: autoSyncLabel(prefs.autoSync),
+      onClick: () => setOpenPanel("autosync"),
+    },
+    {
+      icon: I.doc(16),
+      label: "数据导出",
+      sub: "导出 CSV · PDF · 备份",
+      onClick: () => setOpenPanel("export"),
+    },
+    {
+      icon: I.warn(16),
+      label: "清理 AI 提取记录",
+      onClick: () => setOpenPanel("clear"),
+    },
   ];
 
   return (
@@ -134,6 +196,8 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
             </div>
           </div>
           <button
+            onClick={() => me && setOpenPanel("edit")}
+            disabled={!me}
             style={{
               height: 36,
               padding: "0 14px",
@@ -143,7 +207,8 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
               border: "1px solid var(--ink-200)",
               fontSize: 13,
               fontWeight: 600,
-              cursor: "pointer",
+              cursor: me ? "pointer" : "not-allowed",
+              opacity: me ? 1 : 0.5,
               fontFamily: "var(--font)",
             }}
           >
@@ -205,6 +270,8 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
           {settings.map((it, i) => (
             <button
               key={it.label}
+              onClick={it.onClick}
+              disabled={it.disabled}
               style={{
                 width: "100%",
                 display: "flex",
@@ -214,7 +281,8 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
                 background: "transparent",
                 border: "none",
                 borderBottom: i < settings.length - 1 ? "1px solid var(--ink-100)" : "none",
-                cursor: "pointer",
+                cursor: it.disabled ? "not-allowed" : "pointer",
+                opacity: it.disabled ? 0.5 : 1,
                 textAlign: "left",
                 fontFamily: "var(--font)",
               }}
@@ -275,6 +343,33 @@ export function ProfileScreen({ go: _go }: { go: GoFn }) {
           v0.1.0 · Five Oranges AI · 智通客户
         </div>
       </div>
+
+      {openPanel === "edit" && me && (
+        <EditProfilePanel
+          me={me}
+          onSaved={(name) => setMe((prev) => (prev ? { ...prev, display_name: name } : prev))}
+          onClose={() => setOpenPanel(null)}
+        />
+      )}
+      {openPanel === "account" && me && (
+        <AccountSecurityPanel me={me} onClose={() => setOpenPanel(null)} />
+      )}
+      {openPanel === "team" && me && (
+        <TeamPanel
+          enterpriseId={enterprise?.id ?? null}
+          enterpriseName={enterpriseName}
+          myUserId={me.id}
+          onClose={() => setOpenPanel(null)}
+        />
+      )}
+      {openPanel === "reminders" && (
+        <RemindersPanel userId={userId} onChanged={refreshPrefs} onClose={() => setOpenPanel(null)} />
+      )}
+      {openPanel === "autosync" && (
+        <AutoSyncPanel userId={userId} onChanged={refreshPrefs} onClose={() => setOpenPanel(null)} />
+      )}
+      {openPanel === "export" && <DataExportPanel onClose={() => setOpenPanel(null)} />}
+      {openPanel === "clear" && <ClearExtractionsPanel onClose={() => setOpenPanel(null)} />}
     </div>
   );
 }

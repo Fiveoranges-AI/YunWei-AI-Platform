@@ -88,6 +88,27 @@ def me(request: Request):
     }
 
 
+@router.patch("/api/me")
+def update_me(request: Request, body: dict = Body(...)):
+    """Update the caller's own profile. Currently only ``display_name``.
+
+    Session-cookie authenticated like the rest of ``/api/*`` (no CSRF
+    header — same-origin SOP covers it, see ``firewall.check_request``).
+    The user row is read fresh on every ``/api/me`` call, so no cache
+    invalidation is needed for the new name to show up.
+    """
+    user = _user_from_request(request)
+    if "display_name" not in body:
+        raise HTTPException(400, {"error": "nothing_to_update", "message": "没有可更新的字段"})
+    display_name = (body.get("display_name") or "").strip()
+    if len(display_name) < 1 or len(display_name) > 64:
+        raise HTTPException(400, {"error": "invalid_display_name", "message": "显示名 1-64 字"})
+    db.main().execute(
+        "UPDATE users SET display_name=%s WHERE id=%s", (display_name, user["id"]),
+    )
+    return {"ok": True, "display_name": display_name}
+
+
 @router.get("/api/agents")
 def agents(request: Request):
     user = _user_from_request(request)
@@ -230,6 +251,41 @@ def logout(request: Request, response: Response):
         auth.revoke_session(sid)
     response.delete_cookie("app_session", path="/")
     response.delete_cookie("app_csrf", path="/")
+    return {"ok": True}
+
+
+@router.post("/api/auth/change-password")
+def change_password(request: Request, body: dict = Body(...)):
+    """Change the caller's own password.
+
+    Verifies the current password (constant-time bcrypt), enforces the
+    same ≥8-char rule as registration, then revokes every *other* session
+    so a leaked cookie elsewhere is logged out. The current session stays
+    valid so the caller isn't bounced to the login page.
+    """
+    user = _user_from_request(request)
+    current = body.get("current_password") or ""
+    new = body.get("new_password") or ""
+    if len(new) < 8:
+        raise HTTPException(400, {"error": "password_too_short", "message": "新密码至少 8 位"})
+    row = db.main().execute(
+        "SELECT password_hash FROM users WHERE id=%s", (user["id"],),
+    ).fetchone()
+    if not row or not auth.verify_password(current, row["password_hash"]):
+        raise HTTPException(403, {"error": "wrong_password", "message": "当前密码不正确"})
+    if auth.verify_password(new, row["password_hash"]):
+        raise HTTPException(400, {"error": "password_unchanged", "message": "新密码不能与当前密码相同"})
+    db.main().execute(
+        "UPDATE users SET password_hash=%s WHERE id=%s",
+        (auth.hash_password(new), user["id"]),
+    )
+    # Log out other devices; keep this session alive.
+    others = db.main().execute(
+        "SELECT id FROM platform_sessions WHERE user_id=%s AND id != %s",
+        (user["id"], user["session_id"]),
+    ).fetchall()
+    for r in others:
+        auth.revoke_session(r["id"])
     return {"ok": True}
 
 
