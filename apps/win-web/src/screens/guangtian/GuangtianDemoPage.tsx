@@ -47,7 +47,7 @@ const TABS: {
   { key: "ledger", label: "库存流水", hint: "每一笔变动可追溯", icon: I.clock, color: "var(--guangtian-blue)" },
   { key: "shortage", label: "缺货预警", hint: "本周订单发不发得出", icon: I.warn, color: "var(--guangtian-red)" },
   { key: "replenish", label: "AI 补产建议", hint: "下一批排什么", icon: I.factory, color: "var(--ai-purple)" },
-  { key: "ask", label: "问问 AI", hint: "中文问，秒答", icon: I.chat, color: "var(--ai-purple)" },
+  { key: "ask", label: "老板助手", hint: "推荐问题点一下即得", icon: I.chat, color: "var(--ai-purple)" },
   { key: "report", label: "AI 库存日报", hint: "老板 5 分钟看完", icon: I.calendar, color: "var(--brand-700)" },
 ];
 
@@ -81,8 +81,8 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
     sub: "AI 综合订单 / 出货趋势 / 安全库存 / 生产周期，给出本周补什么 + 补多少。",
   },
   ask: {
-    title: "问问 AI 库存管家",
-    sub: "中文问任意问题，AI 拿实时库存 / 流水 / 订单作答，每条结论都附数据来源。",
+    title: "老板助手",
+    sub: "不用打字——点推荐问题，AI 拿实时库存 / 流水 / 订单算出结构化结果，每条附数据来源。",
   },
   report: {
     title: "AI 库存日报",

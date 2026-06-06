@@ -63,6 +63,13 @@ export function ShortageAlertPanel() {
         <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--ink-400)" }}>
           AI 已于 10:18 完成最新核对
         </span>
+        {/* spec: 工作台/预警要给"未来 3 天 / 7 天风险" */}
+        <div style={{ flexBasis: "100%", fontSize: 11.5, color: "var(--ink-600)", paddingTop: 2 }}>
+          <strong style={{ color: "var(--guangtian-red)" }}>未来 3 天风险 {urg + hi} 笔</strong>
+          （{urg} 紧急 + {hi} 高）
+          <span style={{ color: "var(--ink-300)", margin: "0 8px" }}>·</span>
+          未来 7 天风险 <strong>{urg + hi + mid} 笔</strong>（含 {mid} 中风险）
+        </div>
       </div>
 
       {/* 订单卡片 */}

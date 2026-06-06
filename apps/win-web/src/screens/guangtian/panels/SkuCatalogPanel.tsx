@@ -45,6 +45,84 @@ export function SkuCatalogPanel() {
 
   return (
     <div>
+      {/* spec #1: SKU 标准化中心 —— 库存不准的根因是命名混乱,这块讲清"AI 把多种叫法归一" */}
+      <div
+        className="card"
+        style={{
+          padding: "18px 20px",
+          marginBottom: 16,
+          borderTop: "3px solid var(--guangtian-blue)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--ink-900)" }}>SKU 标准化中心</h2>
+          <span style={{ fontSize: 12, color: "var(--ink-500)" }}>
+            库存不准的根因 = SKU 命名混乱。AI 把同一产品的多种叫法归一到一个标准编码。
+          </span>
+        </div>
+        {/* 归一示例:一眼看懂"这4个名字其实是同一个SKU" */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "12px 14px",
+            background: "var(--surface-2)",
+            borderRadius: 10,
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: 1, minWidth: 220 }}>
+            {["30级莫来石砖", "30莫来石砖", "ML30砖", "莫来石30"].map((alias) => (
+              <span
+                key={alias}
+                style={{
+                  fontSize: 11.5,
+                  color: "var(--ink-500)",
+                  background: "#fff",
+                  border: "1px dashed var(--ink-200)",
+                  padding: "3px 9px",
+                  borderRadius: 6,
+                  textDecoration: "line-through",
+                  textDecorationColor: "var(--ink-300)",
+                }}
+              >
+                {alias}
+              </span>
+            ))}
+          </div>
+          <span style={{ fontSize: 16, color: "var(--ai-purple-deep)", fontWeight: 800 }}>→</span>
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              color: "#fff",
+              background: "var(--guangtian-blue)",
+              padding: "6px 12px",
+              borderRadius: 8,
+              letterSpacing: "0.01em",
+            }}
+          >
+            ML-30-230×114×65
+          </span>
+        </div>
+        {/* 编码规范:材质-等级-规格,让老板一眼看懂 */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 11.5, color: "var(--ink-600)" }}>
+          <span><strong style={{ color: "var(--ink-800)" }}>编码规范</strong> 材质-等级-规格</span>
+          {[
+            ["ML-30-230×114×65", "莫来石砖"],
+            ["GA-75-230×114×65", "高铝砖"],
+            ["JG-80-25KG", "浇注料"],
+          ].map(([code, label]) => (
+            <span key={code}>
+              <code style={{ fontWeight: 700, color: "var(--guangtian-blue)" }}>{code}</code>
+              <span style={{ color: "var(--ink-400)" }}> = {label}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
       {/* iter G9: 筛选条精简 — 搜索 + 高级筛选折叠按钮 + AI 主 CTA */}
       <div
         className="card"

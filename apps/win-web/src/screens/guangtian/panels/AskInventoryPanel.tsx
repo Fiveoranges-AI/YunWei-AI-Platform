@@ -25,7 +25,7 @@ type AnswerBlock = {
 };
 
 const PRESET_ANSWERS: Record<string, AnswerBlock> = {
-  "今天哪些产品库存不够？": {
+  "哪些 SKU 快缺货？": {
     conclusion:
       "今天 3 个 SKU 低于安全线，其中 1 个已完全缺货：\n• 🔴 JC-16 浇注料 — 库存 0 / 安全 200（缺货 14 天）\n• 🟡 M70 莫来石砖 — 库存 320 / 安全 800（11 天耗尽）\n• 🟡 AL90 高纯刚玉砖 — 库存 78 / 安全 200",
     evidence: [
@@ -43,7 +43,7 @@ const PRESET_ANSWERS: Record<string, AnswerBlock> = {
       { label: "去 AI 补产建议 一键挂工艺组", target: "replenish" },
     ],
   },
-  "江苏宏泰订单现在能不能发？": {
+  "哪些订单可能发不出去？": {
     conclusion:
       "江苏宏泰 2 笔在手订单，1 紧急 + 1 可发：\n• 🚨 SO-20260519-001 · 5/22 交付 · 仅 23% 可发（JC-16 完全缺货 200 袋 / JC18-LR 60 袋齐）\n• 🟢 SO-20260519-002 · 5/25 交付 · 100% 可发（JC18-LR 60 袋齐备）",
     evidence: [
@@ -61,7 +61,7 @@ const PRESET_ANSWERS: Record<string, AnswerBlock> = {
       { label: "去出库登记 操作分批发货", target: "ledger" },
     ],
   },
-  "哪些 SKU 最近出库最快？": {
+  "最近出库最快的产品是什么？": {
     conclusion:
       "近 7 天出库 TOP 3：\n• #1 JT-HLZ-230-114-65 高铝砖 — 累计出货 4,800 块（占总 35%）\n• #2 JT-JZL-JC18-LR 低水泥浇注料 — 320 袋（占 18%）\n• #3 JT-MLS-M70 莫来石砖 — 280 块（占 15%）\n\n高铝砖出货异常高，疑似单一大客户集中采购（宜兴华能 5/19 一单 1,500 块）。",
     evidence: [
@@ -75,7 +75,7 @@ const PRESET_ANSWERS: Record<string, AnswerBlock> = {
     ],
     links: [{ label: "去库存流水 看完整出货明细", target: "ledger" }],
   },
-  "哪些产品可能漏记了？": {
+  "今天库管有没有异常操作？": {
     conclusion:
       "AI 流水交叉比对，发现 2 条疑似漏记 / 数据异常：\n• JT-GZB-AL80 刚玉砖 — 5/18 盘点账实差 +12 块（待复核）\n• JT-HLZ-T3-150 高铝砖 — 5/18 调拨方向异常（B-05 备货区 → A-04 常备区 +1,200，与低活跃标签矛盾）",
     evidence: [
@@ -92,7 +92,7 @@ const PRESET_ANSWERS: Record<string, AnswerBlock> = {
       { label: "去 SKU 档案 看 AL80 状态", target: "sku" },
     ],
   },
-  "明天应该优先生产什么？": {
+  "未来 3 天优先生产什么？": {
     conclusion:
       "AI 综合 7 个在手订单 + 30 天出货趋势 + 安全库存 + 窑炉空闲 4 天，明日（5/21）排产推荐：\n\n#1 JC-16 浇注料 200 袋（紧急，对应江苏宏泰 SO-20260519-001 + 安全库存补 200）\n#2 M70 莫来石砖 600 块（高，对应常州新材 SO-003）\n\n若产能允许，可同步排产 #3 AL90 250 块（中优，下周四前需用）。",
     evidence: [
@@ -226,10 +226,10 @@ export function AskInventoryPanel({ onGoTab }: AskProps = {}) {
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--ink-900)" }}>
-              AI 库存管家
+              老板助手
             </h3>
             <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 2 }}>
-              用中文问，秒答 · 每条结论附数据来源
+              点推荐问题，直接给结构化结果 · 每条附数据来源
             </div>
           </div>
           <span

@@ -371,11 +371,11 @@ export const replenishmentItems: ReplenishmentItem[] = [
 
 // ---- 问问 AI 库存管家 (iter G11: 对齐 spec 5 个) ----
 export const askPresets = [
-  "今天哪些产品库存不够？",
-  "江苏宏泰订单现在能不能发？",
-  "哪些 SKU 最近出库最快？",
-  "哪些产品可能漏记了？",
-  "明天应该优先生产什么？",
+  "哪些 SKU 快缺货？",
+  "哪些订单可能发不出去？",
+  "未来 3 天优先生产什么？",
+  "最近出库最快的产品是什么？",
+  "今天库管有没有异常操作？",
 ];
 
 export const askSampleConversation = [

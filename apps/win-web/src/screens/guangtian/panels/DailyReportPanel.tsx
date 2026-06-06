@@ -130,6 +130,58 @@ export function DailyReportPanel() {
           </div>
         </header>
 
+        {/* spec: 老板只看这一页 — 一眼五个数 + 建议补产 + 预计影响订单 */}
+        <section
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+            marginBottom: 14,
+          }}
+        >
+          {[
+            { n: "1,286", l: "SKU 总数", c: "var(--ink-900)" },
+            { n: "46", l: "低库存", c: "var(--stock-low)" },
+            { n: "3", l: "高风险", c: "var(--guangtian-red)" },
+            { n: "18", l: "今日入库", c: "var(--stock-ok)" },
+            { n: "23", l: "今日出库", c: "var(--guangtian-blue)" },
+          ].map((s) => (
+            <div
+              key={s.l}
+              style={{
+                flex: "1 1 90px",
+                minWidth: 90,
+                padding: "10px 12px",
+                border: "1px solid var(--ink-100)",
+                borderRadius: 10,
+                background: "#fff",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 800, color: s.c, lineHeight: 1.1, fontFamily: "var(--font-display)" }}>{s.n}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 3, fontWeight: 600 }}>{s.l}</div>
+            </div>
+          ))}
+        </section>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            alignItems: "center",
+            padding: "10px 14px",
+            background: "var(--ai-100, #F3F0FF)",
+            borderRadius: 10,
+            marginBottom: 20,
+            fontSize: 12.5,
+          }}
+        >
+          <span style={{ fontWeight: 800, color: "var(--ai-purple-deep)" }}>✦ AI 建议补产</span>
+          <span style={{ color: "var(--ink-800)" }}>莫来石砖 600 块 · 高铝砖 800 块 · 浇注料 400 袋</span>
+          <span style={{ color: "var(--ink-300)" }}>|</span>
+          <span style={{ color: "var(--ink-700)" }}>预计影响订单 <strong style={{ color: "var(--guangtian-red)" }}>3 个</strong></span>
+        </div>
+
         {/* 摘要 */}
         <section
           style={{

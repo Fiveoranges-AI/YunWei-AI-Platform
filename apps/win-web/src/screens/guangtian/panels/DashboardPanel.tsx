@@ -85,6 +85,74 @@ export function DashboardPanel({ onGoTab }: Props) {
 
   return (
     <div>
+      {/* spec: 顶部「今日必须处理的三件事」—— 老板进来第一眼就知道今天要干嘛 */}
+      <section
+        className="card"
+        style={{
+          padding: "16px 20px 14px",
+          marginBottom: 20,
+          borderTop: "3px solid var(--guangtian-red)",
+        }}
+      >
+        <header
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            marginBottom: 12,
+            gap: 8,
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--ink-900)", letterSpacing: "-0.01em" }}>
+            今日必须处理的三件事
+          </h2>
+          <span style={{ fontSize: 11.5, color: "var(--ink-400)" }}>
+            AI 已从 {dashboardAlerts.length} 条风险里挑出最该先处理的 3 件
+          </span>
+        </header>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {topAlerts.map((a, i) => {
+            const emoji = a.level === "high" ? "🔴" : a.level === "medium" ? "🟡" : "🟢";
+            const target = a.cta === "查看缺货预警" ? "shortage" : a.cta === "去 AI 补产建议" ? "replenish" : "shortage";
+            return (
+              <button
+                key={i}
+                onClick={() => { onGoTab(target); showToast(`已跳转 · ${a.title}`, "info"); }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  border: "1px solid var(--ink-100)",
+                  background: a.level === "high" ? "rgba(217,32,32,0.045)" : a.level === "medium" ? "rgba(245,158,11,0.05)" : "var(--surface-2)",
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                  transition: "transform 0.12s ease, box-shadow 0.12s ease",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "var(--shadow-card-hover)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = ""; }}
+              >
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{emoji}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)", lineHeight: 1.35 }}>
+                    {a.title}
+                  </span>
+                  <span style={{ display: "block", fontSize: 11.5, color: "var(--ink-600)", lineHeight: 1.5, marginTop: 2 }}>
+                    {a.body}
+                  </span>
+                </span>
+                <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--guangtian-red)" }}>
+                  处理 →
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {/* KPI 卡片 - iter G10: 全卡可点跳对应 tab */}
       <section
         style={{
@@ -217,15 +285,15 @@ export function DashboardPanel({ onGoTab }: Props) {
                   color: "var(--ink-900)",
                 }}
               >
-                今日要紧的事
+                全部库存风险
               </h3>
             </div>
             <span style={{ fontSize: 11, color: "var(--ink-400)" }}>
-              Top 3 · 共 {dashboardAlerts.length} 条
+              共 {dashboardAlerts.length} 条
             </span>
           </header>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-            {topAlerts.map((a, i) => {
+            {dashboardAlerts.map((a, i) => {
               const s = LEVEL_STYLES[a.level];
               return (
                 <li
@@ -335,7 +403,7 @@ export function DashboardPanel({ onGoTab }: Props) {
               {I.chat(14, "var(--ai-purple-deep)")}
             </span>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--ink-900)" }}>
-              问问 AI 库存管家
+              老板助手
             </h3>
           </header>
           <p

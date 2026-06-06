@@ -176,7 +176,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
             查看 SKU 档案
           </button>
           <button onClick={onGoAsk} style={ctaAccent}>
-            问问 AI 库存管家
+            问老板助手
           </button>
         </div>
       </div>
