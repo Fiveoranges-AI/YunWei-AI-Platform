@@ -42,7 +42,7 @@ const LEVEL_STYLES: Record<
 
 export function DashboardPanel({ onGoTab }: Props) {
   const isDesktop = useIsDesktop();
-  const { skuStocks, setPendingAsk, showToast, todayInboundCount, todayOutboundCount } = useGT();
+  const { skuStocks, showToast, todayInboundCount, todayOutboundCount } = useGT();
 
   // iter G18: KPI 数字与 Donut + 日报对齐
   // 低库存 46 = filter(2 条演示) + 44 模拟（与 DIST 中 46 / dailyReport "46 个 SKU" 一致）
@@ -78,9 +78,9 @@ export function DashboardPanel({ onGoTab }: Props) {
   // iter G9: 快捷问题 6 → 4
   const topQuickAsks = dashboardQuickAsks.slice(0, 4);
 
-  const onAskQuestion = (q: string) => {
-    setPendingAsk(q);
-    onGoTab("ask");
+  // R2: 老板助手 tab 已砍 —— 这些速查问题改为直接跳「缺货预警」(真业务页)
+  const onAskQuestion = (_q: string) => {
+    onGoTab("shortage");
   };
 
   return (
@@ -113,7 +113,7 @@ export function DashboardPanel({ onGoTab }: Props) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {topAlerts.map((a, i) => {
             const emoji = a.level === "high" ? "🔴" : a.level === "medium" ? "🟡" : "🟢";
-            const target = a.cta === "查看缺货预警" ? "shortage" : a.cta === "去 AI 补产建议" ? "replenish" : "shortage";
+            const target = "shortage"; // R2: 补产 tab 已砍,风险一律跳缺货预警
             return (
               <button
                 key={i}
@@ -351,7 +351,7 @@ export function DashboardPanel({ onGoTab }: Props) {
                     {a.cta && (
                       <button
                         onClick={() => {
-                          const target = a.cta === "查看缺货预警" ? "shortage" : "replenish";
+                          const target = "shortage";
                           onGoTab(target);
                           showToast(`已跳转 · ${a.cta}`, "info");
                         }}
@@ -403,7 +403,7 @@ export function DashboardPanel({ onGoTab }: Props) {
               {I.chat(14, "var(--ai-purple-deep)")}
             </span>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--ink-900)" }}>
-              老板助手
+              缺货速查
             </h3>
           </header>
           <p
@@ -414,7 +414,7 @@ export function DashboardPanel({ onGoTab }: Props) {
               lineHeight: 1.5,
             }}
           >
-            老板手机一句话，AI 拿实时库存秒答。
+            老板关心的问题，点一下直接看「缺货预警」答案。
           </p>
 
           {/* iter G9: quick asks 6 → 4; iter G10: 点击自动填入问问 AI tab */}

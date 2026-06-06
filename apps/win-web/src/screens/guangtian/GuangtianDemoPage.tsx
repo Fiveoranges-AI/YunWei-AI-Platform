@@ -11,14 +11,11 @@ import { InboundPanel } from "./panels/InboundPanel";
 import { OutboundPanel } from "./panels/OutboundPanel";
 import { LedgerPanel } from "./panels/LedgerPanel";
 import { ShortageAlertPanel } from "./panels/ShortageAlertPanel";
-import { ReplenishmentPanel } from "./panels/ReplenishmentPanel";
-import { AskInventoryPanel } from "./panels/AskInventoryPanel";
-import { DailyReportPanel } from "./panels/DailyReportPanel";
 import { readInitialMode, writeModeToUrl, type BackendMode } from "./backendMode";
 import { resolveBrand, brandCssVars } from "./branding";
 import { GuangtianBackendModePanel } from "./GuangtianBackendModePanel";
 import {
-  GuangtianKpiOverlay, GuangtianLedgerOverlay, GuangtianReplenishOverlay,
+  GuangtianKpiOverlay, GuangtianLedgerOverlay,
   GuangtianShortageOverlay, GuangtianSkuOverlay,
 } from "./GuangtianBackendOverlays";
 
@@ -46,10 +43,9 @@ const TABS: {
   { key: "outbound", label: "出库登记", hint: "客户订单 出库", icon: I.upload, color: "var(--guangtian-blue)" },
   { key: "ledger", label: "库存流水", hint: "每一笔变动可追溯", icon: I.clock, color: "var(--guangtian-blue)" },
   { key: "shortage", label: "缺货预警", hint: "本周订单发不发得出", icon: I.warn, color: "var(--guangtian-red)" },
-  { key: "replenish", label: "AI 补产建议", hint: "下一批排什么", icon: I.factory, color: "var(--ai-purple)" },
-  { key: "ask", label: "老板助手", hint: "推荐问题点一下即得", icon: I.chat, color: "var(--ai-purple)" },
-  { key: "report", label: "AI 库存日报", hint: "老板 5 分钟看完", icon: I.calendar, color: "var(--brand-700)" },
 ];
+// R2 砍 tab：AI 补产建议 / 老板助手 / AI 日报 三个"展示性"tab 从导航移除——
+// MVP 只留可付费核心闭环（录入→库存→流水→预警→看板）。面板代码保留未删。
 
 const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
   dashboard: {
@@ -324,7 +320,7 @@ function GuangtianDemoInner() {
           <GuangtianHero
             onGoSku={() => switchTab("sku")}
             onGoInbound={() => switchTab("inbound")}
-            onGoAsk={() => switchTab("ask")}
+            onGoAsk={() => switchTab("shortage")}
           />
           <DashboardPanel onGoTab={(t) => switchTab(t as TabKey)} />
         </div>
@@ -352,18 +348,7 @@ function GuangtianDemoInner() {
           <ShortageAlertPanel />
         </div>
 
-        <div role="tabpanel" hidden={activeTab !== "replenish"}>
-          <GuangtianReplenishOverlay enabled={backend} />
-          <ReplenishmentPanel onGoShortage={() => switchTab("shortage")} />
-        </div>
-
-        <div role="tabpanel" hidden={activeTab !== "ask"}>
-          <AskInventoryPanel onGoTab={(t) => switchTab(t as TabKey)} />
-        </div>
-
-        <div role="tabpanel" hidden={activeTab !== "report"}>
-          <DailyReportPanel />
-        </div>
+        {/* R2: 补产建议 / 老板助手 / 日报 三个 tabpanel 已随导航砍掉 */}
 
         {/* footer */}
         <div

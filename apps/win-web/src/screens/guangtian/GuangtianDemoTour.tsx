@@ -1,7 +1,8 @@
 // iter G12-B: 一键演示模式 — 顶部固定控制条 + 6 步剧本 + 总结
 import { useGT } from "./state";
 
-// iter G13: 单向 6 步从左到右 — inbound → ledger → shortage → replenish → ask → report
+// R2: 砍到 4 步核心闭环 — 乱(拍照单据) → AI 结构化录入 → 实时流水 → 缺货预警 → 老板看板。
+// 删掉原 5/6 步(老板助手/日报)+ 去掉"置信度 96%"等装饰话术。
 export const DEMO_STEPS: {
   id: number;
   tab: string;
@@ -12,44 +13,30 @@ export const DEMO_STEPS: {
   {
     id: 1,
     tab: "inbound",
-    title: "AI 单据录入 · 识别出货单",
-    narration: "销售刚发来「常州新材出货单」拍照。AI 识别：刚玉砖 AL90 × 150 件 / 关联 SO-20260519-003，整体置信度 96%。",
-    badge: "📷 出货单_常州新材_20260520.jpg",
+    title: "乱数据进来 → AI 抽成结构化",
+    narration: "库管把销售微信发来的「常州新材出货单」拍照传上来。AI 自动抽出：刚玉砖 AL90 × 150 件 / 关联订单 SO-20260519-003 / 日期 / 去向，库管点一下确认即可——不用再手敲 Excel。",
+    badge: "📷 出货单_常州新材.jpg → 已结构化",
   },
   {
     id: 2,
     tab: "ledger",
-    title: "写入库存流水 · AI 置信度",
-    narration: "AL90 出库 -150 件写入流水（置信度 96% 已确认）。AI 同时标记 3 条历史流水待王主管复核（含 1 条置信度仅 62%）。",
-    badge: "⏳ 3 条待确认",
+    title: "确认即写入流水 · 每笔可追溯",
+    narration: "AL90 出库 -150 件实时写入库存流水，谁录的、来源哪张单、什么时候，一清二楚。账实不再靠月底盘点对。",
+    badge: "✓ 已写入 · 库存实时更新",
   },
   {
     id: 3,
     tab: "shortage",
-    title: "扣减后触发缺货预警",
-    narration: "AL90 库存扣减后剩余不足，AI 立刻把 SO-20260519-003 标为高风险，预计可发货 72%、缺 72 件。",
-    badge: "⚠ SO-20260519-003 高风险",
+    title: "库存一变 → 缺货预警自动跳",
+    narration: "AL90 扣减后不够发，AI 立刻把订单 SO-20260519-003 标红：可发 72%、缺 72 件。老板不用等库管汇报。",
+    badge: "🔴 SO-20260519-003 高风险",
   },
   {
     id: 4,
-    tab: "replenish",
-    title: "加入本周补产计划",
-    narration: "AI 把 AL90 列为本周补产，建议补 250 件（5/26 出炉）。一键挂工艺组陈工，绿色徽章亮起。",
-    badge: "✓ AL90 已入计划",
-  },
-  {
-    id: 5,
-    tab: "ask",
-    title: "老板问 AI · 明天优先排产什么",
-    narration: "陈总微信问一句：「明天应该优先生产什么？」AI 立刻拿订单+库存+生产周期算出答案，附数据来源。",
-    badge: "✦ AI 综合答案",
-  },
-  {
-    id: 6,
-    tab: "report",
-    title: "今日库存日报自动收录",
-    narration: "18:30 自动生成日报：今日新增 AL90 出货、新缺货预警 1 条、补产 3 SKU 已挂工艺组。一键发陈总微信。",
-    badge: "📅 日报已就绪",
+    tab: "dashboard",
+    title: "老板看板 · 一眼今天该处理什么",
+    narration: "回到看板：今天必须处理的三件事直接摆在最上面，缺不缺、缺哪几个、谁还没录，30 秒看完。这就是替代 Excel 的那一页。",
+    badge: "📋 老板 30 秒看完",
   },
 ];
 
@@ -70,13 +57,12 @@ export function GuangtianDemoTour() {
             DEMO COMPLETE
           </div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--ink-900)", lineHeight: 1.3 }}>
-            全程 90 秒：<br />
-            <span style={{ color: "var(--guangtian-red)" }}>一张照片</span> → AI 识别 →
-            库存更新 → <span style={{ color: "var(--guangtian-red)" }}>风险预警</span> →
-            补产决策。
+            全程 60 秒：<br />
+            <span style={{ color: "var(--guangtian-red)" }}>微信里一张乱图</span> → AI 抽成结构化 →
+            库管点一下确认 → 库存实时准 → <span style={{ color: "var(--guangtian-red)" }}>缺货自动预警</span>。
           </h2>
           <p style={{ margin: "12px 0 16px", fontSize: 13, color: "var(--ink-600)", lineHeight: 1.65 }}>
-            这就是 AI 库存管家 — 让 1,000+ SKU 自己讲话，告别 Excel 与人工记忆。
+            把您现在的 Excel + 库管手工维护，换成"拍照即录、库存即准、缺货即知"。这一页老板每天 30 秒看完。
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <button

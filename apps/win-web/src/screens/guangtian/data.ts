@@ -145,7 +145,7 @@ export const dashboardAlerts: RiskAlert[] = [
     level: "high",
     title: "JT-MLS-M70 莫来石砖 低于安全线",
     body: "当前 320 块 / 安全 800 块 · 按近 30 天均日出货 28 块/天计，约 11 天耗尽 · 下游订单常州新材 5 月底交付。",
-    cta: "去 AI 补产建议",
+    cta: "查看缺货预警",
   },
   {
     level: "medium",
