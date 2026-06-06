@@ -18,50 +18,61 @@ const SKU_OPTIONS = [
   { code: "JT-GZB-AL90",       name: "高纯刚玉砖 AL90",   unit: "块", loc: "C-02" },
 ];
 
-// iter G11: AI 单据上传识别三段 mock 模板
+// AI 单据录入 mock 模板（先走 mock：前端 deterministic，无需 API key / 后端）。
+// 三份"乱数据"样本 → 三种不同结果，含至少一条低置信度字段，演示"AI 先填、人确认"。
 type DocIngestState = "idle" | "scanning" | "result";
 const DOC_PRESETS = [
+  // 样本 A · 销售微信发来的入库通知截图（最常见的"乱"）
   {
-    kind: "📄 江苏华峰采购入库单 · 扫描件.pdf",
+    kind: "📷 销售微信·入库通知_莫来石ML30.jpg",
     fields: [
-      { key: "SKU 编码", value: "JT-GZB-AL80", conf: 98 },
-      { key: "产品名称", value: "刚玉砖 AL80 等级", conf: 96 },
-      { key: "数量", value: "300", conf: 99 },
-      { key: "批次", value: "P20260520-J3", conf: 94 },
-      { key: "库位", value: "C-01", conf: 92 },
-      { key: "供应商", value: "江苏华峰耐火", conf: 89 },
-      { key: "采购单号", value: "PO-2026-0091", conf: 76 },
-      { key: "送货日期", value: "2026-05-20 11:30", conf: 84 },
+      { key: "SKU 编码", value: "ML-30-230×114×65", conf: 95 },
+      { key: "产品名称", value: "莫来石砖 30 级 标准型", conf: 93 },
+      { key: "数量", value: "500", conf: 97 },
+      { key: "单位", value: "块", conf: 99 },
+      { key: "批次", value: "P20260601-02", conf: 90 },
+      { key: "来源", value: "销售微信 · 常州新材到货通知", conf: 86 },
+      { key: "关联订单", value: "SO-20260601-007", conf: 68 },
+      { key: "日期", value: "2026-06-01", conf: 88 },
     ],
     anomalies: [
-      "采购单号 PO-2026-0091 在系统中未找到，疑似遗漏录入或编号笔误",
-      "批次号 P20260520-J3 含字母 J，与近 30 天命名规则不一致（建议 P20260520-03）",
+      "关联订单 SO-20260601-007 置信度仅 68%——微信图该处反光，AI 没把握，已标黄提醒库管核对",
+      "「30级莫来石砖」已自动归一到标准编码 ML-30-230×114×65",
     ],
   },
+  // 样本 B · 供应商纸质送货单（扫描/拍照）
   {
-    kind: "📷 王主管 5/20 13:42 拍照入库单.jpg",
+    kind: "📄 供应商纸质送货单_浇注料JG80.pdf",
     fields: [
-      { key: "SKU 编码", value: "JT-HLZ-230-114-65", conf: 95 },
-      { key: "产品名称", value: "高铝砖（标准型）", conf: 97 },
-      { key: "数量", value: "600", conf: 98 },
-      { key: "批次", value: "P20260520-02", conf: 92 },
-      { key: "库位", value: "A-03", conf: 96 },
-      { key: "操作人", value: "王主管", conf: 88 },
+      { key: "SKU 编码", value: "JG-80-25KG", conf: 97 },
+      { key: "产品名称", value: "浇注料 JG-80（25kg/袋）", conf: 95 },
+      { key: "数量", value: "120", conf: 98 },
+      { key: "单位", value: "袋", conf: 99 },
+      { key: "供应商", value: "江苏华峰耐火", conf: 92 },
+      { key: "送货单号", value: "DN-2026-0517", conf: 89 },
+      { key: "批次", value: "JG20260531", conf: 84 },
+      { key: "送货日期", value: "2026-06-01", conf: 90 },
     ],
-    anomalies: ["照片角度倾斜 12°，AI 已自动校正后识别"],
+    anomalies: [
+      "送货单号 DN-2026-0517 在系统中未匹配到采购单，建议确认是否计划外到货",
+    ],
   },
-  // iter G12-B: 演示模式专用 — 常州新材出库单（AL90 × 150）
+  // 样本 C · 月底盘点 Excel 调整表
   {
-    kind: "📷 出货单_常州新材_20260520.jpg",
+    kind: "📊 月底盘点调整表_2026-06.xlsx",
     fields: [
-      { key: "SKU 编码", value: "JT-GZB-AL90", conf: 98 },
-      { key: "产品名称", value: "高纯刚玉砖 AL90", conf: 97 },
-      { key: "数量", value: "150", conf: 99 },
-      { key: "关联订单", value: "SO-20260519-003", conf: 96 },
-      { key: "客户", value: "常州新材科技", conf: 94 },
-      { key: "送货日期", value: "2026-05-28", conf: 88 },
+      { key: "SKU 编码", value: "GA-75-230×114×65", conf: 99 },
+      { key: "产品名称", value: "高铝砖 75 级 标准型", conf: 98 },
+      { key: "调整类型", value: "盘点调整（账实差）", conf: 96 },
+      { key: "数量", value: "12", conf: 95 },
+      { key: "库位", value: "A-03", conf: 97 },
+      { key: "盘点单号", value: "PD-20260531", conf: 91 },
+      { key: "差异原因", value: "（Excel 备注栏为空）", conf: 62 },
+      { key: "经办", value: "张仓管", conf: 88 },
     ],
-    anomalies: ["AL90 当前库存仅 78 件，需求 150 件，缺口 72 件 — 触发缺货预警"],
+    anomalies: [
+      "差异原因置信度仅 62%——Excel 备注栏为空，AI 无法判断，需库管补充后再确认",
+    ],
   },
 ];
 
@@ -123,15 +134,30 @@ export function InboundPanel() {
     window.setTimeout(() => setDocState("result"), 1500);
   };
 
+  // 深链 ?doc=0|1|2 直接展示对应示例的 AI 识别结果（演示/截图用,可跳过 1.5s 扫描）。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const d = new URLSearchParams(window.location.search).get("doc");
+    const idx = d === "0" ? 0 : d === "1" ? 1 : d === "2" ? 2 : null;
+    if (idx !== null) {
+      setDocPreset(DOC_PRESETS[idx]);
+      setDocState("result");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // iter G13: demo step 1 内完成完整识别流程（scanning 1.2s → result）。
   // 步 1 单独占一个 tab 时间，不再依赖步 2（步 2 已切到流水 tab）。
   useEffect(() => {
+    // 深链 ?doc= 优先：不要被 demoStep=0 的 idle 重置覆盖
+    const hasDocParam =
+      typeof window !== "undefined" && new URLSearchParams(window.location.search).get("doc") !== null;
     if (demoStep === 1) {
-      setDocPreset(DOC_PRESETS[2]); // 常州新材出库单
+      setDocPreset(DOC_PRESETS[0]); // 样本 A · 销售微信入库通知 (ML-30)
       setDocState("scanning");
       const t = window.setTimeout(() => setDocState("result"), 1200);
       return () => window.clearTimeout(t);
-    } else if (demoStep === 0) {
+    } else if (demoStep === 0 && !hasDocParam) {
       setDocState("idle");
     }
     // 注：step 2-6 不重置 docState — 用户切回 inbound tab 仍能看到识别结果
@@ -589,7 +615,7 @@ function DocIngestSection({
 }: {
   state: DocIngestState;
   preset: (typeof DOC_PRESETS)[number];
-  onUpload: (idx: 0 | 1) => void;
+  onUpload: (idx: 0 | 1 | 2) => void;
   onApply: () => void;
   onCancel: () => void;
 }) {
@@ -624,44 +650,38 @@ function DocIngestSection({
         </span>
         <div style={{ flex: 1, minWidth: 220 }}>
           <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)" }}>
-            AI 单据录入 · 上传扫描件 / 拍照
+            AI 单据录入 · 把乱数据拍上来，AI 抽成结构化
           </h3>
           <div style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 3 }}>
-            AI 自动识别字段 → 复核 → 入库（90% 字段免手工）
+            微信图 / 送货单 / Excel 都行 → AI 识别字段 → 库管 1 秒确认（90% 字段免手敲）
           </div>
         </div>
-        <button
-          onClick={() => onUpload(0)}
-          style={{
-            padding: "7px 12px",
-            fontSize: 11.5,
-            fontWeight: 700,
-            borderRadius: 7,
-            border: "none",
-            background: "var(--ai-purple)",
-            color: "#fff",
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-          }}
-        >
-          📄 上传采购单 PDF
-        </button>
-        <button
-          onClick={() => onUpload(1)}
-          style={{
-            padding: "7px 12px",
-            fontSize: 11.5,
-            fontWeight: 600,
-            borderRadius: 7,
-            border: "1px solid var(--ai-purple)",
-            background: "#fff",
-            color: "var(--ai-purple-deep)",
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-          }}
-        >
-          📷 王主管拍照入库单
-        </button>
+        <div style={{ flexBasis: "100%", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11.5, color: "var(--ink-500)", fontWeight: 600 }}>📎 没有单据？试试示例：</span>
+          {[
+            { idx: 0 as const, label: "📷 销售微信入库单", primary: true },
+            { idx: 1 as const, label: "📄 供应商送货单", primary: false },
+            { idx: 2 as const, label: "📊 盘点 Excel", primary: false },
+          ].map((b) => (
+            <button
+              key={b.idx}
+              onClick={() => onUpload(b.idx)}
+              style={{
+                padding: "7px 12px",
+                fontSize: 11.5,
+                fontWeight: b.primary ? 700 : 600,
+                borderRadius: 7,
+                border: b.primary ? "none" : "1px solid var(--ai-purple)",
+                background: b.primary ? "var(--ai-purple)" : "#fff",
+                color: b.primary ? "#fff" : "var(--ai-purple-deep)",
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+              }}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -816,6 +836,10 @@ function DocIngestSection({
           手工录入
         </button>
       </div>
+      <div style={{ marginTop: 10, fontSize: 10.5, color: "var(--ink-400)", lineHeight: 1.5 }}>
+        ⓘ 本演示为 mock 抽取（按文件名 deterministic 生成，无需联网/API key）。生产部署后接 Claude / GPT
+        真 LLM，<strong>页面结构与确认流程完全一致</strong>，仅字段抽取的智能度提升。
+      </div>
     </div>
   );
 }
@@ -858,8 +882,9 @@ function FieldRow({
   field: { key: string; value: string; conf: number };
   highlight?: boolean;
 }) {
+  // ≥90 绿（有把握）/ 70–90 黄（建议复核）/ <70 红（AI 没把握，必须人确认）
   const confColor =
-    field.conf >= 90 ? "var(--stock-ok)" : field.conf >= 75 ? "var(--stock-low)" : "var(--guangtian-red)";
+    field.conf >= 90 ? "var(--stock-ok)" : field.conf >= 70 ? "var(--stock-low)" : "var(--guangtian-red)";
   return (
     <div
       style={{
