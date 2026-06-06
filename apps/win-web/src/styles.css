@@ -38,6 +38,19 @@
   --navy-900: #1d2b44;
   --navy-700: #2a3c5c;
 
+  /* guangtian / inventory-OS demo tokens (additive — new vars, not used by
+     existing jintai/win-customer; safe to add for the 光天 tab). */
+  --ai-purple:      #7B5CFA;
+  --ai-purple-deep: #5B3FE0;
+  --guangtian-red:      #D92020;
+  --guangtian-red-50:   #FBE6E6;
+  --guangtian-red-soft: #E04949;
+  --guangtian-blue:     #1A3F8E;
+  --guangtian-blue-dark:#102A66;
+  --stock-ok:   #1B7F3A;
+  --stock-low:  #F59E0B;
+  --stock-out:  #C32629;
+
   /* AI accent — lighter cyan-blue */
   --ai-900: #0c3d70;
   --ai-700: #1565a8;

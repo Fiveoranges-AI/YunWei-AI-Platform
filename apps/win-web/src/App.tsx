@@ -9,6 +9,7 @@ import { ReviewScreen } from "./screens/Review";
 import { AskScreen } from "./screens/Ask";
 import { ProfileScreen } from "./screens/Profile";
 import { JintaiDemoPage } from "./screens/jintai/JintaiDemoPage";
+import { GuangtianDemoPage } from "./screens/guangtian/GuangtianDemoPage";
 import { ConfirmDemoScreen } from "./screens/ConfirmDemo";
 
 export type ScreenName =
@@ -21,6 +22,7 @@ export type ScreenName =
   | "ask"
   | "profile"
   | "jintai"
+  | "guangtian"
   | "confirmDemo";
 export type TabName = "home" | "customers" | "inbox" | "upload" | "ask" | "profile" | "jintai";
 
@@ -41,6 +43,7 @@ const SCREEN_TO_TAB: Record<ScreenName, TabName | undefined> = {
   ask: "ask",
   profile: "profile",
   jintai: "jintai",
+  guangtian: undefined, // 光天: URL 深链可达,但不进共享导航栏(只给邹总的 dashboard 卡入口)
   confirmDemo: undefined,
 };
 
@@ -62,6 +65,10 @@ function readInitialScreen(): ScreenStackEntry {
   const params = new URLSearchParams(window.location.search);
   const name = params.get("screen");
   if (name === "confirmDemo") return { name: "confirmDemo" };
+  // ?tab= deep-link (dashboard cards link here, e.g. /win/?tab=guangtian).
+  const tab = params.get("tab");
+  if (tab === "guangtian") return { name: "guangtian" };
+  if (tab && tab in TAB_TO_SCREEN) return { name: TAB_TO_SCREEN[tab as TabName] };
   return { name: "home" };
 }
 
@@ -126,6 +133,8 @@ function CurrentScreen({ entry, go }: { entry: ScreenStackEntry; go: GoFn }) {
       return <ProfileScreen go={go} />;
     case "jintai":
       return <JintaiDemoPage />;
+    case "guangtian":
+      return <GuangtianDemoPage />;
     case "confirmDemo":
       return <ConfirmDemoScreen go={go} />;
   }
