@@ -1,0 +1,130 @@
+name: provision-user
+# One-shot, manually-triggered provisioning of a customer login directly in
+# the PRODUCTION database. Built so a login (e.g. 邹总 / 光天) can be created
+# without anyone running a CLI by hand — and WITHOUT the password ever
+# touching git or logs.
+#
+# ── HOW TO RUN (boss, one time) ──────────────────────────────────────────
+# 1. Add two repo secrets (Settings → Secrets and variables → Actions):
+#      PROVISION_DATABASE_URL  = the PRODUCTION Postgres connection string.
+#                                MUST be Railway's *public* URL (the one with
+#                                a host like *.proxy.rlwy.net:PORT) — the
+#                                internal *.railway.internal host is NOT
+#                                reachable from a GitHub runner. Copy it from
+#                                Railway → Postgres → Connect → "Public Network".
+#      PROVISION_PASSWORD      = the password you want 邹总 to log in with.
+#                                You type it into the GitHub Secret box; the
+#                                runner reads it from the env, masks it in
+#                                logs, and only its bcrypt hash hits the DB.
+# 2. Actions tab → "provision-user" → Run workflow. The inputs are already
+#    defaulted for 邹总; just click the green Run button.
+# 3. After it succeeds, DELETE the PROVISION_PASSWORD secret (optional — keep
+#    it only if you'll re-run to reset the password later).
+#
+# Password red line: the value lives only in the GitHub Secret and the masked
+# runner env. It is never committed, never printed, never written to a file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'Login username (user_id will be u_<username>)'
+        required: true
+        default: 'zou_zong'
+      display_name:
+        description: 'Display name'
+        required: true
+        default: '邹总'
+      email:
+        description: 'Email'
+        required: false
+        default: 'zou@gtnckj.com'
+      enterprise:
+        description: 'Enterprise id'
+        required: true
+        default: 'guangtian'
+      enterprise_name:
+        description: 'Enterprise display name'
+        required: true
+        default: '宜兴光天耐火材料'
+      role:
+        description: 'Role in the enterprise'
+        required: true
+        default: 'owner'
+        type: choice
+        options: [owner, admin, member]
+      reset_password:
+        description: 'If the user already exists, reset their password to PROVISION_PASSWORD'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  provision:
+    name: Provision login in production DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — required secrets present
+        env:
+          DB: ${{ secrets.PROVISION_DATABASE_URL }}
+          PW: ${{ secrets.PROVISION_PASSWORD }}
+        run: |
+          [ -n "$DB" ] || { echo "::error::PROVISION_DATABASE_URL secret is not set (use Railway's PUBLIC Postgres URL)."; exit 1; }
+          [ -n "$PW" ] || { echo "::error::PROVISION_PASSWORD secret is not set."; exit 1; }
+          echo "secrets present"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+
+      - name: pip install platform_app (psycopg, bcrypt deps)
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . 2>/dev/null || pip install -e .
+
+      - name: Run provision_user.py against production DB
+        env:
+          DATABASE_URL: ${{ secrets.PROVISION_DATABASE_URL }}
+          PROVISION_PASSWORD: ${{ secrets.PROVISION_PASSWORD }}
+          # Required at import by settings.py but unused on this code path
+          # (no redis call: guangtian has no proxied tenants/agents).
+          REDIS_URL: 'redis://127.0.0.1:6379/0'
+          COOKIE_SECRET: 'provision-job-unused-cookie-secret-padding'
+        run: |
+          python scripts/admin/provision_user.py \
+            --username "${{ inputs.username }}" \
+            --display-name "${{ inputs.display_name }}" \
+            --email "${{ inputs.email }}" \
+            --enterprise "${{ inputs.enterprise }}" \
+            --enterprise-name "${{ inputs.enterprise_name }}" \
+            --role "${{ inputs.role }}" \
+            --password-env PROVISION_PASSWORD \
+            ${{ inputs.reset_password && '--reset-password' || '' }}
+
+      - name: Verify row exists (no password printed)
+        env:
+          DATABASE_URL: ${{ secrets.PROVISION_DATABASE_URL }}
+          REDIS_URL: 'redis://127.0.0.1:6379/0'
+          COOKIE_SECRET: 'provision-job-unused-cookie-secret-padding'
+        working-directory: services/platform-api
+        run: |
+          python - "${{ inputs.username }}" "${{ inputs.enterprise }}" <<'PY'
+          import sys
+          from platform_app import db
+          db.init()
+          username, eid = sys.argv[1], sys.argv[2]
+          uid = f"u_{username}"
+          u = db.main().execute("SELECT username FROM users WHERE id=%s", (uid,)).fetchone()
+          m = db.main().execute(
+              "SELECT role FROM enterprise_members WHERE user_id=%s AND enterprise_id=%s",
+              (uid, eid)).fetchone()
+          assert u, f"FAIL: user {uid} not in DB"
+          assert m, f"FAIL: membership ({uid}, {eid}) not in DB"
+          print(f"OK: user '{u['username']}' exists, member of '{eid}' as {m['role']}")
+          PY
