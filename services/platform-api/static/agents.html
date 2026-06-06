@@ -1270,6 +1270,39 @@
       `;
     }
 
+    /* 光天 · AI 库存管家 — /win/ 的 guangtian tab。仅光天 enterprise 成员可见
+       (邹总)，故 bootstrap 按 /api/me 的 enterprises 判定后才插入。不影响
+       智通客户(全员)/银湖石墨等现有卡片。 */
+    function buildGuangtianCard() {
+      return `
+        <a class="card card-featured" href="https://app.fiveoranges.ai/win/?tab=guangtian" data-real="guangtian/inventory-os">
+          <div class="card-head">
+            <div class="card-icon" style="background:linear-gradient(135deg,#e9eefb,#dbe6ff);color:#1A3F8E;">${ICON_WIN}</div>
+            <span class="status-pill" style="background:#fdeaea;color:#b21f1f;border-color:#f7d3d3;">
+              <span class="dot" style="background:#D92020;"></span>
+              试点<span class="en">· Pilot</span>
+            </span>
+          </div>
+          <div class="card-title">光天 · AI 库存管家</div>
+          <div class="card-role">AI Inventory OS · 替代 Excel 库存管理</div>
+          <div class="meta-grid">
+            <div class="meta-cell">
+              <div class="lbl">能力 · CAPABILITY</div>
+              <div class="v muted" style="font-size:13px;">SKU 标准化 · 实时库存 · 缺货预警</div>
+            </div>
+            <div class="meta-cell">
+              <div class="lbl">访问 · ACCESS</div>
+              <div class="v muted" style="font-size:13px;">光天团队</div>
+            </div>
+          </div>
+          <div class="card-foot">
+            <span style="font-size:11px;color:#1A3F8E;font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">宜兴光天耐火</span>
+            <span class="card-cta">进入<span class="en">Enter</span>${ICON_ARROW}</span>
+          </div>
+        </a>
+      `;
+    }
+
     function getInitial(name) {
       if (!name) return '·';
       return Array.from(name)[0];
@@ -1344,6 +1377,12 @@
       }
       // 智通客户 — always visible; sits after enterprise agents.
       grid.insertAdjacentHTML('afterbegin', buildWinCard());
+      // 光天 · AI 库存管家 — 仅光天 enterprise 成员可见(邹总)。其他用户(许总等)看不到。
+      const inGuangtian = !!(me && Array.isArray(me.enterprises)
+        && me.enterprises.some(e => (e && (e.id || e)) === 'guangtian'));
+      if (inGuangtian) {
+        grid.insertAdjacentHTML('afterbegin', buildGuangtianCard());
+      }
 
       const cards = document.querySelectorAll('.card');
       cards.forEach((c, i) => setTimeout(() => c.classList.add('in'), 120 + i * 80));
