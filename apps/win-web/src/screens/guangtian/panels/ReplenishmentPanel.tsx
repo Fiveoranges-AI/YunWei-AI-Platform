@@ -4,6 +4,7 @@ import { I } from "../../../icons";
 import { replenishmentItems } from "../data";
 import { useGT } from "../state";
 import { Spinner } from "../Toast";
+import { resolveBrand } from "../branding";
 
 type Props = { onGoShortage: () => void };
 
@@ -19,6 +20,7 @@ const PRIORITY_META: Record<
 export function ReplenishmentPanel(_props: Props) {
   const isDesktop = useIsDesktop();
   const { showToast, highlightSku, demoStep } = useGT();
+  const terms = resolveBrand().terms; // 行业话术随客户切换 (窑炉/工艺组 ↔ 产线/生产组)
   const [showSummary, setShowSummary] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [assigned, setAssigned] = useState<Set<string>>(new Set());
@@ -230,19 +232,67 @@ export function ReplenishmentPanel(_props: Props) {
                 </div>
               </div>
 
-              {/* iter G9: AI 理由仅 1 句概要 + 操作 */}
+              {/* AI 推理:展开综合的因子 + 置信度 + 结论,让老板看着像 AI 在算 */}
               <div>
-                <div
-                  style={{
-                    fontSize: 11.5,
-                    color: "var(--ink-600)",
-                    lineHeight: 1.55,
-                    marginBottom: 8,
-                  }}
-                >
-                  <strong style={{ color: "var(--ai-purple-deep)" }}>AI：</strong>
-                  {item.reason.split("·")[0].trim()}
-                </div>
+                {(() => {
+                  const parts = item.reason.split("·").map((s) => s.trim()).filter(Boolean);
+                  // 最后一段通常是结论(建议补到…),前面是 AI 权衡的因子
+                  const conclusion = parts.length > 1 ? parts[parts.length - 1] : "";
+                  const factors = parts.length > 1 ? parts.slice(0, -1) : parts;
+                  const conf = item.priority === "高" ? 94 : item.priority === "中" ? 90 : 87;
+                  return (
+                    <div style={{ marginBottom: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 6,
+                        }}
+                      >
+                        <strong style={{ fontSize: 11.5, color: "var(--ai-purple-deep)" }}>
+                          ✦ AI 推理 · 综合 {factors.length} 项因子
+                        </strong>
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: "var(--ai-purple-deep)",
+                            background: "var(--ai-100, #F3F0FF)",
+                            padding: "1px 7px",
+                            borderRadius: 999,
+                          }}
+                        >
+                          置信度 {conf}%
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 7 }}>
+                        {factors.map((f, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              fontSize: 11,
+                              color: "var(--ink-700)",
+                              background: "var(--surface-2)",
+                              border: "1px solid var(--ink-100)",
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                      {conclusion && (
+                        <div style={{ fontSize: 11.5, color: "var(--ink-800)", lineHeight: 1.55 }}>
+                          <strong style={{ color: "var(--ai-purple-deep)" }}>→ AI 结论：</strong>
+                          {conclusion}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button
                     style={{
@@ -252,7 +302,7 @@ export function ReplenishmentPanel(_props: Props) {
                     onClick={() => onAssign(item.sku, item.name)}
                     disabled={assigned.has(item.sku)}
                   >
-                    {assigned.has(item.sku) ? "✓ 已挂工艺组" : "挂到工艺组"}
+                    {assigned.has(item.sku) ? `✓ 已挂${terms.team}` : `挂到${terms.team}`}
                   </button>
                   <button
                     style={CTA_GHOST}
@@ -277,6 +327,7 @@ export function ReplenishmentPanel(_props: Props) {
 
 function ReplenishmentSummaryModal({ onClose }: { onClose: () => void }) {
   const { showToast } = useGT();
+  const terms = resolveBrand().terms;
   const total = replenishmentItems.reduce((acc, it) => acc + it.suggestQty, 0);
   return (
     <div
@@ -350,7 +401,7 @@ function ReplenishmentSummaryModal({ onClose }: { onClose: () => void }) {
           <div style={{ fontSize: 12, color: "var(--ai-700)", lineHeight: 1.65 }}>
             <strong style={{ color: "var(--ai-900)" }}>计划摘要：</strong>本周（5/19 – 5/25）共需补产{" "}
             <strong style={{ color: "var(--guangtian-red)" }}>{total.toLocaleString()}</strong> 单位，
-            覆盖 {replenishmentItems.length} 个紧迫 SKU。预计窑炉占用 4 天，工艺组人力 8 人 · 班。
+            覆盖 {replenishmentItems.length} 个紧迫 SKU。预计{terms.line}占用 4 天，{terms.team}人力 8 人 · 班。
             如本周生产能力允许，可同步排产 JT-HLZ-T3-150 备货 800 块（应对下周潜在订单）。
           </div>
         </div>
@@ -385,7 +436,7 @@ function ReplenishmentSummaryModal({ onClose }: { onClose: () => void }) {
               fontFamily: "var(--font)",
             }}
           >
-            发送给工艺组（陈工）
+            发送给{terms.team}（陈工）
           </button>
           <button
             onClick={onClose}

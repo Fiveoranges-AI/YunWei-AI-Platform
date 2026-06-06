@@ -1,5 +1,6 @@
 import { useIsDesktop } from "../../lib/breakpoints";
 import { DemoStartButton } from "./GuangtianDemoTour";
+import { resolveBrand } from "./branding";
 
 type Props = {
   onGoSku: () => void;
@@ -9,7 +10,8 @@ type Props = {
 
 export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
   const isDesktop = useIsDesktop();
-  const logo = `${import.meta.env.BASE_URL}guangtian-logo.png`;
+  const brand = resolveBrand();
+  const logo = `${import.meta.env.BASE_URL}${brand.logo}`;
   return (
     <section
       style={{
@@ -58,7 +60,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
           >
             <img
               src={logo}
-              alt="光天科技"
+              alt={brand.company}
               style={{
                 width: isDesktop ? 156 : 104,
                 height: "auto",
@@ -76,7 +78,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                 marginBottom: 6,
               }}
             >
-              YIXING GUANGTIAN REFRACTORY · AI 库存试点
+              {brand.companyEn} · AI 库存试点
             </div>
             {/* iter G14: 标题字号对调 — 公司名大主标题 + 产品名小副标 */}
             <h1
@@ -97,7 +99,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                   letterSpacing: "-0.015em",
                 }}
               >
-                宜兴光天耐火材料
+                {brand.company}
               </span>
               <span
                 style={{
@@ -107,9 +109,39 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                   letterSpacing: 0,
                 }}
               >
-                AI 库存管家
+                {brand.product}
               </span>
             </h1>
+            {/* 品类定位带 — 让老板 3 秒知道"这是什么、替代什么、不是什么" */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 10,
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  color: "#fff",
+                  background: "linear-gradient(90deg, var(--guangtian-blue), var(--ai-purple-deep, #6D28D9))",
+                  padding: "4px 11px",
+                  borderRadius: 999,
+                }}
+              >
+                AI Inventory OS
+              </span>
+              <span style={{ fontSize: 12.5, color: "var(--ink-700)", fontWeight: 600 }}>
+                替代 Excel + 人工库存
+              </span>
+              <span style={{ fontSize: 11.5, color: "var(--ink-400)" }}>
+                不是 ERP · 不是 WMS — 让 1,000+ SKU 自己讲话
+              </span>
+            </div>
             <p
               style={{
                 margin: "8px 0 0",
@@ -119,7 +151,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                 maxWidth: 620,
               }}
             >
-              知道有多少 · 每笔可查 · 缺货提前知道 · 老板直接问 — AI 替您管 1,000+ SKU。
+              {brand.tagline}
             </p>
           </div>
         </div>

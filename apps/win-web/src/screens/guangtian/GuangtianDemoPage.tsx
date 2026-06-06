@@ -15,6 +15,7 @@ import { ReplenishmentPanel } from "./panels/ReplenishmentPanel";
 import { AskInventoryPanel } from "./panels/AskInventoryPanel";
 import { DailyReportPanel } from "./panels/DailyReportPanel";
 import { readInitialMode, writeModeToUrl, type BackendMode } from "./backendMode";
+import { resolveBrand, brandCssVars } from "./branding";
 import { GuangtianBackendModePanel } from "./GuangtianBackendModePanel";
 import {
   GuangtianKpiOverlay, GuangtianLedgerOverlay, GuangtianReplenishOverlay,
@@ -167,9 +168,15 @@ function GuangtianDemoInner() {
 
   const head = TAB_HEAD[activeTab];
   const demoActive = demoStep > 0 && demoStep <= 6;
+  // 跨客户换肤: 把品牌色注入 CSS 变量,全站 var(--guangtian-*) 自动跟随
+  // (?customer=guangtian|jintai|yinhu|haina)。
+  const brand = resolveBrand();
 
   return (
-    <div className="scroll" style={{ flex: 1, background: "var(--bg)" }}>
+    <div
+      className="scroll"
+      style={{ flex: 1, background: "var(--bg)", ...brandCssVars(brand) }}
+    >
       <div
         style={{
           maxWidth: 1280,
@@ -283,7 +290,7 @@ function GuangtianDemoInner() {
               marginBottom: 6,
             }}
           >
-            光天试点 <span style={{ color: "var(--ink-300)" }}>/</span>{" "}
+            {brand.id === "guangtian" ? "光天试点" : brand.company} <span style={{ color: "var(--ink-300)" }}>/</span>{" "}
             <span style={{ color: "var(--guangtian-red)" }}>{head.title}</span>
           </div>
           <h2
