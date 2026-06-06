@@ -106,6 +106,17 @@ export function App() {
 
   const current = stack[stack.length - 1];
 
+  // 光天是独立品牌全屏页,不套智通客户的 AppShell(rail/header)——否则共享外壳里
+  // 硬编码的锦泰 tab 会泄漏进邹总的光天 tab(租户隔离)。这也补全了 guangtian
+  // SCREEN_TO_TAB=undefined「不进共享导航栏」的设计意图。
+  if (current.name === "guangtian") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "var(--bg)" }}>
+        <GuangtianDemoPage />
+      </div>
+    );
+  }
+
   return (
     <AppShell activeTab={activeTab} onTabChange={setTab} currentScreen={current.name} onAdd={() => go("upload")}>
       <CurrentScreen entry={current} go={go} />
