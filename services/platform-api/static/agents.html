@@ -748,21 +748,21 @@
               <span class="all">全部已读</span>
             </div>
             <div class="notif-list">
-              <button class="notif-item">
+              <button class="notif-item" data-demo-enterprise="yinhu">
                 <span class="notif-dot warning"></span>
                 <span class="notif-text">
                   <strong>报价引擎</strong> 收到 3 条新询价请求，等待审核
                   <span class="ts">12 分钟前 · 12 minutes ago</span>
                 </span>
               </button>
-              <button class="notif-item">
+              <button class="notif-item" data-demo-enterprise="yinhu">
                 <span class="notif-dot info"></span>
                 <span class="notif-text">
                   CEO 驾驶舱 周报已生成，可点击查看
                   <span class="ts">1 小时前 · 1 hour ago</span>
                 </span>
               </button>
-              <button class="notif-item">
+              <button class="notif-item" data-demo-enterprise="yinhu">
                 <span class="notif-dot success"></span>
                 <span class="notif-text">
                   超级小陈 完成 4 月销售台账分析
@@ -886,7 +886,7 @@
 
           <!-- ======= Fake / decorative agents (preview of upcoming capabilities) ======= -->
 
-          <a class="card" href="#" data-fake="quote" onclick="event.preventDefault();">
+          <a class="card" href="#" data-fake="quote" data-demo-enterprise="yinhu" onclick="event.preventDefault();">
             <span class="demo-tag">Demo</span>
             <div class="card-head">
               <div class="card-icon">
@@ -921,7 +921,7 @@
             </div>
           </a>
 
-          <a class="card" href="#" data-fake="ceo" onclick="event.preventDefault();">
+          <a class="card" href="#" data-fake="ceo" data-demo-enterprise="yinhu" onclick="event.preventDefault();">
             <span class="demo-tag">Demo</span>
             <div class="card-head">
               <div class="card-icon">
@@ -956,7 +956,7 @@
             </div>
           </a>
 
-          <a class="card issues" href="#" data-fake="furnace" onclick="event.preventDefault();">
+          <a class="card issues" href="#" data-fake="furnace" data-demo-enterprise="yinhu" onclick="event.preventDefault();">
             <span class="demo-tag">Demo</span>
             <div class="card-head">
               <div class="card-icon" style="background: var(--danger-bg); color: var(--danger);">
@@ -991,7 +991,7 @@
             </div>
           </a>
 
-          <a class="card" href="#" data-fake="contract" onclick="event.preventDefault();">
+          <a class="card" href="#" data-fake="contract" data-demo-enterprise="yinhu" onclick="event.preventDefault();">
             <span class="demo-tag">Demo</span>
             <div class="card-head">
               <div class="card-icon">
@@ -1026,7 +1026,7 @@
             </div>
           </a>
 
-          <a class="card offline" href="#" data-fake="weekly" aria-disabled="true" onclick="event.preventDefault();">
+          <a class="card offline" href="#" data-fake="weekly" data-demo-enterprise="yinhu" aria-disabled="true" onclick="event.preventDefault();">
             <span class="demo-tag">Demo</span>
             <div class="card-head">
               <div class="card-icon" style="background: var(--neutral-bg); color: var(--neutral);">
@@ -1063,7 +1063,7 @@
         </div>
       </section>
 
-      <section class="activity">
+      <section class="activity" data-demo-enterprise="yinhu">
         <div class="section-h">
           <h3>最近活动 <span class="en">Recent Activity</span></h3>
           <div class="tools">
@@ -1345,6 +1345,23 @@
       if (me && me.is_platform_admin) {
         document.getElementById('menu-admin').style.display = '';
       }
+
+      // 租户隔离:删除不属于当前用户企业的演示内容。每块跨租户专属内容
+      // (银湖石墨卡/通知/最近活动 = enterprise 'yinhu') 都带 data-demo-enterprise;
+      // 智通客户卡无此属性 → 全员可见;guangtian 卡按成员单独 gated(见下)。
+      const myEnterprises = new Set(
+        (me && Array.isArray(me.enterprises) ? me.enterprises : [])
+          .map(e => e && (e.id || e))
+      );
+      document.querySelectorAll('[data-demo-enterprise]').forEach(el => {
+        if (!myEnterprises.has(el.getAttribute('data-demo-enterprise'))) el.remove();
+      });
+      // 重算通知未读数 + 铃铛红点,避免删完仍显示旧数字。
+      const remainingNotifs = document.querySelectorAll('#notif-panel .notif-item').length;
+      const notifCountEl = document.querySelector('#notif-panel .notif-h .t');
+      if (notifCountEl) notifCountEl.textContent = `通知 · ${remainingNotifs} 条未读`;
+      const badgeDot = document.querySelector('#btn-notif .badge-dot');
+      if (badgeDot && remainingNotifs === 0) badgeDot.style.display = 'none';
 
       let agents = [];
       try {
