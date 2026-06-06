@@ -16,15 +16,18 @@ existing `platform-admin` CLI (admin.py) exactly — no new schema, no new
 abstractions. Run it inside the platform-api environment (Railway shell or
 `railway run`) where DATABASE_URL is set.
 
-PASSWORD HANDLING — the password is read interactively via getpass and is
-NEVER printed, logged, written to a file, or passed as a CLI flag. Only its
-bcrypt hash touches the database. Existing users are NOT re-passworded unless
-you pass --reset-password.
+PASSWORD HANDLING — the password is read interactively via getpass (default)
+or, for non-interactive runs like CI, from an environment variable named by
+--password-env (the value is supplied by a GitHub Actions secret and is masked
+in logs). The password is NEVER printed, logged, written to a file, or passed
+as a CLI flag. Only its bcrypt hash touches the database. Existing users are
+NOT re-passworded unless you pass --reset-password.
 """
 from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import sys
 import time
 from pathlib import Path
@@ -55,10 +58,28 @@ def _ensure_enterprise(eid: str, legal_name: str, display_name: str) -> None:
     print(f"  enterprise '{eid}' ready")
 
 
+def _read_password(username: str, password_env: str | None) -> str:
+    """Obtain the password without ever logging it: from the named env var
+    (CI path) or interactively via getpass (default). Returns the plaintext
+    only long enough to bcrypt it in the caller."""
+    if password_env:
+        pw = os.environ.get(password_env, "")
+        if not pw:
+            sys.exit(f"aborted: env var {password_env} is empty/unset")
+        return pw
+    pw = getpass.getpass(f"  Set password for {username}: ")
+    if not pw:
+        sys.exit("aborted: empty password")
+    pw2 = getpass.getpass("  Confirm password: ")
+    if pw != pw2:
+        sys.exit("aborted: passwords do not match")
+    return pw
+
+
 def _ensure_user(username: str, display_name: str, email: str | None,
-                 reset_password: bool) -> str:
-    """Create the user if absent (idempotent). Prompts for a password only
-    when actually creating (or when --reset-password). Returns user_id."""
+                 reset_password: bool, password_env: str | None) -> str:
+    """Create the user if absent (idempotent). Reads a password only when
+    actually creating (or when --reset-password). Returns user_id."""
     user_id = f"u_{username}"
     existing = db.main().execute(
         "SELECT id FROM users WHERE id=%s", (user_id,)
@@ -68,13 +89,7 @@ def _ensure_user(username: str, display_name: str, email: str | None,
         print(f"  user '{user_id}' already exists — password left unchanged")
         return user_id
 
-    pw = getpass.getpass(f"  Set password for {username}: ")
-    if not pw:
-        sys.exit("aborted: empty password")
-    pw2 = getpass.getpass("  Confirm password: ")
-    if pw != pw2:
-        sys.exit("aborted: passwords do not match")
-    pw_hash = auth.hash_password(pw)
+    pw_hash = auth.hash_password(_read_password(username, password_env))
 
     if existing:
         db.main().execute(
@@ -127,6 +142,9 @@ def main() -> None:
     p.add_argument("--role", default="owner", choices=["owner", "admin", "member"])
     p.add_argument("--reset-password", action="store_true",
                    help="if the user already exists, prompt and reset their password")
+    p.add_argument("--password-env", default=None, metavar="VARNAME",
+                   help="read the password from this env var instead of getpass "
+                        "(for non-interactive CI; value should come from a secret)")
     args = p.parse_args()
 
     eid = args.enterprise.strip().lower()
@@ -137,7 +155,7 @@ def main() -> None:
     print(f"Provisioning '{args.username}' → enterprise '{eid}' (role={args.role})")
     _ensure_enterprise(eid, ent_legal, ent_display)
     user_id = _ensure_user(args.username, args.display_name, args.email,
-                           args.reset_password)
+                           args.reset_password, args.password_env)
     _ensure_membership(user_id, eid, args.role)
     print("Done. Verify login at https://app.fiveoranges.ai/")
 
