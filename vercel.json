@@ -3,5 +3,11 @@
   "installCommand": "cd apps/marketing-web && npm ci",
   "buildCommand": "cd apps/marketing-web && npm run build",
   "outputDirectory": "apps/marketing-web/dist/public",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/((?!assets/|manus-storage/|favicon.ico|robots.txt|sitemap.xml).*)",
+      "destination": "/index.html"
+    }
+  ]
 }

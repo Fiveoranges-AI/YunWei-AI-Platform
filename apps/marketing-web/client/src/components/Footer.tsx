@@ -115,18 +115,23 @@ export default function Footer() {
               }}
             >
               <li>
-                <a href="#solutions" className="footer-link" style={{ color: "#94A3B8" }}>
+                <a href="/#solutions" className="footer-link" style={{ color: "#94A3B8" }}>
                   解决方案 · Solutions
                 </a>
               </li>
               <li>
-                <a href="#approach" className="footer-link" style={{ color: "#94A3B8" }}>
+                <a href="/#approach" className="footer-link" style={{ color: "#94A3B8" }}>
                   方法论 · Approach
                 </a>
               </li>
               <li>
-                <a href="#use-cases" className="footer-link" style={{ color: "#94A3B8" }}>
+                <a href="/#use-cases" className="footer-link" style={{ color: "#94A3B8" }}>
                   案例 · Use Cases
+                </a>
+              </li>
+              <li>
+                <a href="/kobeli" className="footer-link" style={{ color: "#94A3B8" }}>
+                  创始人 · Founder
                 </a>
               </li>
               <li>

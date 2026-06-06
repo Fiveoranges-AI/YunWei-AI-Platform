@@ -258,6 +258,16 @@
 .drawer-panel { animation: drawerSlideInRight 260ms cubic-bezier(0.32, 0.72, 0.24, 1.0); }
 .drawer-scrim { animation: drawerScrimFadeIn 220ms ease-out; }
 
+@media (max-width: 430px) {
+  .brand-wordmark-wrap {
+    gap: 0 !important;
+  }
+  .brand-cn-divider,
+  .brand-cn-wordmark {
+    display: none !important;
+  }
+}
+
 /* Solution card border-on-hover */
 .solution-card {
   transition: border-color 220ms ease-out, transform 250ms ease-out, box-shadow 250ms ease-out;
@@ -334,4 +344,841 @@
 }
 @media (min-width: 768px) {
   .footer-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Founder page */
+.founder-hero-section {
+  border-bottom: 1px solid rgba(15,35,64,0.06);
+  overflow: hidden;
+}
+
+.founder-hero-grid,
+.founder-story-grid,
+.founder-cta-grid,
+.founder-client-grid-wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+
+.founder-section-header {
+  max-width: 760px;
+}
+
+.founder-section-title,
+.founder-hero-title {
+  font-family: "Sora", sans-serif;
+  color: #0F2340;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.founder-section-title {
+  margin-top: 1rem;
+  font-size: 2rem;
+  line-height: 1.18;
+}
+
+.founder-section-subtitle {
+  margin-top: 0.875rem;
+  color: #475569;
+  font-family: "Sora", sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+
+.founder-hero-role {
+  display: flex;
+  flex-direction: column;
+  font-family: "Sora", sans-serif;
+  letter-spacing: 0;
+}
+
+.founder-hero-role strong {
+  line-height: 1.4;
+}
+
+.founder-hero-role span {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.founder-hero-support {
+  margin-top: 1rem;
+  line-height: 1.68;
+}
+
+.founder-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  align-items: center;
+  margin-top: 2.25rem;
+}
+
+.founder-primary-button,
+.founder-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 22px;
+  border-radius: 0.625rem;
+  font-family: "Sora", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 200ms ease-out, border-color 200ms ease-out, transform 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.founder-primary-button {
+  color: #FFFFFF;
+  background: var(--brand-blue);
+  box-shadow: 0 8px 24px rgba(45,110,168,0.32);
+}
+
+.founder-secondary-button {
+  color: var(--brand-blue);
+  background: #FFFFFF;
+  border: 1.5px solid rgba(45,110,168,0.50);
+}
+
+.founder-profile-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.founder-profile-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.founder-profile-panel::after {
+  position: absolute;
+  font-family: "Sora", sans-serif;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.founder-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.founder-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-family: "Sora", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.founder-profile-eyebrow {
+  font-family: "Sora", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.founder-profile-name {
+  margin-top: 0.35rem;
+  color: #0F2340;
+  font-family: "Sora", sans-serif;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.founder-profile-proof-list {
+  display: grid;
+}
+
+.founder-profile-proof-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  line-height: 1.42;
+}
+
+.founder-profile-proof-item svg,
+.founder-client-item svg {
+  flex-shrink: 0;
+  margin-top: 0.12rem;
+  color: var(--brand-blue);
+}
+
+.founder-work-grid,
+.founder-expertise-grid,
+.founder-client-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.founder-work-card {
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
+}
+
+.founder-work-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.founder-work-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-blue);
+  background: var(--brand-blue-pale);
+  border: 1px solid rgba(45,110,168,0.22);
+}
+
+.founder-work-card-top span {
+  color: var(--brand-blue);
+  font-family: "Sora", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.founder-work-card h3 {
+  color: #0F2340;
+  font-family: "Sora", sans-serif;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.founder-client-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: #334155;
+  background: #FFFFFF;
+  font-size: 1rem;
+  line-height: 1.62;
+}
+
+.founder-quote-card {
+  max-width: 920px;
+  margin: 0 auto;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15,35,64,0.04), 0 18px 40px rgba(15,35,64,0.08);
+}
+
+.founder-quote-card blockquote {
+  margin-top: 1.5rem;
+  color: #0F2340;
+  font-family: "Sora", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.founder-quote-card p {
+  margin-top: 1.25rem;
+  line-height: 1.65;
+}
+
+/* Founder page refinement: executive profile, not product dashboard */
+.founder-hero-section {
+  padding: 7.35rem 0 4rem;
+  background:
+    radial-gradient(circle at 74% 26%, rgba(45,110,168,0.11) 0, rgba(45,110,168,0) 32%),
+    linear-gradient(180deg, #FFFFFF 0%, #F6FAFE 58%, #FFFFFF 100%);
+}
+
+.founder-hero-grid {
+  gap: 3.75rem;
+}
+
+.founder-hero-title {
+  margin-top: 1.15rem;
+  font-size: 2.8rem;
+  line-height: 1.02;
+}
+
+.founder-hero-role {
+  margin-top: 1.25rem;
+  gap: 0.5rem;
+}
+
+.founder-hero-role strong {
+  color: #0F2340;
+  font-size: 1.1rem;
+}
+
+.founder-hero-role span {
+  color: var(--brand-blue);
+}
+
+.founder-hero-support-strong {
+  max-width: 660px;
+  color: #0F2340;
+  font-family: "Sora", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.founder-hero-copy {
+  margin-top: 1.25rem;
+  color: #334155;
+  font-size: 1.05rem;
+  line-height: 1.86;
+}
+
+.founder-primary-button,
+.founder-secondary-button {
+  min-height: 48px;
+  border-radius: 0.625rem;
+}
+
+.founder-primary-button:hover {
+  background: #245F94;
+}
+
+.founder-secondary-button:hover {
+  background: var(--brand-blue-pale);
+  border-color: rgba(45,110,168,0.70);
+}
+
+.founder-profile-panel {
+  padding: 1.65rem;
+  border-radius: 0.875rem;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.98) 0%, rgba(242,247,252,0.96) 100%);
+  border: 1px solid rgba(45,110,168,0.20);
+  box-shadow:
+    0 1px 2px rgba(15,35,64,0.06),
+    0 26px 70px rgba(15,35,64,0.13);
+}
+
+.founder-profile-panel::before {
+  background:
+    linear-gradient(180deg, rgba(45,110,168,0.08), rgba(45,110,168,0)),
+    linear-gradient(rgba(45,110,168,0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45,110,168,0.055) 1px, transparent 1px);
+  background-size: auto, 40px 40px, 40px 40px;
+}
+
+.founder-profile-panel::after {
+  content: "ARCHITECT";
+  right: -0.8rem;
+  bottom: 0.9rem;
+  font-size: 3.15rem;
+  color: rgba(45,110,168,0.055);
+}
+
+.founder-profile-header,
+.founder-profile-proof-list,
+.founder-executive-principle,
+.founder-profile-metrics {
+  position: relative;
+  z-index: 1;
+}
+
+.founder-profile-header {
+  align-items: flex-start;
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid rgba(15,35,64,0.10);
+}
+
+.founder-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(135deg, #0F2340 0%, #1F5C8F 100%);
+  box-shadow: 0 18px 36px rgba(15,35,64,0.22);
+}
+
+.founder-profile-eyebrow {
+  color: var(--brand-blue);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+}
+
+.founder-profile-name {
+  font-size: 1.52rem;
+}
+
+.founder-profile-subtitle {
+  margin-top: 0.55rem;
+  max-width: 280px;
+  color: #475569;
+  font-family: "Sora", sans-serif;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.founder-profile-proof-list-single {
+  grid-template-columns: 1fr;
+  gap: 0.78rem;
+  margin-top: 1.25rem;
+}
+
+.founder-profile-proof-item {
+  padding: 0.78rem 0.9rem;
+  border-radius: 0.625rem;
+  background: rgba(255,255,255,0.78);
+  border: 1px solid rgba(15,35,64,0.08);
+  color: #263B57;
+  font-family: "Sora", sans-serif;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.founder-executive-principle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 1.2rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: #0F2340;
+  color: #FFFFFF;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.58;
+}
+
+.founder-executive-principle svg {
+  flex-shrink: 0;
+  margin-top: 0.14rem;
+  color: #8CC8FF;
+}
+
+.founder-profile-metrics {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.founder-profile-metrics div {
+  padding: 0.9rem 1rem;
+  border-radius: 0.625rem;
+  background: rgba(255,255,255,0.76);
+  border: 1px solid rgba(45,110,168,0.18);
+}
+
+.founder-profile-metrics span {
+  display: block;
+  color: var(--brand-blue);
+  font-family: "Sora", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.founder-profile-metrics strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #0F2340;
+  font-family: "Sora", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.founder-story-section,
+.founder-work-section,
+.founder-expertise-section,
+.founder-experience-section,
+.founder-client-section,
+.founder-quote-section,
+.founder-final-cta {
+  padding: 6.7rem 0;
+}
+
+.founder-story-section {
+  background: #FFFFFF;
+}
+
+.founder-story-grid {
+  align-items: start;
+}
+
+.founder-story-card {
+  position: relative;
+  padding: 2.4rem;
+  border-radius: 0.875rem;
+  background:
+    linear-gradient(180deg, #FFFFFF 0%, #F8FBFE 100%);
+  border: 1px solid rgba(15,35,64,0.12);
+  border-left: 4px solid var(--brand-blue);
+  box-shadow: 0 18px 42px rgba(15,35,64,0.07);
+}
+
+.founder-story-card::before {
+  content: "";
+  position: absolute;
+  top: 1.2rem;
+  right: 1.2rem;
+  width: 72px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(45,110,168,0.22);
+}
+
+.founder-story-card p {
+  color: #263B57;
+  font-size: 1.08rem;
+  line-height: 1.9;
+}
+
+.founder-work-section {
+  background:
+    linear-gradient(180deg, #F7FAFE 0%, #EEF4FB 100%);
+}
+
+.founder-work-heading {
+  margin-bottom: 2.4rem;
+}
+
+.founder-work-grid {
+  gap: 1rem;
+}
+
+.founder-work-card {
+  min-height: 238px;
+  padding: 1.65rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(15,35,64,0.11);
+  box-shadow: 0 1px 2px rgba(15,35,64,0.04);
+}
+
+.founder-work-card-top {
+  margin-bottom: 1.1rem;
+}
+
+.founder-work-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.625rem;
+}
+
+.founder-work-card h3 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.founder-work-card p {
+  margin-top: 0.9rem;
+  color: #334155;
+  font-size: 1rem;
+}
+
+.founder-expertise-section {
+  background: #FFFFFF;
+}
+
+.founder-expertise-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+.founder-expertise-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 72px;
+  padding: 1rem 1.1rem;
+  border-radius: 0.7rem;
+  background: #FFFFFF;
+  border: 1px solid rgba(15,35,64,0.11);
+  box-shadow: 0 1px 2px rgba(15,35,64,0.04);
+}
+
+.founder-expertise-card svg {
+  flex-shrink: 0;
+  color: var(--brand-blue);
+}
+
+.founder-expertise-card span {
+  color: #0F2340;
+  font-family: "Sora", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.38;
+}
+
+.founder-experience-section {
+  background:
+    linear-gradient(180deg, #FFFFFF 0%, #F6FAFE 100%);
+}
+
+.founder-experience-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+  align-items: start;
+}
+
+.founder-experience-card {
+  padding: 2rem;
+  border-radius: 0.875rem;
+  background: #0F2340;
+  color: #FFFFFF;
+  box-shadow: 0 22px 58px rgba(15,35,64,0.20);
+}
+
+.founder-experience-card > p {
+  color: #E5EEF8;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.founder-experience-pill-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.4rem;
+}
+
+.founder-experience-pill-grid span,
+.founder-experience-associated div span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-family: "Sora", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.founder-experience-pill-grid span {
+  color: #D7E8F8;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+}
+
+.founder-experience-associated {
+  margin-top: 1.6rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid rgba(255,255,255,0.16);
+}
+
+.founder-experience-associated strong {
+  display: block;
+  color: #FFFFFF;
+  font-family: "Sora", sans-serif;
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+.founder-experience-associated div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.founder-experience-associated div span {
+  color: #0F2340;
+  background: #FFFFFF;
+}
+
+.founder-experience-associated p {
+  margin-top: 1rem;
+  color: #BFD1E5;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.founder-client-section {
+  background: #FFFFFF;
+}
+
+.founder-client-grid-wrap {
+  align-items: start;
+}
+
+.founder-client-grid {
+  gap: 0.8rem;
+}
+
+.founder-client-item {
+  min-height: 66px;
+  padding: 1rem 1.05rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(15,35,64,0.11);
+  box-shadow: 0 1px 2px rgba(15,35,64,0.03);
+}
+
+.founder-client-item span {
+  color: #263B57;
+}
+
+.founder-quote-section {
+  background:
+    linear-gradient(180deg, #EEF4FB 0%, #FFFFFF 100%);
+}
+
+.founder-quote-card {
+  position: relative;
+  max-width: 980px;
+  padding: 3rem;
+  border-radius: 0.875rem;
+  border: 1px solid rgba(45,110,168,0.18);
+  overflow: hidden;
+}
+
+.founder-quote-card::after {
+  content: "";
+  position: absolute;
+  right: 2rem;
+  top: 2rem;
+  width: 96px;
+  height: 96px;
+  border: 1px solid rgba(45,110,168,0.14);
+  border-radius: 999px;
+}
+
+.founder-quote-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.founder-quote-card blockquote {
+  max-width: 840px;
+  font-size: 1.48rem;
+  line-height: 1.62;
+}
+
+.founder-quote-card p {
+  color: #475569;
+  font-family: "Sora", sans-serif;
+  font-weight: 600;
+}
+
+.founder-final-cta {
+  background: #FFFFFF;
+  border-top: 1px solid #E2E8F0;
+}
+
+.founder-final-cta .founder-button-row {
+  justify-content: flex-start;
+}
+
+@media (min-width: 768px) {
+  .founder-hero-title {
+    font-size: 3.65rem;
+  }
+
+  .founder-profile-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .founder-expertise-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .founder-client-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .founder-hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 0.78fr);
+    gap: 5.2rem;
+  }
+
+  .founder-hero-title {
+    font-size: 4.15rem;
+  }
+
+  .founder-story-grid,
+  .founder-client-grid-wrap,
+  .founder-experience-grid {
+    grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+    gap: 4.4rem;
+  }
+
+  .founder-work-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .founder-final-cta .founder-button-row {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .founder-hero-section {
+    padding: 7rem 0 4rem;
+  }
+
+  .founder-hero-title {
+    font-size: 2.7rem;
+  }
+
+  .founder-story-section,
+  .founder-work-section,
+  .founder-expertise-section,
+  .founder-experience-section,
+  .founder-client-section,
+  .founder-quote-section,
+  .founder-final-cta {
+    padding: 4.7rem 0;
+  }
+
+  .founder-profile-panel,
+  .founder-story-card,
+  .founder-experience-card,
+  .founder-quote-card {
+    padding: 1.45rem;
+  }
+
+  .founder-profile-panel::after {
+    font-size: 2.35rem;
+  }
+
+  .founder-profile-header {
+    gap: 0.75rem;
+  }
+
+  .founder-avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  .founder-profile-subtitle {
+    max-width: none;
+    font-size: 0.82rem;
+  }
+
+  .founder-profile-proof-item {
+    font-size: 0.82rem;
+  }
+
+  .founder-expertise-grid,
+  .founder-client-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .founder-quote-card blockquote {
+    font-size: 1.22rem;
+  }
 }

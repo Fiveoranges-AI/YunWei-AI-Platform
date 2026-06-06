@@ -7,10 +7,11 @@
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
-  { cn: "解决方案", en: "Solutions", href: "#solutions" },
-  { cn: "方法论", en: "Approach", href: "#approach" },
-  { cn: "应用场景", en: "Use Cases", href: "#use-cases" },
-  { cn: "关于我们", en: "About", href: "#about" },
+  { cn: "解决方案", en: "Solutions", href: "/#solutions" },
+  { cn: "方法论", en: "Approach", href: "/#approach" },
+  { cn: "应用场景", en: "Use Cases", href: "/#use-cases" },
+  { cn: "关于我们", en: "About", href: "/#about" },
+  { cn: "创始人", en: "Founder", href: "/kobeli" },
 ];
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
@@ -340,7 +341,7 @@ export default function Navbar() {
       <div className="container flex items-center justify-between" style={{ height: "76px" }}>
         {/* Brand */}
         <a
-          href="#top"
+          href="/#top"
           className="flex items-center"
           style={{ minWidth: 0, gap: "12px", textDecoration: "none" }}
         >
@@ -355,6 +356,7 @@ export default function Navbar() {
             }}
           />
           <div
+            className="brand-wordmark-wrap"
             style={{
               fontFamily: "Sora, sans-serif",
               display: "inline-flex",
@@ -375,6 +377,7 @@ export default function Navbar() {
             </span>
             <span
               aria-hidden
+              className="brand-cn-divider"
               style={{
                 width: "1px",
                 height: "14px",
@@ -384,6 +387,7 @@ export default function Navbar() {
               }}
             />
             <span
+              className="brand-cn-wordmark"
               style={{
                 color: "var(--brand-blue)",
                 letterSpacing: "0.14em",
@@ -398,7 +402,7 @@ export default function Navbar() {
         </a>
 
         {/* Desktop nav */}
-        <nav className="hidden lg:flex items-center" style={{ gap: "24px" }}>
+        <nav className="hidden lg:flex items-center" style={{ gap: "18px" }}>
           {NAV_ITEMS.map((item) => (
             <NavCapsule key={item.en} item={item} />
           ))}
