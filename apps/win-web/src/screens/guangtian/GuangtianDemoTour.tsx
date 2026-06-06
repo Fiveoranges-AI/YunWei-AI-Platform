@@ -61,9 +61,25 @@ export function GuangtianDemoTour() {
             <span style={{ color: "var(--guangtian-red)" }}>微信里一张乱图</span> → AI 抽成结构化 →
             库管点一下确认 → 库存实时准 → <span style={{ color: "var(--guangtian-red)" }}>缺货自动预警</span>。
           </h2>
-          <p style={{ margin: "12px 0 16px", fontSize: 13, color: "var(--ink-600)", lineHeight: 1.65 }}>
+          <p style={{ margin: "12px 0 14px", fontSize: 13, color: "var(--ink-600)", lineHeight: 1.65 }}>
             把您现在的 Excel + 库管手工维护，换成"拍照即录、库存即准、缺货即知"。这一页老板每天 30 秒看完。
           </p>
+          <div
+            style={{
+              margin: "0 0 16px",
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "var(--surface-2)",
+              border: "1px solid var(--ink-100)",
+              fontSize: 12.5,
+              color: "var(--ink-700)",
+              lineHeight: 1.6,
+            }}
+          >
+            算笔账：按光天规模，这套每月省下的人工 + 差异 + 缺货损失 ≈{" "}
+            <strong style={{ color: "var(--guangtian-blue)" }}>3 万</strong>，月费两三千 —— 点顶部
+            <strong>「省多少钱」</strong>自己改数算。
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => startDemo()}

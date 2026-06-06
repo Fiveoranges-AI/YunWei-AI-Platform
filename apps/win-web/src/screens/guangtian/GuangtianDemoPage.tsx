@@ -11,6 +11,7 @@ import { InboundPanel } from "./panels/InboundPanel";
 import { OutboundPanel } from "./panels/OutboundPanel";
 import { LedgerPanel } from "./panels/LedgerPanel";
 import { ShortageAlertPanel } from "./panels/ShortageAlertPanel";
+import { RoiPanel } from "./panels/RoiPanel";
 import { readInitialMode, writeModeToUrl, type BackendMode } from "./backendMode";
 import { resolveBrand, brandCssVars } from "./branding";
 import { GuangtianBackendModePanel } from "./GuangtianBackendModePanel";
@@ -26,6 +27,7 @@ type TabKey =
   | "outbound"
   | "ledger"
   | "shortage"
+  | "roi"
   | "replenish"
   | "ask"
   | "report";
@@ -43,6 +45,7 @@ const TABS: {
   { key: "outbound", label: "出库登记", hint: "客户订单 出库", icon: I.upload, color: "var(--guangtian-blue)" },
   { key: "ledger", label: "库存流水", hint: "每一笔变动可追溯", icon: I.clock, color: "var(--guangtian-blue)" },
   { key: "shortage", label: "缺货预警", hint: "本周订单发不发得出", icon: I.warn, color: "var(--guangtian-red)" },
+  { key: "roi", label: "省多少钱", hint: "用了能省多少 · 自己算", icon: I.grid, color: "var(--guangtian-blue)" },
 ];
 // R2 砍 tab：AI 补产建议 / 老板助手 / AI 日报 三个"展示性"tab 从导航移除——
 // MVP 只留可付费核心闭环（录入→库存→流水→预警→看板）。面板代码保留未删。
@@ -72,6 +75,10 @@ const TAB_HEAD: Record<TabKey, { title: string; sub: string }> = {
     title: "订单缺货预警",
     sub: "AI 把本周下游订单 vs 当前库存 + 在产订单做对账，发不出的提前 3 天告诉你。",
   },
+  roi: {
+    title: "试点价值 · 省多少钱",
+    sub: "按光天的规模与行业平均，算一笔实在账：每月省人工 + 减少差异损失 + 减少缺货损失。",
+  },
   replenish: {
     title: "AI 补产建议",
     sub: "AI 综合订单 / 出货趋势 / 安全库存 / 生产周期，给出本周补什么 + 补多少。",
@@ -93,6 +100,7 @@ const HASH_TO_TAB: Record<string, TabKey> = {
   "#outbound": "outbound",
   "#ledger": "ledger",
   "#shortage": "shortage",
+  "#roi": "roi",
   "#replenish": "replenish",
   "#ask": "ask",
   "#report": "report",
@@ -346,6 +354,10 @@ function GuangtianDemoInner() {
         <div role="tabpanel" hidden={activeTab !== "shortage"}>
           <GuangtianShortageOverlay enabled={backend} />
           <ShortageAlertPanel />
+        </div>
+
+        <div role="tabpanel" hidden={activeTab !== "roi"}>
+          <RoiPanel />
         </div>
 
         {/* R2: 补产建议 / 老板助手 / 日报 三个 tabpanel 已随导航砍掉 */}
