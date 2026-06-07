@@ -2271,3 +2271,64 @@
     font-size: 1.22rem;
   }
 }
+
+/* =============================================================
+   /worldcup microsite — scoped styles (all selectors live under
+   .wc-root). Self-contained: does NOT affect the main site.
+   ============================================================= */
+.wc-root {
+  --wc-green: #0B7A4B;
+  --wc-green-dark: #075235;
+  --wc-gold: #D98A1F;
+}
+
+/* Card hover (complements existing .card-lift where also applied) */
+.wc-root .wc-card {
+  transition: border-color 220ms ease, box-shadow 250ms ease, transform 250ms ease;
+}
+.wc-root .wc-card:hover {
+  border-color: rgba(11, 122, 75, 0.55) !important;
+  box-shadow: 0 14px 34px rgba(15, 35, 64, 0.1);
+}
+
+/* Desktop section nav links */
+.wc-root .wc-navlink {
+  transition: color 180ms ease, border-color 200ms ease;
+}
+.wc-root .wc-navlink:hover {
+  color: var(--wc-green) !important;
+  border-bottom-color: rgba(11, 122, 75, 0.4) !important;
+}
+
+/* Inline text links */
+.wc-root .wc-link {
+  text-decoration: none;
+}
+.wc-root .wc-link:hover {
+  text-decoration: underline;
+}
+
+/* Footer links */
+.wc-root .wc-flink {
+  transition: color 180ms ease;
+}
+.wc-root .wc-flink:hover {
+  color: #fff !important;
+}
+
+/* CTA buttons */
+.wc-root .wc-cta {
+  transition: transform 180ms ease, box-shadow 200ms ease, background 180ms ease, filter 180ms ease, border-color 180ms ease;
+}
+.wc-root .wc-cta:hover {
+  transform: translateY(-1px);
+}
+.wc-root .wc-cta-primary:hover {
+  background: var(--wc-green-dark) !important;
+}
+.wc-root .wc-cta-gold:hover {
+  filter: brightness(0.96);
+}
+.wc-root .wc-cta-ghost:hover {
+  border-color: rgba(11, 122, 75, 0.5) !important;
+}
