@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { CustomerDetail, TimelineEvent } from "../data/types";
 import { I } from "../icons";
 import { fmtCNYRaw } from "../lib/format";
+import { customerCompleteness } from "../lib/customerHealth";
 
 type Tone = "warn" | "normal" | "mute";
 
@@ -11,6 +12,71 @@ const TIMELINE_ICON: Record<TimelineEvent["kind"], (s?: number) => ReactNode> = 
   wechat: (s = 13) => I.wechat(s),
   invoice: (s = 13) => I.cash(s),
 };
+
+function CustomerHealthCard({ customer }: { customer: CustomerDetail }) {
+  const h = customerCompleteness(customer);
+  const color =
+    h.score >= 90 ? "var(--ok-500)" : h.score >= 60 ? "var(--brand-500)" : "var(--warn-500)";
+  return (
+    <div
+      style={{
+        border: "1px solid var(--ink-100)",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 28,
+        background: "var(--surface)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{ color: "var(--brand-600)", display: "flex" }}>{I.shield(14)}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-700)" }}>资料完整度</span>
+        <span className="num" style={{ marginLeft: "auto", fontSize: 16, fontWeight: 700, color }}>
+          {h.score}%
+        </span>
+      </div>
+      <div style={{ height: 6, borderRadius: 99, background: "var(--ink-50)", overflow: "hidden" }}>
+        <div
+          style={{
+            height: "100%",
+            width: `${h.score}%`,
+            background: color,
+            borderRadius: 99,
+            transition: "width 240ms ease",
+          }}
+        />
+      </div>
+      {h.missing.length === 0 ? (
+        <div
+          style={{
+            fontSize: 12.5,
+            color: "var(--ok-700)",
+            marginTop: 10,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          {I.check(13)} 关键资料齐全
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+            {h.missing.map((f) => (
+              <span key={f.key} className="pill pill-warn" style={{ fontSize: 11, padding: "3px 8px" }}>
+                缺 {f.label}
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 10, lineHeight: 1.6 }}>
+            <span style={{ color: "var(--ai-600)" }}>{I.spark(11)}</span> 补充
+            {h.missing.slice(0, 2).map((f) => f.label).join("、")}
+            后，AI 能更准地提醒回款风险、匹配商机。
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function CustomerDetailPane({
   customer,
@@ -164,6 +230,9 @@ export function CustomerDetailPane({
             {customer.aiSummary}
           </div>
         </div>
+
+        {/* 资料完整度 (data health) */}
+        <CustomerHealthCard customer={customer} />
 
         {/* Metrics row */}
         <MetricsRow customer={customer} />
