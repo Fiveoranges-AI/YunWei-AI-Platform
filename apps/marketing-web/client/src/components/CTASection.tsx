@@ -5,7 +5,7 @@
 
 const DEMO_URL = "/demo.html";
 const PORTAL_URL = "https://app.fiveoranges.ai/";
-const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const STRATEGY_CALL_HREF = "/strategy-call";
 
 export default function CTASection() {
   return (
@@ -109,7 +109,7 @@ export default function CTASection() {
             </a>
 
             <a
-              href={CONTACT_HREF}
+              href={STRATEGY_CALL_HREF}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -127,7 +127,7 @@ export default function CTASection() {
               }}
             >
               <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-                <span>预约咨询</span>
+                <span>预约诊断</span>
                 <span
                   style={{
                     fontSize: "10.5px",
@@ -137,7 +137,7 @@ export default function CTASection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  Book a Call
+                  Book a Strategy Call
                 </span>
               </span>
             </a>

@@ -22,6 +22,7 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 
 const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const STRATEGY_CALL_HREF = "/strategy-call";
 
 const seo = {
   title: "Kobe Li | Founder of Five Oranges AI / 运帷AI",
@@ -176,7 +177,7 @@ function SectionHeader({
 
 function PrimaryButton({ children }: { children: ReactNode }) {
   return (
-    <a href={CONTACT_HREF} className="founder-primary-button hover-lift">
+    <a href={STRATEGY_CALL_HREF} className="founder-primary-button hover-lift">
       {children}
       <ArrowRight size={16} strokeWidth={2.2} />
     </a>
@@ -270,7 +271,7 @@ export default function Kobeli() {
                   Kobe Li 拥有10年以上企业级数字化转型、Microsoft Dynamics 365、Power Platform、CRM、ERP、流程自动化和系统架构经验。他创立 Five Oranges AI / 运帷AI，专注于帮助传统制造业企业用更轻量、更务实、更容易落地的方式完成 AI 与数字化升级。
                 </p>
                 <div className="founder-button-row">
-                  <PrimaryButton>预约战略沟通</PrimaryButton>
+                  <PrimaryButton>预约诊断</PrimaryButton>
                   <SecondaryButton href={CONTACT_HREF}>Contact Five Oranges AI</SecondaryButton>
                 </div>
               </div>
@@ -429,7 +430,7 @@ export default function Kobeli() {
                 />
               </div>
               <div className="founder-button-row">
-                <PrimaryButton>预约战略沟通</PrimaryButton>
+                <PrimaryButton>预约诊断</PrimaryButton>
                 <SecondaryButton href="/" icon="home">
                   返回首页
                 </SecondaryButton>

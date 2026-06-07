@@ -16,7 +16,7 @@ const NAV_ITEMS = [
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
 const DEMO_URL = "/demo.html";
-const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const STRATEGY_CALL_HREF = "/strategy-call";
 
 type CnTooltipProps = { text: string; show: boolean };
 function CnTooltip({ text, show }: CnTooltipProps) {
@@ -267,12 +267,12 @@ function ContactBtn() {
   const [hover, setHover] = useState(false);
   return (
     <a
-      href={CONTACT_HREF}
+      href={STRATEGY_CALL_HREF}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      aria-label="Contact · 联系我们"
+      aria-label="预约30分钟AI数字化诊断"
       style={{
         position: "relative",
         display: "inline-flex",
@@ -293,11 +293,11 @@ function ContactBtn() {
         whiteSpace: "nowrap",
       }}
     >
-      <span>Contact</span>
+      <span>预约诊断</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>
-      <CnTooltip text="联系我们" show={hover} />
+      <CnTooltip text="预约30分钟AI数字化诊断" show={hover} />
     </a>
   );
 }
@@ -592,7 +592,7 @@ export default function Navbar() {
             </a>
 
             <a
-              href={CONTACT_HREF}
+              href={STRATEGY_CALL_HREF}
               onClick={closeDrawer}
               style={{
                 marginTop: "4px",
@@ -610,7 +610,7 @@ export default function Navbar() {
                 textDecoration: "none",
               }}
             >
-              Contact · 联系我们
+              预约30分钟AI数字化诊断
             </a>
           </div>
           </div>
