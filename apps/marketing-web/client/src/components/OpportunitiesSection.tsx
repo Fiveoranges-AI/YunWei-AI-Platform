@@ -1,40 +1,74 @@
 /* =============================================================
    Opportunities — 企业运营中的 AI 改造机会 (v1.3)
    AI Opportunities Hidden in Daily Operations.
-   Six premium cards surfacing where AI can be applied across a
-   manufacturing SME's daily operations. Matches Solutions card style.
+   Six parallel opportunity areas across a manufacturing SME's daily
+   operations. Each card pairs the current gap with the AI direction,
+   so the section reads as strategy — not a list of complaints.
+   Category icons (not sequence numbers) keep it distinct from the
+   numbered Solutions cards while sharing the same card system.
    ============================================================= */
 
-const OPPORTUNITIES = [
+import {
+  ArrowRight,
+  Boxes,
+  Route,
+  Users,
+  Workflow,
+  LayoutDashboard,
+  Target,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+type Opportunity = {
+  cn: string;
+  en: string;
+  gap: string;
+  move: string;
+  Icon: LucideIcon;
+};
+
+const OPPORTUNITIES: Opportunity[] = [
   {
     cn: "库存可视化",
     en: "Inventory Visibility",
-    desc: "Excel 每天更新，但账实不一致，管理层无法实时掌握库存状态。",
+    gap: "Excel 每天更新，但账实不一致，管理层无法实时掌握库存状态。",
+    move: "AI 持续对齐账实，库存状态一屏看清。",
+    Icon: Boxes,
   },
   {
     cn: "订单进度追踪",
     en: "Order Tracking",
-    desc: "订单、生产、发货和回款分散在不同人员和表格中，缺少统一视图。",
+    gap: "订单、生产、发货和回款分散在不同人员和表格中，缺少统一视图。",
+    move: "AI 汇成一个可追踪的订单全景视图。",
+    Icon: Route,
   },
   {
     cn: "客户资产沉淀",
     en: "Customer Data Assets",
-    desc: "客户信息分散在微信、Excel 和个人电脑中，难以沉淀为企业资产。",
+    gap: "客户信息分散在微信、Excel 和个人电脑中，难以沉淀为企业资产。",
+    move: "沉淀为可检索、可分析的客户资产。",
+    Icon: Users,
   },
   {
     cn: "流程自动化",
     en: "Process Automation",
-    desc: "审批、采购、出入库、交付和跟进依赖人工提醒，容易遗漏。",
+    gap: "审批、采购、出入库、交付和跟进依赖人工提醒，容易遗漏。",
+    move: "AI 自动推进流程节点，关键动作不漏接。",
+    Icon: Workflow,
   },
   {
     cn: "轻量化系统替代",
     en: "Lightweight Systems",
-    desc: "传统 ERP 功能复杂、成本高、推动难，中小企业需要更轻量的系统切入点。",
+    gap: "传统 ERP 功能复杂、成本高、推动难，中小企业需要更轻量的系统切入点。",
+    move: "从最痛的小场景切入，快速见效。",
+    Icon: LayoutDashboard,
   },
   {
     cn: "AI 落地场景识别",
     en: "AI Use-Case Discovery",
-    desc: "企业知道 AI 重要，但需要先判断哪些场景最适合优先验证和落地。",
+    gap: "企业知道 AI 重要，但需要先判断哪些场景最适合优先验证和落地。",
+    move: "我们帮你锁定最该先做的高价值场景。",
+    Icon: Target,
   },
 ];
 
@@ -85,9 +119,9 @@ export default function OpportunitiesSection() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {OPPORTUNITIES.map((o, i) => (
+          {OPPORTUNITIES.map(({ cn, en, gap, move, Icon }) => (
             <article
-              key={o.en}
+              key={en}
               className="solution-card card-lift"
               style={{
                 padding: "2rem 1.875rem",
@@ -110,13 +144,10 @@ export default function OpportunitiesSection() {
                   alignItems: "center",
                   justifyContent: "center",
                   color: "var(--brand-blue)",
-                  fontFamily: "Sora, sans-serif",
-                  fontWeight: 700,
-                  fontSize: "1.0625rem",
-                  letterSpacing: "0.04em",
+                  flexShrink: 0,
                 }}
               >
-                0{i + 1}
+                <Icon size={26} strokeWidth={1.75} aria-hidden />
               </div>
               <div>
                 <div
@@ -129,7 +160,7 @@ export default function OpportunitiesSection() {
                     letterSpacing: "0.005em",
                   }}
                 >
-                  {o.cn}
+                  {cn}
                 </div>
                 <div
                   style={{
@@ -142,7 +173,7 @@ export default function OpportunitiesSection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  {o.en}
+                  {en}
                 </div>
               </div>
               <p
@@ -153,8 +184,36 @@ export default function OpportunitiesSection() {
                   marginTop: "0.25rem",
                 }}
               >
-                {o.desc}
+                {gap}
               </p>
+              <div
+                style={{
+                  marginTop: "auto",
+                  paddingTop: "0.875rem",
+                  borderTop: "1px solid rgba(15,35,64,0.08)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "0.5rem",
+                  color: "var(--brand-blue)",
+                }}
+              >
+                <ArrowRight
+                  size={17}
+                  strokeWidth={2.25}
+                  style={{ flexShrink: 0, marginTop: "0.18rem" }}
+                  aria-hidden
+                />
+                <span
+                  style={{
+                    fontFamily: "Sora, sans-serif",
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {move}
+                </span>
+              </div>
             </article>
           ))}
         </div>
