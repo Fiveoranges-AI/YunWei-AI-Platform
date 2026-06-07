@@ -18,7 +18,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-ParserProvider = Literal["landingai", "text", "docx", "spreadsheet"]
+ParserProvider = Literal["landingai", "text", "docx", "spreadsheet", "transcribe"]
 
 
 class ParseCapabilities(BaseModel):

@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     landingai_split_model: str = "split-latest"
     landingai_large_file_pages_threshold: int = 50
 
+    # ---- Audio transcription (voice capture) ----------------------------
+    # Speech-to-text for uploaded voice clips. "none" stores the clip and
+    # surfaces a "未转写" note; set to a provider id (+ its credentials) to
+    # enable real transcription.
+    transcription_provider: Literal["none"] = "none"
+
     # ---- CORS ------------------------------------------------------------
     # Comma-separated. localhost:3000 covers the bundled frontend dev server.
     cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
