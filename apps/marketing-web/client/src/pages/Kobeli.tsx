@@ -21,7 +21,7 @@ import type { ReactNode } from "react";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 
-const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const CONTACT_HREF = "/strategy-call";
 
 const seo = {
   title: "Kobe Li | Founder of Five Oranges AI / 运帷AI",

@@ -6,12 +6,18 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Kobeli from "./pages/Kobeli";
+import StrategyCall from "./pages/StrategyCall";
+import { DataSecurityPage, PrivacyPage, TermsPage } from "./pages/TrustPages";
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/kobeli"} component={Kobeli} />
+      <Route path={"/strategy-call"} component={StrategyCall} />
+      <Route path={"/privacy"} component={PrivacyPage} />
+      <Route path={"/terms"} component={TermsPage} />
+      <Route path={"/data-security"} component={DataSecurityPage} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

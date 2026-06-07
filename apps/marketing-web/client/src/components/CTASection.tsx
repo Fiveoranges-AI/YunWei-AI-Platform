@@ -5,7 +5,7 @@
 
 const DEMO_URL = "/demo.html";
 const PORTAL_URL = "https://app.fiveoranges.ai/";
-const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const STRATEGY_CALL_URL = "/strategy-call";
 
 export default function CTASection() {
   return (
@@ -56,7 +56,7 @@ export default function CTASection() {
                 lineHeight: 1.7,
               }}
             >
-              预约 30 分钟战略通话。我们将和你一起诊断你最痛的那条流程，并诚实地告诉你——AI 是否是合适的解法。
+              预约 30 分钟 AI 数字化诊断。我们将和你一起诊断你最痛的那条流程，并诚实地告诉你 AI 是否是合适的解法。
             </p>
           </div>
 
@@ -109,7 +109,7 @@ export default function CTASection() {
             </a>
 
             <a
-              href={CONTACT_HREF}
+              href={STRATEGY_CALL_URL}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -127,7 +127,7 @@ export default function CTASection() {
               }}
             >
               <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-                <span>预约咨询</span>
+                <span>预约30分钟AI数字化诊断</span>
                 <span
                   style={{
                     fontSize: "10.5px",
@@ -137,7 +137,7 @@ export default function CTASection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  Book a Call
+                  Strategy Call
                 </span>
               </span>
             </a>

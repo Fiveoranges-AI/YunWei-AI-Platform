@@ -6,7 +6,7 @@
    ============================================================= */
 
 const DEMO_URL = "/demo.html";
-const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const STRATEGY_CALL_URL = "/strategy-call";
 
 function HeroVisual() {
   return (
@@ -409,7 +409,7 @@ function HeroVisual() {
         </a>
 
         <a
-          href={CONTACT_HREF}
+          href={STRATEGY_CALL_URL}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -431,7 +431,7 @@ function HeroVisual() {
           <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
             <span>预约咨询</span>
             <span style={{ fontSize: "10.5px", letterSpacing: "0.14em", opacity: 0.7, fontWeight: 500, textTransform: "uppercase" }}>
-              Book a Call
+              Strategy Call
             </span>
           </span>
         </a>
@@ -487,16 +487,32 @@ export default function HeroSection() {
             </div>
 
             <p
+              className="home-hero-value fade-up fade-up-delay-2"
+              style={{
+                marginTop: "1.65rem",
+                maxWidth: "640px",
+                fontFamily: "Sora, sans-serif",
+                fontSize: "clamp(1.45rem, 2.35vw, 2rem)",
+                fontWeight: 700,
+                lineHeight: 1.32,
+                color: "#0F2340",
+                letterSpacing: 0,
+              }}
+            >
+              帮制造业老板用 AI 管清库存、订单、客户、流程和经营数据。
+            </p>
+
+            <p
               className="home-hero-copy fade-up fade-up-delay-2"
               style={{
-                marginTop: "1.75rem",
+                marginTop: "1.15rem",
                 fontSize: "1.0625rem",
                 lineHeight: 1.65,
                 color: "#334155",
                 maxWidth: "560px",
               }}
             >
-              我们帮助制造业、贸易与企业团队，将分散数据与手工流程，转化为
+              让老板少靠人盯，多靠系统看清业务。我们帮助制造业、贸易与企业团队，将分散数据与手工流程，转化为
               <strong style={{ color: "#0F2340" }}>真正能跑业务的 AI 智能体</strong>。
             </p>
 
@@ -511,10 +527,10 @@ export default function HeroSection() {
                 </svg>
               </a>
 
-              <a href={CONTACT_HREF} className="hero-mobile-secondary-cta">
+              <a href={STRATEGY_CALL_URL} className="hero-mobile-secondary-cta">
                 <span>
-                  <span>预约咨询</span>
-                  <span>Book a Call</span>
+                  <span>预约30分钟AI数字化诊断</span>
+                  <span>Strategy Call</span>
                 </span>
               </a>
             </div>

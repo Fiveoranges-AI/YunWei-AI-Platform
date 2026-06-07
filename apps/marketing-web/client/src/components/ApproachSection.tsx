@@ -1,15 +1,25 @@
 /* =============================================================
-   Approach — From discovery to daily operation, in four phases (v1.3)
-   Diagonal-rising 4-step layout on desktop, stacked on mobile.
+   Approach — Start with one validated business scene.
    ============================================================= */
 
 import type { CSSProperties } from "react";
 
 const STEPS = [
-  { cn: "诊断", en: "Discover", desc: "到现场梳理你的数据、系统与当前痛点。" },
-  { cn: "设计", en: "Design", desc: "流程先行的架构：哪个智能体负责哪类决策？" },
-  { cn: "构建", en: "Build", desc: "两周一节奏的迭代交付，你的团队全程参与。" },
-  { cn: "运营", en: "Operate", desc: "陪伴上线后的前 90 天进入稳定运营。" },
+  {
+    cn: "业务诊断",
+    en: "Diagnose",
+    desc: "先梳理库存、订单、客户、流程和数据，找到最值得优先解决的问题。",
+  },
+  {
+    cn: "可验证 Demo",
+    en: "Validate",
+    desc: "围绕一个小场景做出可看、可试、可讨论的 Demo，降低投入前的不确定性。",
+  },
+  {
+    cn: "分阶段上线",
+    en: "Scale",
+    desc: "确认价值后再扩展到核心业务流程，让团队逐步接受并持续使用。",
+  },
 ];
 
 export default function ApproachSection() {
@@ -32,7 +42,7 @@ export default function ApproachSection() {
               fontFamily: "Sora, sans-serif",
             }}
           >
-            From discovery to daily operation, in four phases.
+              不从大ERP开始，从一个可验证的小场景开始
           </h2>
           <div
             style={{
@@ -43,7 +53,7 @@ export default function ApproachSection() {
               color: "#475569",
             }}
           >
-            从诊断到日常运营，四个阶段闭环。
+            Start small, validate fast, then expand into core operations.
           </div>
         </div>
 

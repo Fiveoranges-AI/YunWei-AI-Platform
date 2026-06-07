@@ -5,6 +5,7 @@
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
 const DEMO_URL = "/demo.html";
+const STRATEGY_CALL_URL = "/strategy-call";
 
 export default function Footer() {
   return (
@@ -189,6 +190,11 @@ export default function Footer() {
               }}
             >
               <li>
+                <a href={STRATEGY_CALL_URL} className="footer-link" style={{ color: "#60A5FA" }}>
+                  预约诊断 · Strategy Call
+                </a>
+              </li>
+              <li>
                 <a
                   href="mailto:contact@fiveoranges.ai"
                   className="footer-link"
@@ -215,6 +221,20 @@ export default function Footer() {
           }}
         >
           <span>© {new Date().getFullYear()} Five Oranges AI · 运帷 AI. All rights reserved.</span>
+          <span className="footer-legal-links">
+            <a href="/privacy" className="footer-link" style={{ color: "#94A3B8" }}>
+              Privacy
+            </a>
+            <a href="/terms" className="footer-link" style={{ color: "#94A3B8" }}>
+              Terms
+            </a>
+            <a href="/data-security" className="footer-link" style={{ color: "#94A3B8" }}>
+              Data Security
+            </a>
+            <a href={STRATEGY_CALL_URL} className="footer-link" style={{ color: "#94A3B8" }}>
+              Contact
+            </a>
+          </span>
         </div>
       </div>
     </footer>

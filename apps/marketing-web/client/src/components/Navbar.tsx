@@ -16,7 +16,7 @@ const NAV_ITEMS = [
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
 const DEMO_URL = "/demo.html";
-const CONTACT_HREF = "mailto:contact@fiveoranges.ai";
+const STRATEGY_CALL_URL = "/strategy-call";
 
 type CnTooltipProps = { text: string; show: boolean };
 function CnTooltip({ text, show }: CnTooltipProps) {
@@ -267,7 +267,7 @@ function ContactBtn() {
   const [hover, setHover] = useState(false);
   return (
     <a
-      href={CONTACT_HREF}
+      href={STRATEGY_CALL_URL}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
@@ -592,7 +592,7 @@ export default function Navbar() {
             </a>
 
             <a
-              href={CONTACT_HREF}
+              href={STRATEGY_CALL_URL}
               onClick={closeDrawer}
               style={{
                 marginTop: "4px",

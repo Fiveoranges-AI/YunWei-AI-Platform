@@ -1,18 +1,22 @@
 /* =============================================================
    Home — Five Oranges AI · 运帷AI
    Section order per v1.3 design:
-   Navbar → Hero → Solutions → Why → Approach → UseCases →
-   Philosophy → CTA → Footer
+   Navbar → Hero → Opportunities → Approach → Demo → Solutions →
+   Why → UseCases → Philosophy → Founder → FAQ → CTA → Footer
    ============================================================= */
 
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
+import OpportunitySection from "@/components/OpportunitySection";
 import SolutionsSection from "@/components/SolutionsSection";
 import WhySection from "@/components/WhySection";
 import ApproachSection from "@/components/ApproachSection";
+import DemoIntroSection from "@/components/DemoIntroSection";
 import UseCasesSection from "@/components/UseCasesSection";
 import PhilosophySection from "@/components/PhilosophySection";
+import FounderPreviewSection from "@/components/FounderPreviewSection";
+import FAQSection from "@/components/FAQSection";
 import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
 
@@ -30,11 +34,15 @@ export default function Home() {
       <Navbar />
       <main>
         <HeroSection />
+        <OpportunitySection />
+        <ApproachSection />
+        <DemoIntroSection />
         <SolutionsSection />
         <WhySection />
-        <ApproachSection />
         <UseCasesSection />
         <PhilosophySection />
+        <FounderPreviewSection />
+        <FAQSection />
         <CTASection />
       </main>
       <Footer />
