@@ -479,10 +479,42 @@ export default function HeroSection() {
               进无止境
             </div>
 
+            {/* Primary Chinese value proposition — clear to manufacturing SME owners */}
             <p
               className="fade-up fade-up-delay-2"
               style={{
                 marginTop: "1.75rem",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 700,
+                fontSize: "clamp(1.25rem, 2.1vw, 1.6rem)",
+                lineHeight: 1.4,
+                letterSpacing: "-0.005em",
+                color: "#0F2340",
+                maxWidth: "600px",
+              }}
+            >
+              帮制造业老板用 AI 管清库存、订单、客户、流程和经营数据。
+            </p>
+
+            <p
+              className="fade-up fade-up-delay-2"
+              style={{
+                marginTop: "0.875rem",
+                fontFamily: "Sora, sans-serif",
+                fontWeight: 600,
+                fontSize: "1.0625rem",
+                lineHeight: 1.55,
+                color: "var(--brand-blue)",
+                maxWidth: "560px",
+              }}
+            >
+              让老板少靠人盯，多靠系统看清业务。
+            </p>
+
+            <p
+              className="fade-up fade-up-delay-3"
+              style={{
+                marginTop: "1.25rem",
                 fontSize: "1.0625rem",
                 lineHeight: 1.65,
                 color: "#334155",
