@@ -1518,7 +1518,7 @@
     /* ===== Sign out ===== */
     document.getElementById('btn-signout').addEventListener('click', async () => {
       try {
-        await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
       } catch (_) {}
       location.href = '/';
     });
