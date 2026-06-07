@@ -23,34 +23,67 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-BACKEND_DIR="$ROOT/services/platform-api"
+
+# Locate a services/platform-api that actually has dev_jintai_backend.py.
+# (It's on main, so $ROOT works from any main-derived worktree; the sibling
+# fallbacks keep it working from a worktree that lacks it. Override with
+# $DEMO_BACKEND_DIR.)
+_has_jintai_backend() { [[ -f "$1/dev_jintai_backend.py" ]]; }
+BACKEND_DIR=""
+for cand in \
+  "${DEMO_BACKEND_DIR:-}" \
+  "$ROOT/services/platform-api" \
+  "$ROOT/../jintai-finance-reports/services/platform-api" \
+  ; do
+  [[ -z "$cand" ]] && continue
+  if _has_jintai_backend "$cand"; then BACKEND_DIR=$(cd "$cand" && pwd); break; fi
+done
+if [[ -z "$BACKEND_DIR" ]]; then
+  echo "ERR: cannot locate dev_jintai_backend.py (set \$DEMO_BACKEND_DIR)."
+  exit 1
+fi
 # Frontend lives in the sibling worktree when this script is run from the
 # backend worktree (jintai-finance-reports). IMPORTANT: detect by Jintai-screen
 # presence, not by `apps/win-web/` existence — the backend worktree has an
 # OLDER `apps/win-web` (pre-jintai win-customer app) that would serve a
 # stale bundle without the ?tab=jintai route, white-screening the user.
-_has_jintai_screens() {
-  [[ -f "$1/src/screens/jintai/JintaiDemoPage.tsx" ]]
+_has_jintai_screens() { [[ -f "$1/src/screens/jintai/JintaiDemoPage.tsx" ]]; }
+# A frontend carrying BOTH demo tabs — preferred so one vite serves
+# ?tab=jintai AND ?tab=guangtian (avoids ?tab=guangtian white-screening on a
+# jintai-only bundle, which is the exact regression this probe guards against).
+_has_both_screens() {
+  [[ -f "$1/src/screens/jintai/JintaiDemoPage.tsx" && -f "$1/src/screens/guangtian/GuangtianDemoPage.tsx" ]]
 }
 
+# Candidate order. `guangtian-frontend` carries both tabs; `$ROOT/apps/win-web`
+# is the right pick when this script runs *from* that worktree. Override the
+# whole list with $DEMO_WEB_DIR.
+_WEB_CANDS=(
+  "${DEMO_WEB_DIR:-}"
+  "$ROOT/apps/win-web"
+  "$ROOT/../guangtian-frontend/apps/win-web"
+  "$ROOT/../guangtian-frontend-v2/apps/win-web"
+  "$ROOT/../jintai-frontend-mode/apps/win-web"
+  "$ROOT/../jintai-frontend-backend-mode/apps/win-web"
+)
 WEB_DIR=""
-for candidate in \
-  "$ROOT/apps/win-web" \
-  "$ROOT/../jintai-frontend-mode/apps/win-web" \
-  "$ROOT/../jintai-frontend-backend-mode/apps/win-web" \
-  ; do
-  if _has_jintai_screens "$candidate"; then
-    WEB_DIR=$(cd "$candidate" && pwd)
-    break
-  fi
+# Pass 1: prefer a both-tabs frontend.
+for candidate in "${_WEB_CANDS[@]}"; do
+  [[ -z "$candidate" ]] && continue
+  _has_both_screens "$candidate" && { WEB_DIR=$(cd "$candidate" && pwd); break; }
 done
+# Pass 2: fall back to any jintai-aware frontend (back-compat).
+if [[ -z "$WEB_DIR" ]]; then
+  for candidate in "${_WEB_CANDS[@]}"; do
+    [[ -z "$candidate" ]] && continue
+    _has_jintai_screens "$candidate" && { WEB_DIR=$(cd "$candidate" && pwd); break; }
+  done
+fi
 
 if [[ -z "$WEB_DIR" ]]; then
   echo "ERR: cannot locate the jintai-aware apps/win-web."
   echo "     Need a checkout where src/screens/jintai/JintaiDemoPage.tsx exists."
-  echo "     Tried:"
-  echo "       $ROOT/apps/win-web"
-  echo "       $ROOT/../jintai-frontend-mode/apps/win-web"
+  echo "     Tried: \$DEMO_WEB_DIR (${DEMO_WEB_DIR:-unset}) + ${_WEB_CANDS[*]}"
   exit 1
 fi
 
