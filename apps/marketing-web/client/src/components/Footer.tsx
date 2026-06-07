@@ -5,6 +5,7 @@
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
 const DEMO_URL = "/demo.html";
+const STRATEGY_CALL_HREF = "/strategy-call";
 
 export default function Footer() {
   return (
@@ -114,6 +115,15 @@ export default function Footer() {
                 fontSize: "0.9375rem",
               }}
             >
+              <li>
+                <a
+                  href={STRATEGY_CALL_HREF}
+                  className="footer-link"
+                  style={{ color: "#60A5FA", fontWeight: 600 }}
+                >
+                  预约诊断 · Strategy Call
+                </a>
+              </li>
               <li>
                 <a href="/#solutions" className="footer-link" style={{ color: "#94A3B8" }}>
                   解决方案 · Solutions

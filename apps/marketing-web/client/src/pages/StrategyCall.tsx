@@ -218,6 +218,9 @@ export default function StrategyCall() {
               {/* Right — intake form */}
               <div className="strategy-form-card">
                 <form onSubmit={handleSubmit} noValidate>
+                  <p className="sc-form-intro">
+                    只需约 1 分钟 · 仅「姓名」和「联系方式」必填，其余可留空。
+                  </p>
                   <div className="sc-row">
                     <div className="sc-field">
                       <label className="sc-label" htmlFor="sc-name">
@@ -367,7 +370,7 @@ export default function StrategyCall() {
                     />
                   </div>
 
-                  {error && (
+                  {error && (!form.name.trim() || !form.contact.trim()) && (
                     <p className="sc-error" role="alert">
                       {error}
                     </p>
