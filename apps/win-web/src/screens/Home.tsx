@@ -158,6 +158,7 @@ export function HomeScreen({ go }: { go: GoFn }) {
               {assets}
             </div>
           </div>
+          <HomeFooter />
         </div>
       </div>
     );
@@ -177,6 +178,7 @@ export function HomeScreen({ go }: { go: GoFn }) {
         <div style={{ marginTop: 18 }}>{briefing}</div>
         <div style={{ marginTop: 18 }}>{stream}</div>
         <div style={{ marginTop: 18 }}>{assets}</div>
+        <HomeFooter />
       </div>
     </div>
   );
@@ -892,3 +894,88 @@ const oneLine: React.CSSProperties = {
   whiteSpace: "nowrap",
   minWidth: 0,
 };
+
+// ════════════════ footer · legal links ════════════════
+// Privacy / Terms point to the marketing site (single source of truth),
+// opened in a new tab since the workspace lives on a different subdomain.
+
+function FootLink({ cn, en, href }: { cn: string; en: string; href: string }) {
+  const [hover, setHover] = useState(false);
+  const external = href.startsWith("http");
+  return (
+    <a
+      href={href}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "inline-flex",
+        alignItems: "baseline",
+        gap: 5,
+        textDecoration: "none",
+        fontFamily: "var(--font)",
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: hover ? "var(--brand-600)" : "var(--ink-500)",
+        transition: "color 160ms ease",
+      }}
+    >
+      {cn}
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: hover ? "var(--brand-600)" : "var(--ink-300)",
+        }}
+      >
+        {en}
+      </span>
+    </a>
+  );
+}
+
+function HomeFooter() {
+  return (
+    <footer
+      style={{
+        marginTop: 28,
+        paddingTop: 16,
+        borderTop: "1px solid var(--ink-100)",
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "10px 18px",
+        fontFamily: "var(--font)",
+      }}
+    >
+      <span style={{ fontSize: 12, color: "var(--ink-400)" }}>
+        © {new Date().getFullYear()} Five Oranges AI · 运帷 AI
+      </span>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 18px" }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: "var(--font)",
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: "var(--ink-500)",
+          }}
+        >
+          <span style={{ width: 7, height: 7, borderRadius: 4, background: "var(--ok-500)", flexShrink: 0 }} />
+          系统状态
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-300)" }}>
+            Status
+          </span>
+        </span>
+        <FootLink cn="隐私" en="Privacy" href="https://fiveoranges.ai/privacy" />
+        <FootLink cn="条款" en="Terms" href="https://fiveoranges.ai/terms" />
+        <FootLink cn="联系" en="Contact" href="mailto:contact@fiveoranges.ai" />
+      </div>
+    </footer>
+  );
+}
