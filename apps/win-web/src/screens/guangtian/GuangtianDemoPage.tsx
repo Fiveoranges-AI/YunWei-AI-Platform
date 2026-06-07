@@ -191,6 +191,25 @@ function GuangtianDemoInner() {
           transition: "padding-top 0.25s ease",
         }}
       >
+        {/* 返回 dashboard — guangtian 是绕过 AppShell 的独立全屏页(租户隔离),
+            没有侧栏,故在左上角单独给一个回工作台的入口。 */}
+        <a
+          href="/dashboard"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 14,
+            fontSize: 13,
+            fontWeight: 600,
+            color: "var(--ink-500)",
+            textDecoration: "none",
+            fontFamily: "var(--font)",
+          }}
+        >
+          ← 返回所有智能体
+        </a>
+
         {/* Tab navigation */}
         <nav
           aria-label="光天试点 演示分页"
@@ -392,6 +411,9 @@ function GuangtianDemoInner() {
             <img
               src={`${import.meta.env.BASE_URL}guangtian-logo.png`}
               alt="光天科技"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
               style={{ height: 16, width: "auto" }}
             />
             宜兴光天耐火材料
