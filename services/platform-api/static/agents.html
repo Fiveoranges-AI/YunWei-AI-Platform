@@ -1431,9 +1431,47 @@
             <div class="lbl">低库存预警<span class="en">LOW STOCK</span></div>
           </div>
           <div class="stat">
-            <div class="v">¥31,900<span class="delta">13.8×</span></div>
+            <div class="v">3.19<span style="font-size:14px;color:var(--txt-mute);font-weight:600;"> 万</span><span class="delta">13.8×</span></div>
             <div class="lbl">预估月省<span class="en">SAVED / MO</span></div>
           </div>`;
+      }
+
+      // R-new-2 · 把空通知铃变成「AI 已在为你干活」。删 yinhu 通知后(见上)铃是空的;
+      // 注入 2 条光天相关、可点击的通知,数字对齐他的光天 demo(诚实)+ 引导进产品。
+      const notifList = document.querySelector('#notif-panel .notif-list');
+      if (notifList) {
+        const go = "location.href='https://app.fiveoranges.ai/win/?tab=guangtian'";
+        notifList.innerHTML = `
+          <button class="notif-item" onclick="${go}">
+            <span class="notif-dot success"></span>
+            <span class="notif-text">光天 AI 库存试点已激活 · 1,286 个 SKU 已纳入实时监控
+              <span class="ts">今天</span></span>
+          </button>
+          <button class="notif-item" onclick="${go}">
+            <span class="notif-dot warning"></span>
+            <span class="notif-text"><strong>46 个 SKU 低于安全线</strong>，3 笔订单有缺货风险 · 点击查看
+              <span class="ts">刚刚</span></span>
+          </button>`;
+        const cnt = document.querySelector('#notif-panel .notif-h .t');
+        if (cnt) cnt.textContent = '通知 · 2 条未读';
+        const badge = document.querySelector('#btn-notif .badge-dot');
+        if (badge) badge.style.display = '';
+      }
+
+      // R-new-1 · 数据安全信任信号(诚实:平台用 per-tenant 独立数据库 tenant_<id>)。
+      // 企业主签单前最在意「我的数据安不安全/会不会和别家混」。
+      const agentsSection = document.getElementById('agent-grid') &&
+        document.getElementById('agent-grid').closest('section');
+      if (agentsSection && !document.getElementById('gt-trust')) {
+        agentsSection.insertAdjacentHTML('afterend',
+          '<div id="gt-trust" style="display:flex;align-items:center;gap:9px;margin-top:18px;'
+          + 'padding:11px 14px;background:var(--line-soft);border:1px solid var(--line);'
+          + 'border-radius:10px;color:var(--txt-mute);font-size:12.5px;max-width:560px;">'
+          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+          + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" '
+          + 'width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+          + '<span>数据安全 · 您的库存数据存于<strong style="color:#334155;">独立专属数据库</strong>'
+          + '，与其他企业完全隔离</span></div>');
       }
     }
 
