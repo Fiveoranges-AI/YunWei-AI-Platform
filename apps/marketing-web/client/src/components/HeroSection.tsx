@@ -12,6 +12,7 @@ function HeroVisual() {
   return (
     <div
       aria-hidden
+      className="hero-visual-shell"
       style={{
         position: "relative",
         width: "100%",
@@ -42,6 +43,7 @@ function HeroVisual() {
 
       {/* Watermark V */}
       <div
+        className="hero-visual-watermark"
         style={{
           position: "absolute",
           right: "-30px",
@@ -61,6 +63,7 @@ function HeroVisual() {
 
       {/* Dashboard panel — top left */}
       <div
+        className="hero-visual-main-card"
         style={{
           position: "absolute",
           top: "5%",
@@ -153,6 +156,7 @@ function HeroVisual() {
 
       {/* Accuracy card — top right */}
       <div
+        className="hero-visual-secondary-card"
         style={{
           position: "absolute",
           top: "8%",
@@ -217,6 +221,7 @@ function HeroVisual() {
 
       {/* Efficiency strip — mid right */}
       <div
+        className="hero-visual-secondary-card"
         style={{
           position: "absolute",
           top: "50%",
@@ -285,6 +290,7 @@ function HeroVisual() {
 
       {/* Multi-agent chip — bottom left */}
       <div
+        className="hero-visual-secondary-card"
         style={{
           position: "absolute",
           bottom: "5%",
@@ -357,6 +363,7 @@ function HeroVisual() {
 
       {/* CTA pair — bottom-right inset */}
       <div
+        className="hero-visual-cta"
         style={{
           position: "absolute",
           right: "24px",
@@ -437,7 +444,7 @@ export default function HeroSection() {
   return (
     <section
       id="top"
-      className="relative overflow-hidden"
+      className="home-hero-section relative overflow-hidden"
       style={{
         background: "linear-gradient(180deg, #FFFFFF 0%, #F8F7F4 100%)",
         paddingTop: "9rem",
@@ -450,7 +457,7 @@ export default function HeroSection() {
           {/* Left — copy */}
           <div>
             <h1
-              className="fade-up"
+              className="home-hero-title fade-up"
               style={{
                 marginTop: 0,
                 fontFamily: "Sora, sans-serif",
@@ -480,7 +487,7 @@ export default function HeroSection() {
             </div>
 
             <p
-              className="fade-up fade-up-delay-2"
+              className="home-hero-copy fade-up fade-up-delay-2"
               style={{
                 marginTop: "1.75rem",
                 fontSize: "1.0625rem",
@@ -492,6 +499,25 @@ export default function HeroSection() {
               我们帮助制造业、贸易与企业团队，将分散数据与手工流程，转化为
               <strong style={{ color: "#0F2340" }}>真正能跑业务的 AI 智能体</strong>。
             </p>
+
+            <div className="hero-mobile-cta-row fade-up fade-up-delay-2">
+              <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="hero-mobile-primary-cta">
+                <span>
+                  <span>查看演示</span>
+                  <span>Live Demo</span>
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </a>
+
+              <a href={CONTACT_HREF} className="hero-mobile-secondary-cta">
+                <span>
+                  <span>预约咨询</span>
+                  <span>Book a Call</span>
+                </span>
+              </a>
+            </div>
           </div>
 
           {/* Right — visual */}
