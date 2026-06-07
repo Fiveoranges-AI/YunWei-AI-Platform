@@ -137,7 +137,7 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
                   borderRadius: 999,
                 }}
               >
-                AI Inventory OS
+                AI 库存中台
               </span>
               <span style={{ fontSize: 12.5, color: "var(--ink-700)", fontWeight: 600 }}>
                 替代 Excel + 人工库存
