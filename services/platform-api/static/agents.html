@@ -845,7 +845,7 @@
           </div>
         </div>
 
-        <div class="stats-row" aria-label="今日概览">
+        <div class="stats-row" id="stats-row" aria-label="今日概览">
           <div class="stat">
             <div class="v">142<span class="delta">↑ 18%</span></div>
             <div class="lbl">今日处理任务<span class="en">TODAY</span></div>
@@ -1169,7 +1169,7 @@
     </main>
 
     <footer class="foot">
-      <div class="copy">© 2026 Five Oranges AI · 运帷 AI. All rights reserved.</div>
+      <div class="copy" id="foot-copy">© 2026 Five Oranges AI · 运帷 AI. All rights reserved.</div>
       <ul>
         <li><a class="status-link" href="#">系统状态<span class="en">STATUS</span></a></li>
         <li><a href="#">隐私<span class="en">PRIVACY</span></a></li>
@@ -1296,8 +1296,8 @@
             </div>
           </div>
           <div class="card-foot">
-            <span style="font-size:11px;color:#1A3F8E;font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">宜兴光天耐火</span>
-            <span class="card-cta">进入<span class="en">Enter</span>${ICON_ARROW}</span>
+            <span style="font-size:11px;color:#1A3F8E;font-family:'Sora',sans-serif;letter-spacing:0.04em;font-weight:600;">你的主工作台</span>
+            <span class="card-cta" style="background:#1A3F8E;color:#fff;padding:7px 13px;border-radius:8px;">从这里开始<span class="en" style="color:#cdd8ef;">Start</span>${ICON_ARROW}</span>
           </div>
         </a>
       `;
@@ -1399,10 +1399,42 @@
         && me.enterprises.some(e => (e && (e.id || e)) === 'guangtian'));
       if (inGuangtian) {
         grid.insertAdjacentHTML('afterbegin', buildGuangtianCard());
+        personalizeForGuangtian();
       }
 
       const cards = document.querySelectorAll('.card');
       cards.forEach((c, i) => setTimeout(() => c.classList.add('in'), 120 + i * 80));
+    }
+
+    /* 光天成员(邹总)专属个性化 — 让 dashboard 第一眼就是「他自己的」。
+       仅在 inGuangtian 时调用,不影响许总(yinhu)等其他租户的默认视图。 */
+    function personalizeForGuangtian() {
+      // Round 2 · 概览句:他明明有 2 个智能体,不该再写「暂无」。
+      const sumZh = document.getElementById('agents-summary');
+      const sumEn = document.getElementById('agents-summary-en');
+      if (sumZh) sumZh.textContent = '宜兴光天耐火材料 · 试点工作台 · 2 个智能体已就绪';
+      if (sumEn) sumEn.textContent = '';
+      // Round 1 · KPI 换成邹总自己的库存盘点(与光天 demo 同一组数 → 数据真实感,
+      // 点进光天卡能对上号),而不是通用占位 142/23.4/99.8%。
+      // Round 4 · footer 归属感:为他的公司定制。
+      const footCopy = document.getElementById('foot-copy');
+      if (footCopy) footCopy.textContent = '© 2026 Five Oranges AI · 运帷 AI · 为 宜兴光天耐火材料 定制';
+      const statsRow = document.getElementById('stats-row');
+      if (statsRow) {
+        statsRow.innerHTML = `
+          <div class="stat">
+            <div class="v">1,286<span class="delta">↑ 12 本月</span></div>
+            <div class="lbl">在管 SKU<span class="en">SKUS</span></div>
+          </div>
+          <div class="stat">
+            <div class="v">46<span style="font-size:12px;color:var(--txt-mute);font-weight:600;">个</span></div>
+            <div class="lbl">低库存预警<span class="en">LOW STOCK</span></div>
+          </div>
+          <div class="stat">
+            <div class="v">¥31,900<span class="delta">13.8×</span></div>
+            <div class="lbl">预估月省<span class="en">SAVED / MO</span></div>
+          </div>`;
+      }
     }
 
     /* ===== Dropdowns ===== */
