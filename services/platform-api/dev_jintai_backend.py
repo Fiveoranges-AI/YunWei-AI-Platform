@@ -84,6 +84,20 @@ def create_app() -> FastAPI:
             "mode": f"dev ({db_label}, no auth)",
         }
 
+    @app.api_route("/api/health", methods=["GET", "HEAD"])
+    async def api_health():
+        """Same shape as the prod app's /api/health so the SPA + uptime probes
+        hit one canonical path in both demo and prod. dev backend is always a
+        live local DB file, so db_ok is True here."""
+        from fastapi.responses import JSONResponse
+
+        from platform_app.observability import build_health_payload
+
+        payload, status = build_health_payload(
+            db_ok=True, extra={"deployment": "dev-backend", "auth": "bypassed"}
+        )
+        return JSONResponse(payload, status_code=status)
+
     app.include_router(win_router, prefix="/api/win")
     return app
 
