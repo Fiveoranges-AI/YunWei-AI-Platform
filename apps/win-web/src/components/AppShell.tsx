@@ -31,6 +31,9 @@ export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, childre
   const isTablet = useIsTablet();
   const isWide = isDesktop || isTablet;
   const [avatarInitial, setAvatarInitial] = useState<string>("?");
+  // 租户隔离:侧栏里的跨租户入口(锦泰试点 tab / 超级小陈外链)只对对应
+  // enterprise 成员显示。fail-closed:getMe 未回/失败 → 集合为空 → 都不显示。
+  const [enterpriseIds, setEnterpriseIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +42,7 @@ export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, childre
         if (cancelled) return;
         const name = (u.display_name || u.username || "").trim();
         if (name) setAvatarInitial(name.slice(0, 1).toUpperCase());
+        setEnterpriseIds(new Set((u.enterprises || []).map((e) => e.id)));
       })
       .catch(() => {
         /* keep fallback */
@@ -67,6 +71,8 @@ export function AppShell({ activeTab, onTabChange, currentScreen, onAdd, childre
           onAdd={onAdd}
           avatarInitial={avatarInitial}
           compact={isTablet}
+          showJintai={enterpriseIds.has("jintai")}
+          showXiaochen={enterpriseIds.has("yinhu")}
         />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <UHeader
