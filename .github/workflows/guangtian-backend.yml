@@ -1,0 +1,174 @@
+name: guangtian-backend
+# CI for 光天 · AI 库存管家 后端 (PR-G1). 克隆自 jintai-backend.yml.
+#
+# 3 个并行 job:
+#   1. backend-sqlite — guangtian-* + 既有锦泰/confirm SQLite 测试 (快, 无 PG/Redis)
+#   2. backend-pg     — guangtian-* 全套 (Postgres service container)
+#   3. smoke-api      — clean-room API smoke (dev_guangtian_backend + full-demo.sh)
+
+on:
+  push:
+    branches:
+      - 'feat/guangtian-**'
+    paths:
+      - 'services/platform-api/**'
+      - 'scripts/guangtian/**'
+      - '.github/workflows/guangtian-backend.yml'
+  pull_request:
+    branches:
+      - main
+      - 'feat/jintai-**'
+      - 'feat/guangtian-**'
+    paths:
+      - 'services/platform-api/**'
+      - 'scripts/guangtian/**'
+      - '.github/workflows/guangtian-backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-sqlite:
+    name: SQLite (guangtian-* tests, fast)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+      - name: pip install
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev] 2>/dev/null || pip install -e .
+          pip install pytest pytest-asyncio httpx aiosqlite
+      - name: run guangtian-* SQLite tests (+ 既有回归)
+        working-directory: services/platform-api
+        env:
+          DATABASE_URL: 'sqlite+aiosqlite:///./ci_sqlite.db'
+          REDIS_URL: 'redis://localhost:6380'
+          COOKIE_SECRET: 'ci-cookie-secret-32-bytes-padding====='
+        run: |
+          python -m pytest -v --tb=short --no-header \
+            tests/test_guangtian_inventory.py \
+            tests/test_guangtian_cross_tenant.py \
+            tests/test_guangtian_concurrency.py \
+            tests/test_guangtian_confirm.py \
+            tests/test_jintai_mainline_e2e.py \
+            tests/test_jintai_cross_tenant.py \
+            tests/test_confirm_cards.py \
+            tests/test_parse_pipeline.py
+
+  backend-pg:
+    name: Postgres (guangtian + full pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+      - name: pip install
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . 2>/dev/null || true
+          pip install pytest pytest-asyncio httpx respx aiosqlite asyncpg psycopg[binary]
+      - name: pytest guangtian (PG mode)
+        working-directory: services/platform-api
+        env:
+          DATABASE_URL: 'postgresql://postgres:test@localhost:5433/test'
+          REDIS_URL: 'redis://localhost:6380'
+          COOKIE_SECRET: 'ci-cookie-secret-32-bytes-padding====='
+        run: |
+          python -m pytest -v --tb=short --no-header -rs \
+            tests/test_guangtian_inventory.py \
+            tests/test_guangtian_cross_tenant.py \
+            tests/test_guangtian_concurrency.py \
+            tests/test_guangtian_confirm.py
+
+  smoke-api:
+    name: API smoke (dev_guangtian_backend + full-demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: backend-pg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/platform-api/pyproject.toml
+      - name: pip install
+        working-directory: services/platform-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . 2>/dev/null || true
+          pip install pytest httpx aiosqlite uvicorn[standard]
+      - name: install jq
+        run: sudo apt-get install -y jq
+      - name: start dev_guangtian_backend (SQLite) in background
+        working-directory: services/platform-api
+        env:
+          REDIS_URL: 'redis://localhost:6379'
+          COOKIE_SECRET: 'ci-cookie-secret-32-bytes-padding====='
+        run: |
+          python -m uvicorn dev_guangtian_backend:app --host 127.0.0.1 --port 8000 \
+            > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sSf http://127.0.0.1:8000/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -sS http://127.0.0.1:8000/health
+      - name: full-demo.sh (12 步主线)
+        run: |
+          BASE=http://127.0.0.1:8000/api/win bash scripts/guangtian/full-demo.sh \
+            > /tmp/full-demo.log 2>&1
+          if ! grep -q "光天后端全链 happy path 跑通" /tmp/full-demo.log; then
+            echo "::error::full-demo.sh did not complete"; tail -40 /tmp/full-demo.log; exit 1
+          fi
+      - name: verify key API responses
+        run: |
+          set -e
+          KPI=$(curl -sS http://127.0.0.1:8000/api/win/guangtian/briefing/kpi)
+          TOTAL=$(echo "$KPI" | jq -r '.sku_total')
+          [[ "$TOTAL" -ge 8 ]] || { echo "::error::sku_total expected >=8 got $TOTAL"; exit 1; }
+          echo "✓ sku_total=$TOTAL"
+          ASK=$(curl -sS -X POST http://127.0.0.1:8000/api/win/guangtian/ask \
+            -H 'Content-Type: application/json' -d '{"question":"明天优先生产什么"}')
+          ENGINE=$(echo "$ASK" | jq -r '.engine')
+          [[ "$ENGINE" == "demo-mock" ]] || { echo "::error::ask engine expected demo-mock got $ENGINE"; exit 1; }
+          echo "✓ ask engine=$ENGINE"
+      - name: dump backend log on failure
+        if: failure()
+        run: tail -100 /tmp/backend.log

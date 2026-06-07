@@ -236,6 +236,16 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         BillOfMaterials,
         BillOfMaterialsLine,
     )
+    from yunwei_win.models.guangtian import (
+        GuangtianCustomerOrder,
+        GuangtianCustomerOrderItem,
+        GuangtianInboundVoucher,
+        GuangtianOutboundVoucher,
+        GuangtianReplenishment,
+        GuangtianSku,
+        GuangtianStockAlert,
+        GuangtianStockMovement,
+    )
 
     new_tables = [
         CompanySchemaTable.__table__,
@@ -277,6 +287,15 @@ async def ensure_schema_ingest_tables(engine: AsyncEngine) -> None:
         # BOM (配料单)
         BillOfMaterials.__table__,
         BillOfMaterialsLine.__table__,
+        # 光天 · AI 库存管家
+        GuangtianSku.__table__,
+        GuangtianStockMovement.__table__,
+        GuangtianInboundVoucher.__table__,
+        GuangtianOutboundVoucher.__table__,
+        GuangtianStockAlert.__table__,
+        GuangtianCustomerOrder.__table__,
+        GuangtianCustomerOrderItem.__table__,
+        GuangtianReplenishment.__table__,
     ]
 
     async with engine.begin() as conn:
