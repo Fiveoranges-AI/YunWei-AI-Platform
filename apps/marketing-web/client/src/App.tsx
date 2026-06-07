@@ -10,6 +10,7 @@ import Kobeli from "./pages/Kobeli";
 import Resources from "./pages/Resources";
 import StrategyCall from "./pages/StrategyCall";
 import { DataSecurityPage, PrivacyPage, TermsPage } from "./pages/TrustPages";
+import WorldCup from "./worldcup/WorldCup";
 
 function Router() {
   return (
@@ -22,6 +23,10 @@ function Router() {
       <Route path={"/privacy"} component={PrivacyPage} />
       <Route path={"/terms"} component={TermsPage} />
       <Route path={"/data-security"} component={DataSecurityPage} />
+      {/* Standalone /worldcup microsite — its own nav/footer/router.
+          Hidden from the main site nav & homepage by design. */}
+      <Route path={"/worldcup"} component={WorldCup} />
+      <Route path={"/worldcup/*"} component={WorldCup} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
