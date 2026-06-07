@@ -61,6 +61,10 @@ export function GuangtianHero({ onGoSku, onGoInbound, onGoAsk }: Props) {
             <img
               src={logo}
               alt={brand.company}
+              onError={(e) => {
+                // 防 logo 文件缺失时露破图占位符 — 优雅隐藏。
+                e.currentTarget.style.display = "none";
+              }}
               style={{
                 width: isDesktop ? 156 : 104,
                 height: "auto",
