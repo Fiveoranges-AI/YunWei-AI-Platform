@@ -11,6 +11,7 @@ const STRATEGY_CALL_HREF = "/strategy-call";
 function HeroVisual() {
   return (
     <div
+      className="hero-visual"
       aria-hidden
       style={{
         position: "relative",
@@ -42,6 +43,7 @@ function HeroVisual() {
 
       {/* Watermark V */}
       <div
+        className="hero-watermark"
         style={{
           position: "absolute",
           right: "-30px",
@@ -61,6 +63,7 @@ function HeroVisual() {
 
       {/* Dashboard panel — top left */}
       <div
+        className="hero-card-dashboard"
         style={{
           position: "absolute",
           top: "5%",
@@ -153,6 +156,7 @@ function HeroVisual() {
 
       {/* Accuracy card — top right */}
       <div
+        className="hero-card-secondary"
         style={{
           position: "absolute",
           top: "8%",
@@ -217,6 +221,7 @@ function HeroVisual() {
 
       {/* Efficiency strip — mid right */}
       <div
+        className="hero-card-secondary"
         style={{
           position: "absolute",
           top: "50%",
@@ -285,6 +290,7 @@ function HeroVisual() {
 
       {/* Multi-agent chip — bottom left */}
       <div
+        className="hero-card-secondary"
         style={{
           position: "absolute",
           bottom: "5%",
@@ -355,8 +361,9 @@ function HeroVisual() {
         </div>
       </div>
 
-      {/* CTA pair — bottom-right inset */}
+      {/* CTA pair — bottom-right inset (desktop only; mobile uses .hero-mobile-cta) */}
       <div
+        className="hero-cta-inset"
         style={{
           position: "absolute",
           right: "24px",
@@ -524,6 +531,24 @@ export default function HeroSection() {
               我们帮助制造业、贸易与企业团队，将分散数据与手工流程，转化为
               <strong style={{ color: "#0F2340" }}>真正能跑业务的 AI 智能体</strong>。
             </p>
+
+            {/* Mobile-only CTA row — desktop CTAs live inside <HeroVisual /> */}
+            <div className="hero-mobile-cta fade-up fade-up-delay-3" aria-label="Hero call-to-actions">
+              <a href={STRATEGY_CALL_HREF} className="hero-mobile-cta-primary">
+                <span>预约30分钟AI数字化诊断</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </a>
+              <a
+                href={DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hero-mobile-cta-secondary"
+              >
+                <span>查看演示 · Live Demo</span>
+              </a>
+            </div>
           </div>
 
           {/* Right — visual */}

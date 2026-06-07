@@ -290,6 +290,78 @@
   }
 }
 
+/* Hero mobile CTA row — appears under the hero copy on mobile only.
+   On desktop the same actions live inside <HeroVisual />, so this is hidden. */
+.hero-mobile-cta {
+  display: none;
+}
+@media (max-width: 768px) {
+  .hero-mobile-cta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.75rem;
+    width: 100%;
+    max-width: 420px;
+  }
+  .hero-mobile-cta-primary,
+  .hero-mobile-cta-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    width: 100%;
+    min-height: 50px;
+    padding: 0.85rem 1.25rem;
+    border-radius: 0.7rem;
+    font-family: "Sora", sans-serif;
+    font-weight: 700;
+    font-size: 0.98rem;
+    text-decoration: none;
+    transition: background 180ms ease-out, border-color 180ms ease-out, transform 180ms ease-out;
+  }
+  .hero-mobile-cta-primary {
+    background: var(--brand-blue);
+    color: #FFFFFF;
+    box-shadow: 0 8px 22px rgba(45, 110, 168, 0.28);
+  }
+  .hero-mobile-cta-primary:active {
+    background: #245F94;
+    transform: translateY(1px);
+  }
+  .hero-mobile-cta-secondary {
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--brand-blue);
+    border: 1.5px solid rgba(45, 110, 168, 0.45);
+  }
+  .hero-mobile-cta-secondary:active {
+    background: var(--brand-blue-pale);
+  }
+}
+
+/* Hero visual — desktop keeps the floating-card composition; mobile (<=768px)
+   collapses to a single static dashboard preview to avoid overlapping cards
+   inside the constrained 5:4 box, and hides the inset CTA pair (which is now
+   served by .hero-mobile-cta above the visual). */
+@media (max-width: 768px) {
+  .hero-visual {
+    aspect-ratio: auto !important;
+    min-height: 260px;
+    padding: 1.25rem;
+    border-radius: 16px !important;
+  }
+  .hero-visual .hero-watermark,
+  .hero-visual .hero-card-secondary,
+  .hero-visual .hero-cta-inset {
+    display: none !important;
+  }
+  .hero-visual .hero-card-dashboard {
+    position: static !important;
+    width: 100% !important;
+    margin: 0 auto;
+  }
+}
+
 /* Approach diagonal-up rail */
 .approach-rail { position: relative; }
 .approach-line { display: none; }
