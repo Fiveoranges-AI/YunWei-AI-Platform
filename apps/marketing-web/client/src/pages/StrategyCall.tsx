@@ -1,11 +1,10 @@
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
+import { ANALYTICS_EVENTS, trackEvent } from "@/utils/analytics";
 import { usePageSeo } from "@/utils/usePageSeo";
+import { useState } from "react";
 
 const EMAIL = "contact@fiveoranges.ai";
-const MAILTO = `mailto:${EMAIL}?subject=${encodeURIComponent("预约30分钟AI数字化诊断")}&body=${encodeURIComponent(
-  "你好 Five Oranges AI，我想预约一次30分钟AI数字化诊断。我的企业目前主要想解决："
-)}`;
 
 const DIAGNOSIS_ITEMS = [
   "当前最影响管理效率的业务痛点",
@@ -23,7 +22,31 @@ const BEST_FIT = [
   "有北美客户、出海业务或希望提升管理规范性的制造企业",
 ];
 
+const OUTCOMES = [
+  "我们会先判断你的问题是否适合用 AI 或轻量化系统解决。",
+  "如果适合，会建议一个最小可验证场景。",
+  "如果不适合，我们会直接说明，不建议你盲目投入。",
+];
+
+function buildMailtoUrl(form: { name: string; company: string; contact: string; challenge: string }) {
+  const body = [
+    "你好 Five Oranges AI，我想预约一次30分钟AI数字化诊断。",
+    "",
+    `姓名：${form.name || "（未填写）"}`,
+    `公司：${form.company || "（未填写）"}`,
+    `联系方式：${form.contact || "（未填写）"}`,
+    "",
+    "当前主要想解决的问题：",
+    form.challenge || "（未填写）",
+  ].join("\n");
+
+  return `mailto:${EMAIL}?subject=${encodeURIComponent("预约30分钟AI数字化诊断")}&body=${encodeURIComponent(body)}`;
+}
+
 export default function StrategyCall() {
+  const [form, setForm] = useState({ name: "", company: "", contact: "", challenge: "" });
+  const [formStarted, setFormStarted] = useState(false);
+
   usePageSeo({
     title: "预约30分钟AI数字化诊断 | Five Oranges AI / 运帷AI",
     description:
@@ -32,6 +55,18 @@ export default function StrategyCall() {
     keywords:
       "AI数字化诊断, Five Oranges AI, 运帷AI, 制造业AI转型, CRM ERP modernization, AI strategy call",
   });
+
+  const handleFormStart = () => {
+    if (formStarted) return;
+    setFormStarted(true);
+    trackEvent(ANALYTICS_EVENTS.strategyFormStart, { location: "strategy_call_form" });
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    trackEvent(ANALYTICS_EVENTS.strategyFormSubmit, { location: "strategy_call_form" });
+    window.location.href = buildMailtoUrl(form);
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -55,14 +90,24 @@ export default function StrategyCall() {
                 </p>
 
                 <div className="strategy-actions">
-                  <a href={MAILTO} className="strategy-primary-button">
-                    发邮件预约诊断
+                  <a
+                    href="#strategy-form"
+                    className="strategy-primary-button"
+                    onClick={() => trackEvent(ANALYTICS_EVENTS.strategyFormStart, { location: "strategy_hero" })}
+                  >
+                    填写预约信息
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M5 12h14M13 6l6 6-6 6" />
                     </svg>
                   </a>
-                  <a href="/demo.html" target="_blank" rel="noopener noreferrer" className="strategy-secondary-button">
-                    先查看演示
+                  <a
+                    href="/demo.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="strategy-secondary-button"
+                    onClick={() => trackEvent(ANALYTICS_EVENTS.demoEntryClick, { location: "strategy_hero" })}
+                  >
+                    查看 AI 经营助手演示
                   </a>
                 </div>
               </div>
@@ -83,6 +128,72 @@ export default function StrategyCall() {
                   <span>Five Oranges AI / 运帷AI</span>
                 </div>
               </aside>
+            </div>
+          </div>
+        </section>
+
+        <section className="strategy-submit-section">
+          <div className="container">
+            <div className="strategy-submit-grid">
+              <article className="strategy-outcome-card">
+                <span className="section-label">
+                  <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
+                  提交后 · NEXT STEPS
+                </span>
+                <h2>提交后你会得到什么？</h2>
+                <ol>
+                  {OUTCOMES.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </article>
+
+              <form id="strategy-form" className="strategy-form-card" onFocus={handleFormStart} onSubmit={handleSubmit}>
+                <h2>预约信息</h2>
+                <div className="strategy-form-row">
+                  <label>
+                    姓名
+                    <input
+                      value={form.name}
+                      onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="你的姓名"
+                    />
+                  </label>
+                  <label>
+                    公司
+                    <input
+                      value={form.company}
+                      onChange={(event) => setForm((current) => ({ ...current, company: event.target.value }))}
+                      placeholder="公司名称"
+                    />
+                  </label>
+                </div>
+                <label>
+                  联系方式
+                  <input
+                    value={form.contact}
+                    onChange={(event) => setForm((current) => ({ ...current, contact: event.target.value }))}
+                    placeholder="邮箱、电话或微信号"
+                    required
+                  />
+                </label>
+                <label>
+                  当前最想解决的问题
+                  <textarea
+                    value={form.challenge}
+                    onChange={(event) => setForm((current) => ({ ...current, challenge: event.target.value }))}
+                    placeholder="例如：库存不准、订单进度不透明、客户资料分散、AI不知道从哪里开始"
+                    rows={4}
+                    required
+                  />
+                </label>
+                <p className="strategy-wechat-note">
+                  也可以通过微信沟通。为保护隐私，请先通过表单预约，我们会发送联系方式。
+                </p>
+                <button type="submit" className="strategy-primary-button">
+                  提交预约信息
+                </button>
+              </form>
             </div>
           </div>
         </section>

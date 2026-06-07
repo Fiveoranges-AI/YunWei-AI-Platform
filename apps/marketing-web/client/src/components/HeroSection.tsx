@@ -5,6 +5,8 @@
    Productivity / Cost / Multi-agent).
    ============================================================= */
 
+import { ANALYTICS_EVENTS, trackEvent } from "@/utils/analytics";
+
 const DEMO_URL = "/demo.html";
 const STRATEGY_CALL_URL = "/strategy-call";
 
@@ -380,6 +382,7 @@ function HeroVisual() {
           target="_blank"
           rel="noopener noreferrer"
           className="hover-lift"
+          onClick={() => trackEvent(ANALYTICS_EVENTS.heroDemoClick, { location: "hero_visual" })}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -410,6 +413,7 @@ function HeroVisual() {
 
         <a
           href={STRATEGY_CALL_URL}
+          onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "hero_visual" })}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -517,17 +521,27 @@ export default function HeroSection() {
             </p>
 
             <div className="hero-mobile-cta-row fade-up fade-up-delay-2">
-              <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="hero-mobile-primary-cta">
+              <a
+                href={DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hero-mobile-primary-cta"
+                onClick={() => trackEvent(ANALYTICS_EVENTS.heroDemoClick, { location: "hero_mobile" })}
+              >
                 <span>
-                  <span>查看演示</span>
-                  <span>Live Demo</span>
+                  <span>查看 AI 经营助手演示</span>
+                  <span>AI Assistant Demo</span>
                 </span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
               </a>
 
-              <a href={STRATEGY_CALL_URL} className="hero-mobile-secondary-cta">
+              <a
+                href={STRATEGY_CALL_URL}
+                className="hero-mobile-secondary-cta"
+                onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "hero_mobile" })}
+              >
                 <span>
                   <span>预约30分钟AI数字化诊断</span>
                   <span>Strategy Call</span>

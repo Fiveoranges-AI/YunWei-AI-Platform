@@ -3,6 +3,8 @@
    2-column layout: copy + 3-button cluster (Demo / Book / Portal).
    ============================================================= */
 
+import { ANALYTICS_EVENTS, trackEvent } from "@/utils/analytics";
+
 const DEMO_URL = "/demo.html";
 const PORTAL_URL = "https://app.fiveoranges.ai/";
 const STRATEGY_CALL_URL = "/strategy-call";
@@ -73,6 +75,7 @@ export default function CTASection() {
               target="_blank"
               rel="noopener noreferrer"
               className="hover-lift"
+              onClick={() => trackEvent(ANALYTICS_EVENTS.demoEntryClick, { location: "final_cta" })}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -90,7 +93,7 @@ export default function CTASection() {
               }}
             >
               <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-                <span>查看演示</span>
+                <span>查看 AI 经营助手演示</span>
                 <span
                   style={{
                     fontSize: "10.5px",
@@ -100,7 +103,7 @@ export default function CTASection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  Try Live Demo
+                  Demo
                 </span>
               </span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -110,6 +113,7 @@ export default function CTASection() {
 
             <a
               href={STRATEGY_CALL_URL}
+              onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "final_cta" })}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

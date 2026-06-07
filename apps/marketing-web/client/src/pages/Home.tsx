@@ -9,9 +9,11 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import OpportunitySection from "@/components/OpportunitySection";
+import FitCheckSection from "@/components/FitCheckSection";
 import SolutionsSection from "@/components/SolutionsSection";
 import WhySection from "@/components/WhySection";
 import ApproachSection from "@/components/ApproachSection";
+import LowRiskSection from "@/components/LowRiskSection";
 import DemoIntroSection from "@/components/DemoIntroSection";
 import UseCasesSection from "@/components/UseCasesSection";
 import PhilosophySection from "@/components/PhilosophySection";
@@ -35,7 +37,9 @@ export default function Home() {
       <main>
         <HeroSection />
         <OpportunitySection />
+        <FitCheckSection />
         <ApproachSection />
+        <LowRiskSection />
         <DemoIntroSection />
         <SolutionsSection />
         <WhySection />
