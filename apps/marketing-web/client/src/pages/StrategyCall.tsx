@@ -2,7 +2,7 @@
    Strategy Call — 预约30分钟AI数字化诊断 (v1.3)
    Low-risk intake page for manufacturing SME owners. The form is
    fully client-side: on submit it assembles a pre-filled email to
-   fiveorangesltd@gmail.com (no backend required), so nothing is lost
+   contact@fiveoranges.ai (no backend required), so nothing is lost
    if no mail server is wired up.
    ============================================================= */
 
@@ -12,7 +12,7 @@ import { ArrowRight, Check, CheckCircle2, Clock, Mail, ShieldCheck } from "lucid
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
-const CONTACT_EMAIL = "fiveorangesltd@gmail.com";
+const CONTACT_EMAIL = "contact@fiveoranges.ai";
 
 const seo = {
   title: "预约30分钟AI数字化诊断 | Five Oranges AI / 运帷AI",
