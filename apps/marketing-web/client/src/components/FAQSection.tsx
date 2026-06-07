@@ -19,7 +19,7 @@ const FAQS = [
 
 export default function FAQSection() {
   return (
-    <section className="faq-section">
+    <section id="faq" className="faq-section">
       <div className="container">
         <div className="faq-header">
           <span className="section-label">

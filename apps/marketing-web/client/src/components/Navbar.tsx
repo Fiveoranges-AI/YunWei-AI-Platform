@@ -1,21 +1,21 @@
 /* =============================================================
    Navbar — Five Oranges AI · 运帷AI (v1.3)
    Editorial bilingual nav with EN-primary labels and CN tooltips,
-   icon-utility right cluster (Demo · Portal) + Contact CTA pill.
+   company-first navigation with Portal utility + Strategy Call CTA.
    ============================================================= */
 
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { cn: "解决方案", en: "Solutions", href: "/#solutions" },
-  { cn: "方法论", en: "Approach", href: "/#approach" },
   { cn: "应用场景", en: "Use Cases", href: "/#use-cases" },
-  { cn: "关于我们", en: "About", href: "/#about" },
-  { cn: "创始人", en: "Founder", href: "/kobeli" },
+  { cn: "方法论", en: "Approach", href: "/#approach" },
+  { cn: "演示", en: "Demo", href: "/demo.html" },
+  { cn: "资源", en: "Resources", href: "/resources" },
+  { cn: "关于我们", en: "About", href: "/about" },
 ];
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
-const DEMO_URL = "/demo.html";
 const STRATEGY_CALL_URL = "/strategy-call";
 
 type CnTooltipProps = { text: string; show: boolean };
@@ -112,121 +112,6 @@ function NavCapsule({ item, onNav }: NavCapsuleProps) {
   );
 }
 
-function LiveDot() {
-  return (
-    <span
-      aria-hidden
-      style={{ position: "relative", width: "8px", height: "8px", display: "inline-block", flexShrink: 0 }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          inset: 0,
-          borderRadius: "999px",
-          background: "#34D399",
-          animation: "navLivePulse 1.8s ease-out infinite",
-          opacity: 0.6,
-        }}
-      />
-      <span
-        style={{
-          position: "absolute",
-          inset: "1.5px",
-          borderRadius: "999px",
-          background: "#10B981",
-        }}
-      />
-    </span>
-  );
-}
-
-function DemoBtn() {
-  const [hover, setHover] = useState(false);
-  return (
-    <a
-      href={DEMO_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onFocus={() => setHover(true)}
-      onBlur={() => setHover(false)}
-      aria-label="Try Live Demo · 立即体验演示"
-      style={{
-        position: "relative",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "8px",
-        padding: "9px 16px 9px 14px",
-        borderRadius: "999px",
-        background: hover
-          ? "linear-gradient(135deg, rgba(45,110,168,0.16) 0%, rgba(45,110,168,0.10) 100%)"
-          : "linear-gradient(135deg, rgba(45,110,168,0.10) 0%, rgba(45,110,168,0.04) 100%)",
-        color: "var(--brand-blue)",
-        fontFamily: "Sora, sans-serif",
-        fontWeight: 600,
-        fontSize: "13.5px",
-        letterSpacing: "0.01em",
-        textDecoration: "none",
-        border: hover ? "1px solid rgba(45,110,168,0.42)" : "1px solid rgba(45,110,168,0.26)",
-        boxShadow: hover
-          ? "0 0 0 4px rgba(45,110,168,0.12), 0 6px 16px rgba(45,110,168,0.18)"
-          : "0 1px 2px rgba(45,110,168,0.08)",
-        transition:
-          "background 200ms ease-out, border-color 200ms ease-out, box-shadow 220ms ease-out, transform 200ms ease-out",
-        transform: hover ? "translateY(-1px)" : "translateY(0)",
-        outline: "none",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {/* live pulse dot — left of label, signals "interactive" */}
-      <span
-        aria-hidden
-        style={{ position: "relative", display: "inline-flex", width: "8px", height: "8px", flexShrink: 0 }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            inset: "-3px",
-            borderRadius: "999px",
-            background: "#10B981",
-            animation: "navLivePulse 1.8s ease-out infinite",
-            opacity: 0.45,
-          }}
-        />
-        <span
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: "999px",
-            background: "#10B981",
-          }}
-        />
-      </span>
-      <span>Live Demo</span>
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-        style={{
-          transition: "transform 200ms ease-out",
-          transform: hover ? "translateX(2px)" : "translateX(0)",
-        }}
-      >
-        <path d="M5 12h14" />
-        <path d="M13 5l7 7-7 7" />
-      </svg>
-      <CnTooltip text="立即体验演示" show={hover} />
-    </a>
-  );
-}
-
 function PortalBtn() {
   const [hover, setHover] = useState(false);
   return (
@@ -272,7 +157,7 @@ function ContactBtn() {
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      aria-label="Contact · 联系我们"
+      aria-label="预约诊断 · Strategy Call"
       style={{
         position: "relative",
         display: "inline-flex",
@@ -293,11 +178,11 @@ function ContactBtn() {
         whiteSpace: "nowrap",
       }}
     >
-      <span>Contact</span>
+      <span>预约诊断</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>
-      <CnTooltip text="联系我们" show={hover} />
+      <CnTooltip text="预约30分钟AI数字化诊断" show={hover} />
     </a>
   );
 }
@@ -410,9 +295,6 @@ export default function Navbar() {
 
         {/* Right cluster */}
         <div className="flex items-center" style={{ gap: "4px" }}>
-          <span className="hidden lg:inline-flex">
-            <DemoBtn />
-          </span>
           <span className="hidden lg:inline-flex">
             <PortalBtn />
           </span>
@@ -528,38 +410,6 @@ export default function Navbar() {
             <div style={{ height: "1px", background: "#E2E8F0", margin: "12px 4px" }} />
 
             <a
-              href={DEMO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={closeDrawer}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "14px 20px",
-                borderRadius: "10px",
-                border: "1.5px solid rgba(45,110,168,0.32)",
-                background:
-                  "linear-gradient(135deg, rgba(45,110,168,0.10) 0%, rgba(45,110,168,0.04) 100%)",
-                color: "var(--brand-blue)",
-                fontFamily: "Sora, sans-serif",
-                fontWeight: 600,
-                fontSize: "15px",
-                textDecoration: "none",
-                marginTop: "4px",
-                boxShadow: "0 1px 2px rgba(45,110,168,0.08)",
-              }}
-            >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
-                <LiveDot />
-                Live Demo · 立即体验
-              </span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </a>
-
-            <a
               href={PORTAL_URL}
               target="_blank"
               rel="noopener noreferrer"
@@ -610,7 +460,7 @@ export default function Navbar() {
                 textDecoration: "none",
               }}
             >
-              Contact · 联系我们
+              预约30分钟AI数字化诊断
             </a>
           </div>
           </div>

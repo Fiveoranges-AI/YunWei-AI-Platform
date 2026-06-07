@@ -121,18 +121,23 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="/#approach" className="footer-link" style={{ color: "#94A3B8" }}>
-                  方法论 · Approach
-                </a>
-              </li>
-              <li>
                 <a href="/#use-cases" className="footer-link" style={{ color: "#94A3B8" }}>
                   案例 · Use Cases
                 </a>
               </li>
               <li>
-                <a href="/kobeli" className="footer-link" style={{ color: "#94A3B8" }}>
-                  创始人 · Founder
+                <a href="/#approach" className="footer-link" style={{ color: "#94A3B8" }}>
+                  方法论 · Approach
+                </a>
+              </li>
+              <li>
+                <a href="/resources" className="footer-link" style={{ color: "#94A3B8" }}>
+                  资源 · Resources
+                </a>
+              </li>
+              <li>
+                <a href="/about" className="footer-link" style={{ color: "#94A3B8" }}>
+                  关于我们 · About
                 </a>
               </li>
               <li>
