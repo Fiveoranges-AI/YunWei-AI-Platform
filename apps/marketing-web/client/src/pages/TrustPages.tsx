@@ -64,27 +64,39 @@ const pages = {
     ],
   },
   security: {
-    title: "Data Security | Five Oranges AI / 运帷AI",
+    title: "数据安全与AI使用边界 | Five Oranges AI / 运帷AI",
     label: "数据安全 · DATA SECURITY",
     description:
-      "Five Oranges AI / 运帷AI data security principles for AI digital transformation, CRM, ERP, workflow automation and consulting projects.",
+      "Five Oranges AI / 运帷AI 的数据安全与 AI 使用边界：客户数据不用于训练公共模型、仅在授权范围内使用、支持脱敏、权限控制与可审计流程，可部署在客户指定或合规云环境，AI 输出辅助而非替代业务判断。",
     canonical: "https://fiveoranges.ai/data-security",
     sections: [
       {
-        heading: "最小必要原则",
-        body: "在诊断和方案阶段，我们只要求了解完成业务判断所需的最小必要信息，避免在早期收集不必要的敏感数据。",
+        heading: "客户数据不用于训练公共模型",
+        body: "客户数据不会用于训练公共模型。你的业务数据只服务于你自己的项目，不会被用于训练面向公众的通用模型。",
       },
       {
-        heading: "授权数据使用",
-        body: "任何企业数据接入、系统演示或原型验证，都应基于客户明确授权，并围绕已确认的业务目标进行。",
+        heading: "仅在授权范围内使用",
+        body: "客户数据仅用于授权范围内的业务分析、系统配置和演示验证，不作他用。",
       },
       {
-        heading: "系统与权限设计",
-        body: "在 CRM、ERP、Power Platform、报表和 AI 系统方案中，我们优先考虑权限边界、角色访问、审计记录和数据可追溯性。",
+        heading: "敏感数据可脱敏",
+        body: "敏感数据可脱敏后再进入 AI 分析流程；对敏感字段在进入分析前进行脱敏或最小化处理，降低暴露风险。",
       },
       {
-        heading: "AI 落地边界",
-        body: "AI 应该服务于清晰的业务流程和可验证的管理目标。涉及敏感数据、客户资料或经营数据时，需要在接入、存储、使用和输出环节设置边界。",
+        heading: "权限、访问记录与可审计",
+        body: "系统应支持权限控制、访问记录和可审计的数据处理流程，按角色控制访问并保留可追溯的操作记录，便于审计。",
+      },
+      {
+        heading: "合规环境部署",
+        body: "正式项目中可根据企业要求，部署在客户指定环境或合规云环境，按你的安全与合规要求确定部署位置。",
+      },
+      {
+        heading: "AI 输出结合业务判断",
+        body: "AI 输出需要结合业务判断，不作为唯一决策依据。AI 用于辅助分析与提升效率，最终决策仍由你的团队结合实际业务把关。",
+      },
+      {
+        heading: "说明",
+        body: "以上为通用性原则，用于说明我们对待企业数据与 AI 的基本态度，不构成对特定法律法规合规性的承诺。具体的数据处理、权限与部署方案，会在正式项目中根据你的行业要求与内部规范共同确定，并以双方签署的协议为准。",
       },
     ],
   },
