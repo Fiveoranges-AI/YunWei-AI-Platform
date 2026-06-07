@@ -235,7 +235,7 @@ const PR_STATUS_META: Record<PurchaseRequisition["status"], { bg: string; fg: st
 };
 
 function RequisitionCard({ req }: { req: PurchaseRequisition }) {
-  const { dispatch, isFlashing } = useJintai();
+  const { dispatchWithBackend, isFlashing } = useJintai();
   const meta = PR_STATUS_META[req.status];
   const pending = req.status === "待审批";
   const flashing = isFlashing(`pr:${req.prNo}`);
@@ -399,7 +399,7 @@ function RequisitionCard({ req }: { req: PurchaseRequisition }) {
           <>
             <button
               className="pill"
-              onClick={() => dispatch({ type: "APPROVE_PR", prNo: req.prNo })}
+              onClick={() => void dispatchWithBackend({ type: "APPROVE_PR", prNo: req.prNo })}
               style={{
                 background: "var(--brand-500)",
                 color: "#fff",
@@ -415,7 +415,7 @@ function RequisitionCard({ req }: { req: PurchaseRequisition }) {
             </button>
             <button
               className="pill"
-              onClick={() => dispatch({ type: "REJECT_PR", prNo: req.prNo })}
+              onClick={() => void dispatchWithBackend({ type: "REJECT_PR", prNo: req.prNo })}
               style={{
                 background: "var(--surface-2)",
                 color: "var(--ink-700)",
@@ -963,7 +963,7 @@ function DesktopTable({ orders }: { orders: PurchaseOrder[] }) {
 }
 
 function PurchaseOrderRow({ o }: { o: PurchaseOrder }) {
-  const { dispatch, isFlashing } = useJintai();
+  const { dispatchWithBackend, isFlashing } = useJintai();
   const flashing = isFlashing(`po:${o.poNo}`);
   const canReceive = o.status !== "已入库";
   return (
@@ -1001,7 +1001,7 @@ function PurchaseOrderRow({ o }: { o: PurchaseOrder }) {
       <Td>
         {canReceive ? (
           <button
-            onClick={() => dispatch({ type: "RECEIVE_PO", poNo: o.poNo })}
+            onClick={() => void dispatchWithBackend({ type: "RECEIVE_PO", poNo: o.poNo })}
             style={{
               padding: "4px 10px",
               fontSize: 10.5,
