@@ -225,6 +225,17 @@ export default function Footer() {
           }}
         >
           <span>© {new Date().getFullYear()} Five Oranges AI · 运帷 AI. All rights reserved.</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
+            <a href="/privacy" className="footer-link" style={{ color: "#94A3B8" }}>
+              隐私政策 · Privacy
+            </a>
+            <a href="/terms" className="footer-link" style={{ color: "#94A3B8" }}>
+              服务条款 · Terms
+            </a>
+            <a href="/data-security" className="footer-link" style={{ color: "#94A3B8" }}>
+              数据安全 · Data Security
+            </a>
+          </div>
         </div>
       </div>
     </footer>

@@ -7,6 +7,9 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Kobeli from "./pages/Kobeli";
 import StrategyCall from "./pages/StrategyCall";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import DataSecurity from "./pages/DataSecurity";
 
 function Router() {
   return (
@@ -14,6 +17,9 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/kobeli"} component={Kobeli} />
       <Route path={"/strategy-call"} component={StrategyCall} />
+      <Route path={"/privacy"} component={Privacy} />
+      <Route path={"/terms"} component={Terms} />
+      <Route path={"/data-security"} component={DataSecurity} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
