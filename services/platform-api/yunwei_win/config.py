@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     landingai_split_model: str = "split-latest"
     landingai_large_file_pages_threshold: int = 50
 
+    # ---- Image preprocessing (pre-OCR) ----------------------------------
+    # Applied to uploaded images before storage so the parser/OCR reads a
+    # right-side-up, sensibly-sized image (EXIF auto-rotate + bound + recompress).
+    image_preprocess_enabled: bool = True
+    image_max_dimension: int = 2600
+    image_jpeg_quality: int = 85
+
     # ---- CORS ------------------------------------------------------------
     # Comma-separated. localhost:3000 covers the bundled frontend dev server.
     cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"

@@ -69,6 +69,10 @@ from yunwei_win.services.schema_ingest.parsers.factory import (
 from yunwei_win.services.schema_ingest.review_draft import materialize_review_draft_vnext
 from yunwei_win.services.schema_ingest.schemas import ReviewDraft
 from yunwei_win.services.storage import materialize_to_local, store_upload
+from yunwei_win.services.schema_ingest.model_ids import (
+    extraction_model_id,
+    parse_model_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +179,7 @@ async def auto_ingest(
     parse = DocumentParse(
         document_id=document.id,
         provider=detected.parser_provider,
-        model=parse_artifact.metadata.get("model") if isinstance(parse_artifact.metadata, dict) else None,
+        model=parse_model_id(detected.parser_provider, parse_artifact.metadata),
         status=parse_status,
         artifact=_safe_model_dump(parse_artifact),
         raw_metadata=_safe_json_dict(parse_artifact.metadata or {}),
@@ -276,7 +280,7 @@ async def auto_ingest(
         document_id=document.id,
         parse_id=parse.id,
         provider=detected.extractor_provider,
-        model=None,
+        model=extraction_model_id(detected.extractor_provider, normalized.metadata),
         status=DocumentExtractionStatus.pending_review,
         selected_tables=selected_tables_dump,
         extraction=_safe_model_dump(normalized),

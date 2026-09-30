@@ -69,6 +69,7 @@ from yunwei_win.services.schema_ingest.schemas import (
     AutosaveReviewResponse,
 )
 from yunwei_win.services.storage import open_for_read, store_upload
+from yunwei_win.services.image_preprocess import preprocess_image_bytes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest")
@@ -227,6 +228,12 @@ async def create_ingest_jobs(
         body = await f.read()
         if not body:
             continue
+        # Normalize photos before storage (auto-rotate + bound size + recompress)
+        # so the parser/OCR downstream reads a right-side-up, sensibly-sized
+        # image. Non-images and anything unprocessable pass through unchanged.
+        body = preprocess_image_bytes(
+            body, content_type=f.content_type, filename=f.filename
+        ).data
         stored = store_upload(body, f.filename or "upload.bin")
         staged.append({
             "filename": f.filename or "upload.bin",
