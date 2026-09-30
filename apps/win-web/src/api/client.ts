@@ -769,8 +769,109 @@ function transformRisks(rows: unknown[] | null): RiskSignal[] {
   }));
 }
 
+const MOCK_ME: CurrentUser = {
+  id: "u_demo",
+  username: "xuzong",
+  display_name: "许总",
+  is_platform_admin: false,
+  enterprises: [
+    { id: "e_demo", display_name: "银湖石墨 - 超级小陈", legal_name: "银湖石墨", role: "member" },
+  ],
+};
+
 export async function getMe(): Promise<CurrentUser> {
-  return fetchPlatformJSON<CurrentUser>("/api/me");
+  try {
+    return await fetchPlatformJSON<CurrentUser>("/api/me");
+  } catch (e) {
+    if (USE_MOCK_FALLBACK) {
+      await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+      return MOCK_ME;
+    }
+    throw e;
+  }
+}
+
+// Platform mutations (/api/me, /api/auth/*, /api/enterprise/*) are
+// same-origin + session-cookie. FastAPI nests {error, message} under
+// `detail`; surface the friendly `message` so panels can show it inline.
+async function readPlatformError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as {
+      detail?: { message?: unknown } | string;
+      message?: unknown;
+    };
+    const d = body?.detail ?? body;
+    if (typeof d === "string") return d;
+    if (d && typeof d === "object" && "message" in d && d.message) return String(d.message);
+    if (body?.message) return String(body.message);
+  } catch {
+    /* not JSON */
+  }
+  return `HTTP ${res.status}`;
+}
+
+async function mutatePlatformJSON<T>(
+  path: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await readPlatformError(res));
+  return (await res.json()) as T;
+}
+
+/** Update the caller's own display name (PATCH /api/me). */
+export async function updateMe(displayName: string): Promise<{ display_name: string }> {
+  return mutatePlatformJSON("/api/me", "PATCH", { display_name: displayName });
+}
+
+/** Change the caller's own password (POST /api/auth/change-password). */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await mutatePlatformJSON("/api/auth/change-password", "POST", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
+export type EnterpriseMember = {
+  user_id: string;
+  username: string;
+  display_name?: string | null;
+  email?: string | null;
+  role: string;
+  granted_at?: number | null;
+};
+
+const MOCK_MEMBERS: EnterpriseMember[] = [
+  { user_id: "u_owner", username: "laochen", display_name: "陈老板", role: "owner" },
+  { user_id: "u_demo", username: "xuzong", display_name: "许总", role: "member" },
+  { user_id: "u_admin", username: "wangkf", display_name: "王会计", role: "admin" },
+];
+
+/** List members of an enterprise (GET /api/enterprise/{id}/members). */
+export async function listEnterpriseMembers(
+  enterpriseId: string,
+): Promise<EnterpriseMember[]> {
+  try {
+    const res = await fetchPlatformJSON<{ members: EnterpriseMember[] }>(
+      `/api/enterprise/${encodeURIComponent(enterpriseId)}/members`,
+    );
+    return res.members ?? [];
+  } catch (e) {
+    if (USE_MOCK_FALLBACK) {
+      await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
+      return MOCK_MEMBERS;
+    }
+    throw e;
+  }
 }
 
 export async function getAskSeed(customerId: string): Promise<AskSeed> {
