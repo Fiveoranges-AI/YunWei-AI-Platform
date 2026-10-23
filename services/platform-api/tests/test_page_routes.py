@@ -120,3 +120,45 @@ def test_me_marks_platform_admin(client):
     sid, _ = auth.create_session("u_root", "127.0.0.1", "test")
     r = client.get("/api/me", cookies={"app_session": sid})
     assert r.json()["is_platform_admin"] is True
+
+
+def test_agent_entry_serves_login_when_unauthed_browser(client):
+    """An unauthenticated *browser* navigation to an agent entrypoint
+    (e.g. /yinhu/super-xiaochen/) lands on the login page (200 HTML),
+    not a raw not_logged_in JSON body. Mirrors /, /dashboard, /win."""
+    r = client.get(
+        "/yinhu/super-xiaochen/",
+        headers={"Accept": "text/html,application/xhtml+xml"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    # login.html marker (登录 in UTF-8)
+    assert b"\xe7\x99\xbb\xe5\xbd\x95" in r.content or b"login" in r.content.lower()
+
+
+def test_agent_entry_json_401_when_unauthed_api(client):
+    """An unauthenticated API/XHR call (no text/html Accept) to an agent
+    entrypoint still gets the programmatic 401 not_logged_in JSON."""
+    r = client.get(
+        "/yinhu/super-xiaochen/",
+        headers={"Accept": "application/json"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 401
+    assert r.json()["detail"]["error"] == "not_logged_in"
+
+
+def test_agent_entry_serves_login_when_session_expired_browser(client):
+    """A browser still holding a *stale/expired* app_session cookie (present but
+    no longer valid server-side) also lands on the login page — not a raw
+    not_logged_in JSON body. Regression test for the gap where only a *missing*
+    cookie was handled; an expired session is the common real-world case."""
+    db.init()
+    r = client.get(
+        "/yinhu/super-xiaochen/",
+        headers={"Accept": "text/html,application/xhtml+xml"},
+        cookies={"app_session": "stale-or-expired-session-id"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert b"\xe7\x99\xbb\xe5\xbd\x95" in r.content or b"login" in r.content.lower()
