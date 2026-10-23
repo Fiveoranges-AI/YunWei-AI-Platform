@@ -675,20 +675,32 @@ async def reject_requisition(
     reason: str | None,
     session: AsyncSession,
 ) -> uuid.UUID:
-    pr = await session.get(PurchaseRequisition, pr_id)
-    if pr is None:
-        raise ProcurementRuleError(f"requisition {pr_id} not found")
-    if pr.status != PurchaseRequisitionStatus.pending_approval:
+    # Atomic status transition: prevent a concurrent reject (or a reject
+    # racing an approve) from both passing a read-then-check and double-writing
+    # the decision. Mirrors approve_requisition (Round 9 P0-4). The reason /
+    # approver / timestamp are set inside the same conditional UPDATE.
+    transition = await session.execute(
+        update(PurchaseRequisition)
+        .where(PurchaseRequisition.id == pr_id)
+        .where(PurchaseRequisition.status == PurchaseRequisitionStatus.pending_approval)
+        .values(
+            status=PurchaseRequisitionStatus.rejected,
+            rejected_reason=reason,
+            approver=actor,
+            approved_at=_now(),
+            updated_by=actor,
+        )
+    )
+    if transition.rowcount == 0:
+        pr = await session.get(PurchaseRequisition, pr_id)
+        if pr is None:
+            raise ProcurementRuleError(f"requisition {pr_id} not found")
         raise ProcurementRuleError(
             f"requisition {pr.pr_no} is in status {pr.status.value}, "
             "expected pending_approval"
         )
-    pr.status = PurchaseRequisitionStatus.rejected
-    pr.rejected_reason = reason
-    pr.approver = actor
-    pr.approved_at = _now()
-    pr.updated_by = actor
-    await session.flush()
+
+    pr = await session.get(PurchaseRequisition, pr_id)
     await _emit_action_log(
         session,
         target_entity_id=pr.id,
