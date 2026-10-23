@@ -157,6 +157,21 @@ export async function postApprovePr(
   });
 }
 
+export type RejectPrResp = {
+  pr_id: string;
+  status: string;
+};
+
+export async function postRejectPr(
+  pr_id: string,
+  payload?: { reason?: string },
+): Promise<RejectPrResp> {
+  return _fetch<RejectPrResp>(`/procurement/requisitions/${pr_id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 export type ReceivePoResp = {
   po_id: string;
   receipt_id: string;
