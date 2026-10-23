@@ -51,6 +51,12 @@ from yunwei_win.models import (
     ContactRole,
     Contract,
     Customer,
+    GuangtianCustomerOrder,
+    GuangtianCustomerOrderItem,
+    GuangtianInboundVoucher,
+    GuangtianOutboundVoucher,
+    GuangtianReplenishment,
+    GuangtianSku,
     Invoice,
     IssueVoucher,
     Material,
@@ -93,6 +99,13 @@ _ENTITY_MODEL: dict[str, type] = {
     # BOM (配料单)
     "BillOfMaterials": BillOfMaterials,
     "BillOfMaterialsLine": BillOfMaterialsLine,
+    # 光天 · AI 库存管家
+    "GuangtianSku": GuangtianSku,
+    "GuangtianInboundVoucher": GuangtianInboundVoucher,
+    "GuangtianOutboundVoucher": GuangtianOutboundVoucher,
+    "GuangtianCustomerOrder": GuangtianCustomerOrder,
+    "GuangtianCustomerOrderItem": GuangtianCustomerOrderItem,
+    "GuangtianReplenishment": GuangtianReplenishment,
 }
 
 _ENTITY_TARGET: dict[str, ActionTargetType] = {
@@ -116,6 +129,13 @@ _ENTITY_TARGET: dict[str, ActionTargetType] = {
     "PurchaseOrderItem": ActionTargetType.other,
     "BillOfMaterials": ActionTargetType.other,
     "BillOfMaterialsLine": ActionTargetType.other,
+    # 光天 — no native ActionTargetType; entity_type encoded in input_summary.
+    "GuangtianSku": ActionTargetType.other,
+    "GuangtianInboundVoucher": ActionTargetType.other,
+    "GuangtianOutboundVoucher": ActionTargetType.other,
+    "GuangtianCustomerOrder": ActionTargetType.order,
+    "GuangtianCustomerOrderItem": ActionTargetType.order,
+    "GuangtianReplenishment": ActionTargetType.other,
 }
 
 # Fields the candidate JSON may carry but the ORM models drive via FK
@@ -129,6 +149,7 @@ _SYSTEM_LINK_COLUMNS = {
     "payment_id",
     "product_id",
     "shipment_id",
+    "sku_id",
 }
 
 
@@ -229,6 +250,12 @@ _PARENT_FK_BY_RELATIONSHIP: dict[str, tuple[str, str]] = {
     # BOM
     "BillOfMaterials-has-Line":             ("BillOfMaterialsLine", "bom_id"),
     "Material-has-BillOfMaterialsLine":     ("BillOfMaterialsLine", "material_id"),
+    # 光天 · AI 库存管家
+    "GuangtianSku-has-GuangtianInboundVoucher":  ("GuangtianInboundVoucher", "sku_id"),
+    "GuangtianSku-has-GuangtianOutboundVoucher": ("GuangtianOutboundVoucher", "sku_id"),
+    "GuangtianSku-has-GuangtianReplenishment":   ("GuangtianReplenishment", "sku_id"),
+    "GuangtianCustomerOrder-has-Item":           ("GuangtianCustomerOrderItem", "order_id"),
+    "GuangtianSku-has-GuangtianCustomerOrderItem": ("GuangtianCustomerOrderItem", "sku_id"),
 }
 
 

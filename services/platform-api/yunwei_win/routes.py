@@ -10,6 +10,7 @@ from yunwei_win.api.confirm import router as _confirm_router
 from yunwei_win.api.customer_management import router as _customer_management_router
 from yunwei_win.api.customer_profile import router as _customer_profile_router
 from yunwei_win.api.finance import router as _finance_router
+from yunwei_win.api.guangtian import router as _guangtian_router
 from yunwei_win.api.ingest import router as _ingest_router
 from yunwei_win.api.parse_upload import router as _parse_upload_router
 from yunwei_win.api.procurement import router as _procurement_router
@@ -31,6 +32,7 @@ def create_router() -> APIRouter:
     router.include_router(_briefing_router)
     router.include_router(_finance_router)
     router.include_router(_bom_router)
+    router.include_router(_guangtian_router)
     router.include_router(_parse_upload_router)
     return router
 

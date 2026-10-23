@@ -120,6 +120,31 @@ from yunwei_win.models.procurement import (
 )
 
 # ---------------------------------------------------------------------------
+# 光天耐火材料 · AI 库存管家 (SKU 台账 / 出入库 / 缺货预警 / AI 补产建议)
+# ---------------------------------------------------------------------------
+from yunwei_win.models.guangtian import (
+    GuangtianCustomerOrder,
+    GuangtianCustomerOrderItem,
+    GuangtianInboundType,
+    GuangtianInboundVoucher,
+    GuangtianMovementOp,
+    GuangtianMovementRefType,
+    GuangtianOrderLevel,
+    GuangtianOutboundType,
+    GuangtianOutboundVoucher,
+    GuangtianReplenishment,
+    GuangtianReplenishPriority,
+    GuangtianReplenishStatus,
+    GuangtianSku,
+    GuangtianSkuKind,
+    GuangtianStockAlert,
+    GuangtianStockAlertLevel,
+    GuangtianStockMovement,
+    GuangtianStockStatus,
+    GuangtianVoucherStatus,
+)
+
+# ---------------------------------------------------------------------------
 # Finance (会企 01/02/03 — chart of accounts + opening balances + fixed assets)
 # ---------------------------------------------------------------------------
 from yunwei_win.models.finance import (
@@ -191,6 +216,15 @@ __all__ = [
     "GoodsReceipt",
     "Payable", "PayableStatus",
     "StockAlert", "StockAlertLevel",
+    # 光天 · AI 库存管家
+    "GuangtianSku", "GuangtianSkuKind", "GuangtianStockStatus",
+    "GuangtianStockMovement", "GuangtianMovementOp", "GuangtianMovementRefType",
+    "GuangtianInboundVoucher", "GuangtianInboundType",
+    "GuangtianOutboundVoucher", "GuangtianOutboundType",
+    "GuangtianVoucherStatus",
+    "GuangtianStockAlert", "GuangtianStockAlertLevel",
+    "GuangtianCustomerOrder", "GuangtianCustomerOrderItem", "GuangtianOrderLevel",
+    "GuangtianReplenishment", "GuangtianReplenishPriority", "GuangtianReplenishStatus",
     # Finance (会企 01/02/03)
     "ChartOfAccount", "AccountClass", "StatementSection", "NormalBalance",
     "PeriodOpeningBalance",
