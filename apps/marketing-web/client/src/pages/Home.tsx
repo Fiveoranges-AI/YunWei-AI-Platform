@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n/LocaleContext";
 /* =============================================================
    Home — Five Oranges AI · 运帷AI
    Section order per v1.3 design:
@@ -22,6 +23,7 @@ import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
 
 export default function Home() {
+  const { locale } = useLocale();
   const [showTop, setShowTop] = useState(false);
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function Home() {
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           className="fixed bottom-8 right-8 z-50 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5"
           style={{ background: "#2D6EA8" }}
-          aria-label="Scroll to top"
+          aria-label={locale === "en" ? "Scroll to top" : "返回顶部"}
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path

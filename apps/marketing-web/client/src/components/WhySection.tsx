@@ -1,34 +1,37 @@
+import { useLocale } from "@/i18n/LocaleContext";
+import type { Copy } from "@/i18n/catalog";
 /* =============================================================
    Why — Three commitments we don't break (v1.3)
    CN-primary blue title pills, top-border accent
    ============================================================= */
 
-const WHY = [
+const WHY = (c: Copy) => [
   {
-    cn: "流程先行",
+    cn: c.workflowFirst,
     en: "Workflow-first",
-    desc: "我们把每一个智能体都锚定在一个具体的业务流程上，而不是一个通用对话框。",
+    desc: c.weStartWithASpecific,
   },
   {
-    cn: "可追溯",
+    cn: c.traceability,
     en: "Auditable",
-    desc: "驾驶舱里的每一个数字都可以追溯到源记录——拒绝 AI 幻觉。",
+    desc: c.ourDesignPriorityIsTo,
   },
   {
-    cn: "共创交付",
+    cn: c.builtWithYourTeam,
     en: "Co-built",
-    desc: "我们和你的团队坐在一起做事。共同设计，而不是隔墙交付。",
+    desc: c.weWorkAlongsideYourTeam,
   },
 ];
 
 export default function WhySection() {
+  const { copy: c, locale } = useLocale();
   return (
     <section style={{ padding: "7rem 0" }}>
       <div className="container">
         <div style={{ marginBottom: "3.5rem", maxWidth: "760px" }}>
           <span className="section-label">
             <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
-            为什么选择我们 · WHY US
+            {c.whyFiveOrangesAi}
           </span>
           <h2
             style={{
@@ -41,7 +44,7 @@ export default function WhySection() {
               fontFamily: "Sora, sans-serif",
             }}
           >
-            Three commitments we don't break.
+            {c.threePrinciplesThatGuideOur}
           </h2>
           <div
             style={{
@@ -52,12 +55,12 @@ export default function WhySection() {
               color: "#475569",
             }}
           >
-            我们绝不打破的三项承诺。
+            {c.practicalEngineeringClearBoundariesShared}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {WHY.map((w, i) => (
+          {WHY(c).map((w, i) => (
             <div
               key={w.en}
               style={{
@@ -108,7 +111,7 @@ export default function WhySection() {
                 >
                   {w.cn}
                 </span>
-                <span
+                {locale === "zh-CN" && <span
                   style={{
                     fontSize: "0.75rem",
                     fontWeight: 500,
@@ -116,9 +119,7 @@ export default function WhySection() {
                     opacity: 0.85,
                     textTransform: "uppercase",
                   }}
-                >
-                  {w.en}
-                </span>
+                >{w.en}</span>}
               </div>
 
               <p style={{ color: "#334155", fontSize: "1rem", lineHeight: 1.7 }}>{w.desc}</p>

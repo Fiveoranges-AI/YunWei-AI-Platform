@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n/LocaleContext";
 /* =============================================================
    Hero — Five Oranges AI · 运帷AI (v1.3)
    "Beyond the scope. 进无止境" — left copy, right layered visual
@@ -11,9 +12,9 @@ const DEMO_URL = "/demo.html";
 const STRATEGY_CALL_URL = "/strategy-call";
 
 function HeroVisual() {
+  const { copy: c, href: localize } = useLocale();
   return (
     <div
-      aria-hidden
       className="hero-visual-shell"
       style={{
         position: "relative",
@@ -60,7 +61,7 @@ function HeroVisual() {
           pointerEvents: "none",
         }}
       >
-        V
+        {c.v}
       </div>
 
       {/* Dashboard panel — top left */}
@@ -99,7 +100,7 @@ function HeroVisual() {
                 letterSpacing: "0.01em",
               }}
             >
-              智能驾驶舱
+              {c.operationsOverview}
             </span>
           </div>
           <span
@@ -112,7 +113,7 @@ function HeroVisual() {
               fontWeight: 700,
             }}
           >
-            Live
+            {c.sample}
           </span>
         </div>
         <svg width="100%" height="96" viewBox="0 0 240 96" preserveAspectRatio="none" style={{ display: "block" }}>
@@ -142,7 +143,7 @@ function HeroVisual() {
               +32%
             </div>
             <div style={{ fontSize: "11px", color: "#64748B", letterSpacing: "0.06em", marginTop: "2px", fontFamily: "Sora, sans-serif" }}>
-              产能
+              {c.sampleCapacity}
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -150,7 +151,7 @@ function HeroVisual() {
               −18%
             </div>
             <div style={{ fontSize: "11px", color: "#64748B", letterSpacing: "0.06em", marginTop: "2px", fontFamily: "Sora, sans-serif" }}>
-              成本
+              {c.sampleCost}
             </div>
           </div>
         </div>
@@ -182,7 +183,7 @@ function HeroVisual() {
             marginBottom: "12px",
           }}
         >
-          精准 · ACCURACY
+          {c.accuracyIllustration}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <svg width="64" height="64" viewBox="0 0 64 64">
@@ -204,7 +205,7 @@ function HeroVisual() {
           </svg>
           <div>
             <div style={{ fontFamily: "Sora, sans-serif", fontSize: "16px", fontWeight: 700, lineHeight: 1.2 }}>
-              检测命中
+              {c.detectionExample}
             </div>
             <div
               style={{
@@ -215,7 +216,7 @@ function HeroVisual() {
                 letterSpacing: "0.06em",
               }}
             >
-              缺陷识别准确率
+              {c.illustrativeData}
             </div>
           </div>
         </div>
@@ -247,7 +248,7 @@ function HeroVisual() {
             marginBottom: "12px",
           }}
         >
-          效率 · EFFICIENCY
+          {c.workflowExample}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {[1, 2, 3, 4, 5].map((i) => (
@@ -285,8 +286,8 @@ function HeroVisual() {
             fontFamily: "Sora, sans-serif",
           }}
         >
-          <span style={{ fontWeight: 600 }}>节拍 4 / 5</span>
-          <span style={{ color: "#10B981", fontWeight: 700 }}>● 实时同步</span>
+          <span style={{ fontWeight: 600 }}>{c.step45}</span>
+          <span style={{ color: "#10B981", fontWeight: 700 }}>{c.sampleSync}</span>
         </div>
       </div>
 
@@ -316,7 +317,7 @@ function HeroVisual() {
             marginBottom: "14px",
           }}
         >
-          协同 · MULTI-AGENT
+          {c.agentCoordination}
         </div>
         <div style={{ display: "flex", alignItems: "center" }}>
           {[
@@ -358,7 +359,7 @@ function HeroVisual() {
               fontWeight: 700,
             }}
           >
-            5 Agents 协作
+            {c.message5ExampleAgents}
           </div>
         </div>
       </div>
@@ -378,7 +379,7 @@ function HeroVisual() {
         }}
       >
         <a
-          href={DEMO_URL}
+          href={localize(DEMO_URL)}
           target="_blank"
           rel="noopener noreferrer"
           className="hover-lift"
@@ -401,9 +402,9 @@ function HeroVisual() {
           }}
         >
           <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-            <span>查看演示</span>
+            <span>{c.exploreThePlatform2}</span>
             <span style={{ fontSize: "10.5px", letterSpacing: "0.14em", opacity: 0.72, fontWeight: 500, textTransform: "uppercase" }}>
-              Live Demo
+              {c.liveDemo}
             </span>
           </span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -412,7 +413,7 @@ function HeroVisual() {
         </a>
 
         <a
-          href={STRATEGY_CALL_URL}
+          href={localize(STRATEGY_CALL_URL)}
           onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "hero_visual" })}
           style={{
             display: "inline-flex",
@@ -433,9 +434,9 @@ function HeroVisual() {
           }}
         >
           <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-            <span>预约咨询</span>
+            <span>{c.talkToUs2}</span>
             <span style={{ fontSize: "10.5px", letterSpacing: "0.14em", opacity: 0.7, fontWeight: 500, textTransform: "uppercase" }}>
-              Strategy Call
+              {c.strategyCall}
             </span>
           </span>
         </a>
@@ -445,6 +446,7 @@ function HeroVisual() {
 }
 
 export default function HeroSection() {
+  const { copy: c, href: localize, locale } = useLocale();
   return (
     <section
       id="top"
@@ -472,7 +474,7 @@ export default function HeroSection() {
                 color: "#0F2340",
               }}
             >
-              Beyond <span style={{ color: "var(--brand-blue)" }}>the scope.</span>
+              {c.turnManufacturingDataInto}{" "}<span style={{ color: "var(--brand-blue)" }}>{c.operationalIntelligence}</span>
             </h1>
 
             <div
@@ -487,7 +489,7 @@ export default function HeroSection() {
                 color: "var(--brand-blue)",
               }}
             >
-              进无止境
+              {c.operationalIntelligenceForSmeManufacturing}
             </div>
 
             <p
@@ -503,7 +505,7 @@ export default function HeroSection() {
                 letterSpacing: 0,
               }}
             >
-              帮制造业老板用 AI 管清库存、订单、客户、流程和经营数据。
+              {c.aClearerViewOfInventory}
             </p>
 
             <p
@@ -516,21 +518,20 @@ export default function HeroSection() {
                 maxWidth: "560px",
               }}
             >
-              让老板少靠人盯，多靠系统看清业务。我们帮助制造业、贸易与企业团队，将分散数据与手工流程，转化为
-              <strong style={{ color: "#0F2340" }}>真正能跑业务的 AI 智能体</strong>。
+              {c.connectFragmentedErpExcelAnd}{locale === "en" ? " " : ""}<strong style={{ color: "#0F2340" }}>{c.practicalAi}</strong>{locale === "en" ? "." : "。"}
             </p>
 
             <div className="hero-mobile-cta-row fade-up fade-up-delay-2">
               <a
-                href={DEMO_URL}
+                href={localize(DEMO_URL)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hero-mobile-primary-cta"
                 onClick={() => trackEvent(ANALYTICS_EVENTS.heroDemoClick, { location: "hero_mobile" })}
               >
                 <span>
-                  <span>查看 AI 经营助手演示</span>
-                  <span>AI Assistant Demo</span>
+                  <span>{c.exploreThePlatform}</span>
+                  <span>{c.aiAssistantDemo}</span>
                 </span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M5 12h14M13 6l6 6-6 6" />
@@ -538,13 +539,13 @@ export default function HeroSection() {
               </a>
 
               <a
-                href={STRATEGY_CALL_URL}
+                href={localize(STRATEGY_CALL_URL)}
                 className="hero-mobile-secondary-cta"
                 onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "hero_mobile" })}
               >
                 <span>
-                  <span>预约30分钟AI数字化诊断</span>
-                  <span>Strategy Call</span>
+                  <span>{c.bookA30MinuteDiscovery2}</span>
+                  <span>{c.strategyCall}</span>
                 </span>
               </a>
             </div>
@@ -553,6 +554,7 @@ export default function HeroSection() {
           {/* Right — visual */}
           <div className="fade-up fade-up-delay-2">
             <HeroVisual />
+            <p className="hero-sample-note">{locale === "en" ? "Illustrative interface · Sample data, not measured results." : "功能示意 · 示例数据，非客户业绩。"}</p>
           </div>
         </div>
       </div>

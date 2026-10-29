@@ -1,3 +1,7 @@
+import * as Dialog from "@radix-ui/react-dialog";
+import LanguageSwitcher from "./LanguageSwitcher";
+import { useLocale } from "@/i18n/LocaleContext";
+import type { Copy } from "@/i18n/catalog";
 /* =============================================================
    Navbar — Five Oranges AI · 运帷AI (v1.3)
    Editorial bilingual nav with EN-primary labels and CN tooltips,
@@ -6,13 +10,13 @@
 
 import { useEffect, useState } from "react";
 
-const NAV_ITEMS = [
-  { cn: "解决方案", en: "Solutions", href: "/#solutions" },
-  { cn: "应用场景", en: "Use Cases", href: "/#use-cases" },
-  { cn: "方法论", en: "Approach", href: "/#approach" },
-  { cn: "演示", en: "Demo", href: "/demo.html" },
-  { cn: "资源", en: "Resources", href: "/resources" },
-  { cn: "关于我们", en: "About", href: "/about" },
+const NAV_ITEMS = (c: Copy) => [
+  { cn: c.solutions2, en: "Solutions", href: "/#solutions" },
+  { cn: c.useCases2, en: "Use Cases", href: "/#use-cases" },
+  { cn: c.approach2, en: "Approach", href: "/#approach" },
+  { cn: c.demo3, en: c.demo, href: "/demo.html" },
+  { cn: c.resources2, en: "Resources", href: "/resources" },
+  { cn: c.about2, en: "About", href: "/about" },
 ];
 
 const PORTAL_URL = "https://app.fiveoranges.ai/";
@@ -65,16 +69,17 @@ function CnTooltip({ text, show }: CnTooltipProps) {
 
 type NavCapsuleProps = { item: { cn: string; en: string; href: string }; onNav?: () => void };
 function NavCapsule({ item, onNav }: NavCapsuleProps) {
+  const { href: localize, locale } = useLocale();
   const [hover, setHover] = useState(false);
   return (
     <a
-      href={item.href}
+      href={localize(item.href)}
       onClick={onNav}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      aria-label={`${item.en} · ${item.cn}`}
+      aria-label={locale === "en" ? item.en : item.cn}
       style={{
         position: "relative",
         display: "inline-flex",
@@ -92,7 +97,7 @@ function NavCapsule({ item, onNav }: NavCapsuleProps) {
       }}
     >
       <span style={{ position: "relative" }}>
-        {item.en}
+        {locale === "en" ? item.en : item.cn}
         <span
           aria-hidden
           style={{
@@ -107,30 +112,31 @@ function NavCapsule({ item, onNav }: NavCapsuleProps) {
           }}
         />
       </span>
-      <CnTooltip text={item.cn} show={hover} />
+      {locale === "zh-CN" && <CnTooltip text={item.cn} show={hover} />}
     </a>
   );
 }
 
 function PortalBtn() {
+  const { copy: c, href: localize } = useLocale();
   const [hover, setHover] = useState(false);
   return (
     <a
-      href={PORTAL_URL}
+      href={localize(PORTAL_URL)}
       target="_blank"
       rel="noopener noreferrer"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      aria-label="Client Portal · 客户登录"
+      aria-label={c.clientPortal4}
       style={{
         position: "relative",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        width: "40px",
-        height: "40px",
+        width: "44px",
+        height: "44px",
         borderRadius: "10px",
         background: hover ? "rgba(45,110,168,0.10)" : "transparent",
         color: hover ? "var(--brand-blue)" : "#0F2340",
@@ -143,21 +149,22 @@ function PortalBtn() {
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
         <circle cx="12" cy="7" r="4" />
       </svg>
-      <CnTooltip text="Client Portal · 客户登录" show={hover} />
+      <CnTooltip text={c.clientPortal4} show={hover} />
     </a>
   );
 }
 
 function ContactBtn() {
+  const { copy: c, href: localize } = useLocale();
   const [hover, setHover] = useState(false);
   return (
     <a
-      href={STRATEGY_CALL_URL}
+      href={localize(STRATEGY_CALL_URL)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      aria-label="预约诊断 · Strategy Call"
+      aria-label={c.talkToUs}
       style={{
         position: "relative",
         display: "inline-flex",
@@ -178,16 +185,17 @@ function ContactBtn() {
         whiteSpace: "nowrap",
       }}
     >
-      <span>预约诊断</span>
+      <span>{c.talkToUs3}</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>
-      <CnTooltip text="预约30分钟AI数字化诊断" show={hover} />
+      <CnTooltip text={c.bookA30MinuteDiscovery2} show={hover} />
     </a>
   );
 }
 
 export default function Navbar() {
+  const { copy: c, href: localize, locale } = useLocale();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -214,6 +222,7 @@ export default function Navbar() {
   const closeDrawer = () => setOpen(false);
 
   return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
     <header
       className="fixed top-0 left-0 right-0 z-50 w-full"
       style={{
@@ -226,8 +235,8 @@ export default function Navbar() {
       <div className="container flex items-center justify-between" style={{ height: "76px" }}>
         {/* Brand */}
         <a
-          href="/#top"
-          className="flex items-center"
+          href={localize("/#top")}
+          className="brand-link flex items-center"
           style={{ minWidth: 0, gap: "12px", textDecoration: "none" }}
         >
           <img
@@ -258,7 +267,7 @@ export default function Navbar() {
                 fontSize: "20px",
               }}
             >
-              FIVE ORANGES
+              {c.fiveOranges}
             </span>
             <span
               aria-hidden
@@ -281,14 +290,14 @@ export default function Navbar() {
                 fontSize: "20px",
               }}
             >
-              运帷 AI
+              {c.ai}
             </span>
           </div>
         </a>
 
         {/* Desktop nav */}
         <nav className="hidden lg:flex items-center" style={{ gap: "18px" }}>
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS(c).map((item) => (
             <NavCapsule key={item.en} item={item} />
           ))}
         </nav>
@@ -308,15 +317,15 @@ export default function Navbar() {
               margin: "0 4px",
             }}
           />
+          <LanguageSwitcher />
           <span className="hidden lg:inline-flex" style={{ marginLeft: "6px" }}>
             <ContactBtn />
           </span>
 
-          <button
+          <Dialog.Trigger asChild><button
             className="lg:hidden flex items-center justify-center"
-            aria-label="Open menu"
+            aria-label={locale === "en" ? (open ? "Close menu" : "Open menu") : (open ? "关闭菜单" : "打开菜单")}
             aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
             style={{
               width: "44px",
               height: "44px",
@@ -333,14 +342,14 @@ export default function Navbar() {
                 <path d="M4 7h16M4 12h16M4 17h16" />
               </svg>
             )}
-          </button>
+          </button></Dialog.Trigger>
         </div>
       </div>
 
       {/* Mobile drawer — side panel, ~340px, bilingual labels visible */}
       {open && (
-        <>
-          <div
+        <Dialog.Portal>
+          <Dialog.Overlay asChild><div
             className="drawer-scrim lg:hidden"
             onClick={closeDrawer}
             aria-hidden
@@ -353,10 +362,10 @@ export default function Navbar() {
               background: "rgba(15,35,64,0.42)",
               backdropFilter: "blur(2px)",
               WebkitBackdropFilter: "blur(2px)",
-              zIndex: 1,
+              zIndex: 60,
             }}
-          />
-          <div
+          /></Dialog.Overlay>
+          <Dialog.Content asChild aria-label={locale === "en" ? "Navigation" : "导航菜单"} aria-describedby={undefined}><div
             className="drawer-panel lg:hidden"
             style={{
               position: "fixed",
@@ -368,7 +377,7 @@ export default function Navbar() {
               borderLeft: "1px solid #E2E8F0",
               boxShadow: "-12px 0 30px rgba(15,35,64,0.10)",
               overflowY: "auto",
-              zIndex: 2,
+              zIndex: 70,
             }}
           >
           <div
@@ -379,10 +388,12 @@ export default function Navbar() {
               gap: "4px",
             }}
           >
-            {NAV_ITEMS.map((item) => (
+            <Dialog.Title className="sr-only">{locale === "en" ? "Navigation" : "导航菜单"}</Dialog.Title>
+            <div className="flex items-center justify-between"><LanguageSwitcher /><Dialog.Close className="drawer-close">{locale === "en" ? "Close menu" : "关闭菜单"} ×</Dialog.Close></div>
+            {NAV_ITEMS(c).map((item) => (
               <a
                 key={item.en}
-                href={item.href}
+                href={localize(item.href)}
                 onClick={closeDrawer}
                 style={{
                   display: "flex",
@@ -401,8 +412,8 @@ export default function Navbar() {
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 <span>{item.cn}</span>
-                <span style={{ fontSize: "12px", letterSpacing: "0.1em", color: "#94A3B8" }}>
-                  {item.en}
+                <span style={{ fontSize: "12px", letterSpacing: "0.1em", color: "#64748B" }}>
+                  {locale === "zh-CN" ? item.en : ""}
                 </span>
               </a>
             ))}
@@ -410,7 +421,7 @@ export default function Navbar() {
             <div style={{ height: "1px", background: "#E2E8F0", margin: "12px 4px" }} />
 
             <a
-              href={PORTAL_URL}
+              href={localize(PORTAL_URL)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={closeDrawer}
@@ -434,7 +445,7 @@ export default function Navbar() {
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                Client Portal · 客户登录
+                {c.clientPortal4}
               </span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M7 17L17 7M7 7h10v10" />
@@ -442,7 +453,7 @@ export default function Navbar() {
             </a>
 
             <a
-              href={STRATEGY_CALL_URL}
+              href={localize(STRATEGY_CALL_URL)}
               onClick={closeDrawer}
               style={{
                 marginTop: "4px",
@@ -460,12 +471,13 @@ export default function Navbar() {
                 textDecoration: "none",
               }}
             >
-              预约30分钟AI数字化诊断
+              {c.bookA30MinuteDiscovery2}
             </a>
           </div>
-          </div>
-        </>
+          </div></Dialog.Content>
+        </Dialog.Portal>
       )}
     </header>
+    </Dialog.Root>
   );
 }
