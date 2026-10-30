@@ -1,29 +1,31 @@
+import { useLocale } from "@/i18n/LocaleContext";
+import type { Copy } from "@/i18n/catalog";
 /* =============================================================
    UseCases — Where AI agents are already earning their keep (v1.3)
    3 industry cards (manufacturing / trading / executive) with
    subtle SVG bg patterns and scene icons.
    ============================================================= */
 
-const USE_CASES = [
+const USE_CASES = (c: Copy) => [
   {
-    tagCn: "制造业",
+    tagCn: c.manufacturing,
     tagEn: "Manufacturing",
-    titleCn: "生产简报，自动撰写",
-    body: "一个每日早班的 AI 简报智能体，自动汇总 MES、质量日志、班次反馈，把异常浮现在站会之前。",
+    titleCn: c.aiAssistedProductionBriefings,
+    body: c.aPotentialWorkflowBringProduction,
     kind: "manufacturing" as const,
   },
   {
-    tagCn: "贸易",
+    tagCn: c.commercialOperations,
     tagEn: "Trading",
-    titleCn: "守得住毛利的报价引擎",
-    body: "一个根据实时成本、合同条款、历史中标率自动起草客户报价的定价智能体。",
+    titleCn: c.betterContextForQuotingDecisions,
+    body: c.aPotentialWorkflowOrganizeAuthorized,
     kind: "trading" as const,
   },
   {
-    tagCn: "管理",
+    tagCn: c.management,
     tagEn: "Executive",
-    titleCn: "CEO 驾驶舱，告别表格",
-    body: "一个自然语言驾驶舱，CEO 真正会打开——每个数字都可以一键追溯到源记录。",
+    titleCn: c.managementReportingWithContext,
+    body: c.aPotentialWorkflowAskOperational,
     kind: "executive" as const,
   },
 ];
@@ -31,6 +33,7 @@ const USE_CASES = [
 type SceneKind = "manufacturing" | "trading" | "executive";
 
 function SceneIcon({ kind }: { kind: SceneKind }) {
+
   const sw = 1.6;
   if (kind === "manufacturing") {
     return (
@@ -66,6 +69,7 @@ function SceneIcon({ kind }: { kind: SceneKind }) {
 }
 
 function CaseBgPattern({ kind }: { kind: SceneKind }) {
+
   const baseStyle = {
     position: "absolute" as const,
     inset: 0,
@@ -129,13 +133,14 @@ function CaseBgPattern({ kind }: { kind: SceneKind }) {
 }
 
 export default function UseCasesSection() {
+  const { copy: c, locale } = useLocale();
   return (
     <section id="use-cases" style={{ padding: "7rem 0" }}>
       <div className="container">
         <div style={{ marginBottom: "3.5rem", maxWidth: "760px" }}>
           <span className="section-label">
             <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
-            应用场景 · USE CASES
+            {c.potentialUseCases}
           </span>
           <h2
             style={{
@@ -148,7 +153,7 @@ export default function UseCasesSection() {
               fontFamily: "Sora, sans-serif",
             }}
           >
-            Where AI agents are already earning their keep.
+            {c.practicalScenariosToExploreTogether}
           </h2>
           <div
             style={{
@@ -159,12 +164,12 @@ export default function UseCasesSection() {
               color: "#475569",
             }}
           >
-            AI 智能体已经在这些场景中创造价值。
+            {c.illustrativeWorkflowsScopeAndAvailability}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {USE_CASES.map((u) => (
+          {USE_CASES(c).map((u) => (
             <article
               key={u.tagEn}
               className="card-lift"
@@ -216,7 +221,7 @@ export default function UseCasesSection() {
                   >
                     {u.tagCn}
                   </span>
-                  <span
+                  {locale === "zh-CN" && <span
                     style={{
                       fontSize: "9.5px",
                       fontWeight: 500,
@@ -225,9 +230,7 @@ export default function UseCasesSection() {
                       opacity: 0.7,
                       textTransform: "uppercase",
                     }}
-                  >
-                    {u.tagEn}
-                  </span>
+                  >{u.tagEn}</span>}
                 </span>
 
                 <div

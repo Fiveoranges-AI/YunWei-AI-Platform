@@ -1,15 +1,18 @@
+import { useLocale } from "@/i18n/LocaleContext";
+import type { Copy } from "@/i18n/catalog";
 import { ANALYTICS_EVENTS, trackEvent } from "@/utils/analytics";
 
-const CHECKLIST = [
-  "还在用 Excel 管库存、订单或客户",
-  "老板每天靠人汇报才能知道进度",
-  "ERP 太复杂，员工不愿意用",
-  "客户资料分散在微信和个人电脑里",
-  "想用 AI，但不知道第一个场景从哪里开始",
-  "正在做接班、出海或管理规范化",
+const CHECKLIST = (c: Copy) => [
+  c.youManageInventoryOrdersOr,
+  c.youRelyOnManualUpdates,
+  c.yourErpIsDifficultFor,
+  c.customerInformationIsScatteredAcross,
+  c.youWantToUseAi,
+  c.youArePlanningASuccession,
 ];
 
 export default function FitCheckSection() {
+  const { copy: c, href: localize } = useLocale();
   return (
     <section className="fit-check-section">
       <div className="container">
@@ -17,21 +20,21 @@ export default function FitCheckSection() {
           <div className="fit-check-copy">
             <span className="section-label">
               <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
-              适合沟通 · FIT CHECK
+              {c.isThisAFit}
             </span>
-            <h2>你的企业适合先聊一次吗？</h2>
-            <p>如果你的企业符合以下任意 2 条，就值得预约一次 AI 数字化诊断。</p>
+            <h2>{c.aPracticalStartingPointFor}</h2>
+            <p>{c.ifTwoOrMoreOf}</p>
             <a
-              href="/strategy-call"
+              href={localize("/strategy-call")}
               className="fit-check-cta"
               onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "fit_check" })}
             >
-              预约30分钟AI数字化诊断
+              {c.bookA30MinuteDiscovery2}
             </a>
           </div>
 
           <div className="fit-check-list">
-            {CHECKLIST.map((item) => (
+            {CHECKLIST(c).map((item) => (
               <div key={item} className="fit-check-item">
                 <span aria-hidden>✓</span>
                 <p>{item}</p>
@@ -47,15 +50,15 @@ export default function FitCheckSection() {
               </svg>
             </div>
             <div>
-              <h3>企业数据边界清晰</h3>
+              <h3>{c.clearBoundariesForBusinessData}</h3>
               <p>
-                客户数据不会用于训练公共模型。正式项目可根据客户要求设计权限、脱敏、审计和部署边界。
+                {c.beforeAPilotWeAgree}
               </p>
               <a
-                href="/data-security"
+                href={localize("/data-security")}
                 onClick={() => trackEvent(ANALYTICS_EVENTS.dataSecurityClick, { location: "fit_check" })}
               >
-                查看数据安全说明
+                {c.readOurDataSecurityPrinciples}
               </a>
             </div>
           </article>

@@ -1,0 +1,362 @@
+{
+  "demo071": {
+    "en": "Illustrative demo with fictional data. No live ERP connection. Controls replay the sample scenario; they do not send messages or access company data.",
+    "zh-CN": "超级小陈仅基于已授权的企业数据回答，所有数字可追溯至原始记录。"
+  },
+  "demo033": {
+    "en": "How are this month’s orders progressing? Rank by customer and flag delays.",
+    "zh-CN": "本月银湖订单完成进度怎么样？按客户给我排一下，落后的标出来。"
+  },
+  "demo001": {
+    "en": "Sample Operations Assistant — Five Oranges AI",
+    "zh-CN": "超级小陈 · 银湖石墨 — Five Oranges AI"
+  },
+  "demo062": {
+    "en": "Illustrative source alignment · Sample confidence 0.94",
+    "zh-CN": "数据口径与金蝶 ERP 一致 · 置信度 0.94"
+  },
+  "demo004": {
+    "en": "Back to homepage",
+    "zh-CN": "返回首页 · Back to homepage"
+  },
+  "demo059": {
+    "en": "Sample contract · SALES-2026-Q1-007 §4.2",
+    "zh-CN": "合同 · 销-2026-Q1-007 §4.2"
+  },
+  "demo066": {
+    "en": "Ask about the sample data, for example: Which orders are delayed?",
+    "zh-CN": "向超级小陈提问，例如：今天车间有几个异常停机？"
+  },
+  "demo055": {
+    "en": ". Suggested next step: review the production schedule with the operations team. This is a fictional scenario.",
+    "zh-CN": "。建议尽快联系生产部王主任调度其他炉位补排。"
+  },
+  "demo032": {
+    "en": "Saturday, April 25, 2026",
+    "zh-CN": "2026 年 4 月 25 日 · 周六"
+  },
+  "demo038": {
+    "en": "Sample data as of 14:08 · 4 customers",
+    "zh-CN": "数据截至 14:08 · 共 4 个客户"
+  },
+  "demo089": {
+    "en": "Analyzing 4 sample customers and 47 orders…",
+    "zh-CN": "正在分析 4 个客户、47 笔订单…"
+  },
+  "demo002": {
+    "en": "01 Demo · Sample Assistant",
+    "zh-CN": "01 Demo · 超级小陈"
+  },
+  "demo036": {
+    "en": "Reading sample sales and production records…",
+    "zh-CN": "正在读取销售台账与生产工时…"
+  },
+  "demo058": {
+    "en": "Sample MES · Furnace 2",
+    "zh-CN": "MES · 石墨化-2 号炉"
+  },
+  "demo064": {
+    "en": "Which customers have invoices more than 90 days overdue?",
+    "zh-CN": "哪些客户回款超过 90 天？"
+  },
+  "demo085": {
+    "en": ", broadly in line with the same time last month.",
+    "zh-CN": "，与上月同期基本持平。其中 "
+  },
+  "demo013": {
+    "en": "CUST-007 quote history",
+    "zh-CN": "CUST-007 报价历史"
+  },
+  "demo051": {
+    "en": ". At the current rate, the estimated delay is",
+    "zh-CN": "。若按当前节奏，预计延期 "
+  },
+  "demo057": {
+    "en": "Sample ERP · April sales ledger",
+    "zh-CN": "金蝶 · 销售台账 4 月"
+  },
+  "demo072": {
+    "en": "Book a discovery call",
+    "zh-CN": "预约30分钟AI数字化诊断"
+  },
+  "demo027": {
+    "en": "Sandbox · Sample data",
+    "zh-CN": "Sandbox · 沙盒"
+  },
+  "demo037": {
+    "en": "Order progress · By customer",
+    "zh-CN": "订单完成情况 · 按客户"
+  },
+  "demo049": {
+    "en": ", with downtime in the past 7 days of",
+    "zh-CN": "，过去 7 天累计停机 "
+  },
+  "demo063": {
+    "en": "How many unplanned stoppages were recorded today?",
+    "zh-CN": "今天车间有几个异常停机？"
+  },
+  "demo065": {
+    "en": "Prepare this week’s operations briefing for review",
+    "zh-CN": "把这周运营快报发到管理群"
+  },
+  "demo007": {
+    "en": "Operations Assistant · Sample Company",
+    "zh-CN": "超级小陈 · 银湖石墨"
+  },
+  "demo016": {
+    "en": "Top 10 receipts this week",
+    "zh-CN": "本周回款 Top 10"
+  },
+  "demo047": {
+    "en": "Sample Customer A’s backlog is concentrated at",
+    "zh-CN": "宁德时代积压主要发生在"
+  },
+  "demo015": {
+    "en": "Furnace downtime analysis",
+    "zh-CN": "石墨化炉异常停机分析"
+  },
+  "demo018": {
+    "en": "Sample Customer D contract expiry",
+    "zh-CN": "蜂巢能源合同到期提醒"
+  },
+  "demo025": {
+    "en": "Sample Company · CEO",
+    "zh-CN": "银湖石墨 · CEO"
+  },
+  "demo020": {
+    "en": "Q1 net income comparison",
+    "zh-CN": "Q1 净利同比分析"
+  },
+  "demo035": {
+    "en": "3 illustrative sources",
+    "zh-CN": "调用 3 个数据源"
+  },
+  "demo086": {
+    "en": "1 customer is behind",
+    "zh-CN": "1 个客户明显落后"
+  },
+  "demo011": {
+    "en": "Monthly order progress",
+    "zh-CN": "本月订单完成进度"
+  },
+  "demo012": {
+    "en": "Overdue receivables",
+    "zh-CN": "应收账款超期清单"
+  },
+  "demo021": {
+    "en": "Purchasing receipt exceptions",
+    "zh-CN": "采购入库异常波动"
+  },
+  "demo048": {
+    "en": "Furnace 2",
+    "zh-CN": "石墨化-2 号炉"
+  },
+  "demo053": {
+    "en": ", with a potential contractual exposure of",
+    "zh-CN": "，违约金风险约 "
+  },
+  "demo088": {
+    "en": ". Suggested priorities:",
+    "zh-CN": "，建议优先处理："
+  },
+  "demo050": {
+    "en": "14.6 hours",
+    "zh-CN": "14.6 小时"
+  },
+  "demo054": {
+    "en": "CNY 182,000",
+    "zh-CN": "¥18.2 万"
+  },
+  "demo080": {
+    "en": ", April has",
+    "zh-CN": "总，4 月共 "
+  },
+  "demo084": {
+    "en": ", overall completion:",
+    "zh-CN": "，整体完成率 "
+  },
+  "demo087": {
+    "en": "1 needs review",
+    "zh-CN": "1 个需要关注"
+  },
+  "demo009": {
+    "en": "Search conversations",
+    "zh-CN": "搜索过往对话"
+  },
+  "demo017": {
+    "en": "Earlier this week",
+    "zh-CN": "本周早些时候"
+  },
+  "demo028": {
+    "en": "Skip demo animation",
+    "zh-CN": "跳过演示动画"
+  },
+  "demo039": {
+    "en": "Order progress",
+    "zh-CN": "订单完成情况"
+  },
+  "demo081": {
+    "en": "47 orders",
+    "zh-CN": "47 笔订单"
+  },
+  "demo090": {
+    "en": "Skip mode on",
+    "zh-CN": "跳过模式开启"
+  },
+  "demo006": {
+    "en": "Five Oranges AI",
+    "zh-CN": "运帷 AI"
+  },
+  "demo043": {
+    "en": "Amount (CNY 10k)",
+    "zh-CN": "金额（万）"
+  },
+  "demo082": {
+    "en": ", delivered:",
+    "zh-CN": "，已交付 "
+  },
+  "demo003": {
+    "en": "Conversation list",
+    "zh-CN": "会话列表"
+  },
+  "demo005": {
+    "en": "Back to home",
+    "zh-CN": "返回首页"
+  },
+  "demo008": {
+    "en": "New conversation",
+    "zh-CN": "新建对话"
+  },
+  "demo029": {
+    "en": "Skip animation",
+    "zh-CN": "跳过动画"
+  },
+  "demo030": {
+    "en": "Replay",
+    "zh-CN": "重新播放"
+  },
+  "demo034": {
+    "en": "Operations Assistant",
+    "zh-CN": "超级小陈"
+  },
+  "demo046": {
+    "en": "Key observation",
+    "zh-CN": "关键发现"
+  },
+  "demo052": {
+    "en": "+6 days",
+    "zh-CN": "+6 天"
+  },
+  "demo073": {
+    "en": "Sample Customer A",
+    "zh-CN": "宁德时代"
+  },
+  "demo074": {
+    "en": "Sample Customer B",
+    "zh-CN": "江苏先导"
+  },
+  "demo075": {
+    "en": "Sample Customer C",
+    "zh-CN": "中钢新材"
+  },
+  "demo076": {
+    "en": "Sample Customer D",
+    "zh-CN": "蜂巢能源"
+  },
+  "demo083": {
+    "en": "31",
+    "zh-CN": "31 笔"
+  },
+  "demo041": {
+    "en": "Orders",
+    "zh-CN": "订单数"
+  },
+  "demo044": {
+    "en": "Complete",
+    "zh-CN": "完成度"
+  },
+  "demo010": {
+    "en": "Today",
+    "zh-CN": "今天"
+  },
+  "demo014": {
+    "en": "Yesterday",
+    "zh-CN": "昨天"
+  },
+  "demo019": {
+    "en": "Tue",
+    "zh-CN": "周二"
+  },
+  "demo022": {
+    "en": "Mon",
+    "zh-CN": "周一"
+  },
+  "demo023": {
+    "en": "Alex",
+    "zh-CN": "许总"
+  },
+  "demo026": {
+    "en": "More",
+    "zh-CN": "更多"
+  },
+  "demo031": {
+    "en": "Settings",
+    "zh-CN": "设置"
+  },
+  "demo040": {
+    "en": "Customer",
+    "zh-CN": "客户"
+  },
+  "demo042": {
+    "en": "Delivered",
+    "zh-CN": "已交"
+  },
+  "demo045": {
+    "en": "Status",
+    "zh-CN": "状态"
+  },
+  "demo056": {
+    "en": "Sources",
+    "zh-CN": "引用"
+  },
+  "demo060": {
+    "en": "Copy",
+    "zh-CN": "复制"
+  },
+  "demo061": {
+    "en": "Export",
+    "zh-CN": "导出"
+  },
+  "demo067": {
+    "en": "Ask a question",
+    "zh-CN": "提问"
+  },
+  "demo068": {
+    "en": "Attachment",
+    "zh-CN": "附件"
+  },
+  "demo069": {
+    "en": "Voice",
+    "zh-CN": "语音"
+  },
+  "demo070": {
+    "en": "Send",
+    "zh-CN": "发送"
+  },
+  "demo077": {
+    "en": "Behind",
+    "zh-CN": "落后"
+  },
+  "demo078": {
+    "en": "Review",
+    "zh-CN": "关注"
+  },
+  "demo079": {
+    "en": "On track",
+    "zh-CN": "正常"
+  },
+  "demo024": {
+    "en": "A",
+    "zh-CN": "许"
+  }
+}

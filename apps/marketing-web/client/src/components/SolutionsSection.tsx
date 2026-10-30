@@ -1,31 +1,34 @@
+import { useLocale } from "@/i18n/LocaleContext";
+import type { Copy } from "@/i18n/catalog";
 /* =============================================================
    Solutions — Four building blocks for an AI-native operation (v1.3)
    ============================================================= */
 
-const SOLUTIONS = [
+const SOLUTIONS = (c: Copy) => [
   {
-    cn: "AI 智能体",
+    cn: c.aiAssistants,
     en: "AI Agents",
-    desc: "面向业务领域训练的 AI 智能体，读取你的真实数据、自动撰写报告、并在现有系统中触发动作。",
+    desc: c.exploreAssistantsThatAnswerOperational,
   },
   {
-    cn: "企业知识库",
+    cn: c.businessKnowledge,
     en: "Knowledge Bases",
-    desc: "将 SOP、合同、历史记录统一为可被检索调用的知识层，让团队真正信任并依赖。",
+    desc: c.organizeProceduresDocumentsAndBusiness,
   },
   {
-    cn: "流程自动化",
+    cn: c.workflowAutomation,
     en: "Process Automation",
-    desc: "替代 ERP / CRM / 表格之间的人工流转，构建可靠、可追溯的 AI 驱动流程。",
+    desc: c.assessHowApprovedDataFlows,
   },
   {
-    cn: "智能驾驶舱",
+    cn: c.operationsOverview,
     en: "Intelligent Dashboards",
-    desc: "决策级仪表盘，把原始运营数据翻译成高管真正会问的那些问题。",
+    desc: c.bringOperationalInformationTogetherTo,
   },
 ];
 
 export default function SolutionsSection() {
+  const { copy: c, locale } = useLocale();
   return (
     <section id="solutions" style={{ padding: "7rem 0", background: "#FFFFFF" }}>
       <div className="container">
@@ -36,7 +39,7 @@ export default function SolutionsSection() {
           <div>
             <span className="section-label">
               <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
-              解决方案 · SOLUTIONS
+              {c.solutions3}
             </span>
             <h2
               style={{
@@ -50,7 +53,7 @@ export default function SolutionsSection() {
                 fontFamily: "Sora, sans-serif",
               }}
             >
-              Four building blocks for an AI-native operation.
+              {c.anIntelligenceLayerForYour}
             </h2>
             <div
               style={{
@@ -61,7 +64,7 @@ export default function SolutionsSection() {
                 color: "#475569",
               }}
             >
-              为 AI 原生运营打造的四大基石。
+              {c.designedAroundManufacturingWorkflows}
             </div>
           </div>
           <p
@@ -72,12 +75,12 @@ export default function SolutionsSection() {
               lineHeight: 1.65,
             }}
           >
-            按需组合，从你真实的业务流程出发，而不是套用通用 AI 演示。
+            {c.weScopeEachEngagementAround}
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {SOLUTIONS.map((s, i) => (
+          {SOLUTIONS(c).map((s, i) => (
             <article
               key={s.en}
               className="solution-card card-lift"
@@ -123,7 +126,7 @@ export default function SolutionsSection() {
                 >
                   {s.cn}
                 </div>
-                <div
+                {locale === "zh-CN" && <div
                   style={{
                     fontSize: "0.875rem",
                     color: "var(--brand-blue)",
@@ -133,9 +136,7 @@ export default function SolutionsSection() {
                     fontWeight: 500,
                     textTransform: "uppercase",
                   }}
-                >
-                  {s.en}
-                </div>
+                >{s.en}</div>}
               </div>
               <p
                 style={{

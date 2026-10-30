@@ -6,8 +6,80 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/zh",
+      "destination": "/zh/index.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about.html"
+    },
+    {
+      "source": "/resources",
+      "destination": "/resources.html"
+    },
+    {
+      "source": "/kobeli",
+      "destination": "/kobeli.html"
+    },
+    {
+      "source": "/strategy-call",
+      "destination": "/strategy-call.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/data-security",
+      "destination": "/data-security.html"
+    },
+    {
+      "source": "/404",
+      "destination": "/404.html"
+    },
+    {
+      "source": "/zh/about",
+      "destination": "/zh/about.html"
+    },
+    {
+      "source": "/zh/resources",
+      "destination": "/zh/resources.html"
+    },
+    {
+      "source": "/zh/kobeli",
+      "destination": "/zh/kobeli.html"
+    },
+    {
+      "source": "/zh/strategy-call",
+      "destination": "/zh/strategy-call.html"
+    },
+    {
+      "source": "/zh/privacy",
+      "destination": "/zh/privacy.html"
+    },
+    {
+      "source": "/zh/terms",
+      "destination": "/zh/terms.html"
+    },
+    {
+      "source": "/zh/data-security",
+      "destination": "/zh/data-security.html"
+    },
+    {
+      "source": "/zh/404",
+      "destination": "/zh/404.html"
+    },
+    {
+      "source": "/zh/:path*",
+      "destination": "/zh/404/index.html"
+    },
+    {
       "source": "/((?!assets/|manus-storage/|favicon.ico|robots.txt|sitemap.xml).*)",
-      "destination": "/index.html"
+      "destination": "/404/index.html"
     }
   ]
 }

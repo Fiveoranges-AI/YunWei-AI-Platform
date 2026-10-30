@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n/LocaleContext";
 /* =============================================================
    Footer — Five Oranges AI · 运帷AI (v1.3)
    Dark navy 3-column: brand+slogan / navigate / contact.
@@ -8,6 +9,7 @@ const DEMO_URL = "/demo.html";
 const STRATEGY_CALL_URL = "/strategy-call";
 
 export default function Footer() {
+  const { copy: c, href: localize } = useLocale();
   return (
     <footer style={{ padding: "4rem 0 2.5rem", background: "#0F2340", color: "#94A3B8" }}>
       <div className="container">
@@ -46,7 +48,7 @@ export default function Footer() {
                     lineHeight: 1.1,
                   }}
                 >
-                  FIVE ORANGES
+                  {c.fiveOranges}
                 </div>
                 <div
                   style={{
@@ -57,7 +59,7 @@ export default function Footer() {
                     marginTop: "3px",
                   }}
                 >
-                  运帷 AI
+                  {c.ai}
                 </div>
               </div>
             </div>
@@ -73,7 +75,7 @@ export default function Footer() {
                   lineHeight: 1.1,
                 }}
               >
-                Beyond the scope.
+                {c.beyondTheScope2}
               </span>
               <span
                 style={{
@@ -84,7 +86,7 @@ export default function Footer() {
                   letterSpacing: "0.06em",
                 }}
               >
-                进无止境
+                {c.operationalIntelligenceForSmeManufacturing}
               </span>
             </div>
           </div>
@@ -102,7 +104,7 @@ export default function Footer() {
                 marginBottom: "1rem",
               }}
             >
-              Navigate
+              {c.navigate}
             </div>
             <ul
               style={{
@@ -116,51 +118,50 @@ export default function Footer() {
               }}
             >
               <li>
-                <a href="/#solutions" className="footer-link" style={{ color: "#94A3B8" }}>
-                  解决方案 · Solutions
+                <a href={localize("/#solutions")} className="footer-link" style={{ color: "#94A3B8" }}>
+                  {c.solutions}
                 </a>
               </li>
               <li>
-                <a href="/#use-cases" className="footer-link" style={{ color: "#94A3B8" }}>
-                  案例 · Use Cases
+                <a href={localize("/#use-cases")} className="footer-link" style={{ color: "#94A3B8" }}>
+                  {c.useCases}
                 </a>
               </li>
               <li>
-                <a href="/#approach" className="footer-link" style={{ color: "#94A3B8" }}>
-                  方法论 · Approach
+                <a href={localize("/#approach")} className="footer-link" style={{ color: "#94A3B8" }}>
+                  {c.approach}
                 </a>
               </li>
               <li>
-                <a href="/resources" className="footer-link" style={{ color: "#94A3B8" }}>
-                  资源 · Resources
+                <a href={localize("/resources")} className="footer-link" style={{ color: "#94A3B8" }}>
+                  {c.resources}
                 </a>
               </li>
               <li>
-                <a href="/about" className="footer-link" style={{ color: "#94A3B8" }}>
-                  关于我们 · About
+                <a href={localize("/about")} className="footer-link" style={{ color: "#94A3B8" }}>
+                  {c.about}
                 </a>
               </li>
               <li>
                 <a
-                  href={DEMO_URL}
+                  href={localize(DEMO_URL)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="footer-link"
                   style={{ color: "#94A3B8" }}
                 >
-                  演示 · Demo
+                  {c.demo2}
                 </a>
               </li>
               <li>
                 <a
-                  href={PORTAL_URL}
+                  href={localize(PORTAL_URL)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="footer-link"
                   style={{ color: "#60A5FA", display: "inline-flex", alignItems: "center", gap: "6px" }}
                 >
-                  客户登录 · Client Portal
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {c.clientPortal3}<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M7 17L17 7M7 7h10v10" />
                   </svg>
                 </a>
@@ -181,7 +182,7 @@ export default function Footer() {
                 marginBottom: "1rem",
               }}
             >
-              Contact
+              {c.contact}
             </div>
             <ul
               style={{
@@ -195,20 +196,20 @@ export default function Footer() {
               }}
             >
               <li>
-                <a href={STRATEGY_CALL_URL} className="footer-link" style={{ color: "#60A5FA" }}>
-                  预约诊断 · Strategy Call
+                <a href={localize(STRATEGY_CALL_URL)} className="footer-link" style={{ color: "#60A5FA" }}>
+                  {c.talkToUs}
                 </a>
               </li>
               <li>
                 <a
-                  href="mailto:contact@fiveoranges.ai"
+                  href={localize("mailto:contact@fiveoranges.ai")}
                   className="footer-link"
                   style={{ color: "#94A3B8" }}
                 >
-                  contact@fiveoranges.ai
+                  {c.contactFiveorangesAi}
                 </a>
               </li>
-              <li>Shanghai · 上海</li>
+              <li>{c.canadianAiStartupServingManufacturers}</li>
             </ul>
           </div>
         </div>
@@ -225,19 +226,19 @@ export default function Footer() {
             gap: "0.5rem",
           }}
         >
-          <span>© {new Date().getFullYear()} Five Oranges AI · 运帷 AI. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} {c.fiveOrangesAiAllRights}</span>
           <span className="footer-legal-links">
-            <a href="/privacy" className="footer-link" style={{ color: "#94A3B8" }}>
-              Privacy
+            <a href={localize("/privacy")} className="footer-link" style={{ color: "#94A3B8" }}>
+              {c.privacy}
             </a>
-            <a href="/terms" className="footer-link" style={{ color: "#94A3B8" }}>
-              Terms
+            <a href={localize("/terms")} className="footer-link" style={{ color: "#94A3B8" }}>
+              {c.terms}
             </a>
-            <a href="/data-security" className="footer-link" style={{ color: "#94A3B8" }}>
-              Data Security
+            <a href={localize("/data-security")} className="footer-link" style={{ color: "#94A3B8" }}>
+              {c.dataSecurity}
             </a>
-            <a href={STRATEGY_CALL_URL} className="footer-link" style={{ color: "#94A3B8" }}>
-              Contact
+            <a href={localize(STRATEGY_CALL_URL)} className="footer-link" style={{ color: "#94A3B8" }}>
+              {c.contact}
             </a>
           </span>
         </div>

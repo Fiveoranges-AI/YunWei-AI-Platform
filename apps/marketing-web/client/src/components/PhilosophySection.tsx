@@ -1,9 +1,11 @@
+import { useLocale } from "@/i18n/LocaleContext";
 /* =============================================================
    Philosophy — AI doesn't replace operators, it frees them to think (v1.3)
    Dark navy section with executive silhouette + data wall scene.
    ============================================================= */
 
 function PhilosophyScene() {
+  const { copy: c } = useLocale();
   return (
     <svg
       viewBox="0 0 800 500"
@@ -52,8 +54,7 @@ function PhilosophyScene() {
           strokeWidth="1.6"
         />
         <text x="465" y="115" fill="rgba(255,255,255,0.45)" fontSize="9" fontFamily="Sora,sans-serif" letterSpacing="0.14em">
-          YIELD · 良率
-        </text>
+          {c.yieldExample}</text>
       </g>
 
       {/* Wall: chart 2 — throughput */}
@@ -70,8 +71,7 @@ function PhilosophyScene() {
           />
         ))}
         <text x="615" y="115" fill="rgba(255,255,255,0.45)" fontSize="9" fontFamily="Sora,sans-serif" letterSpacing="0.14em">
-          THROUGHPUT · 节拍
-        </text>
+          {c.throughputExample}</text>
       </g>
 
       {/* Wall: heat grid */}
@@ -93,8 +93,7 @@ function PhilosophyScene() {
           })
         )}
         <text x="465" y="296" fill="rgba(255,255,255,0.45)" fontSize="9" fontFamily="Sora,sans-serif" letterSpacing="0.14em">
-          ANOMALY MAP · 异常
-        </text>
+          {c.anomalyMapExample}</text>
       </g>
 
       {/* Wall: KPI tile */}
@@ -104,11 +103,9 @@ function PhilosophyScene() {
           +32%
         </text>
         <text x="625" y="252" fill="rgba(255,255,255,0.55)" fontSize="9" fontFamily="Sora,sans-serif" letterSpacing="0.14em">
-          PRODUCTIVITY
-        </text>
+          {c.productivity}</text>
         <text x="625" y="266" fill="rgba(96,165,250,0.85)" fontSize="9" fontFamily="Sora,sans-serif">
-          产能 · 同比
-        </text>
+          {c.sampleCapacityChange}</text>
       </g>
 
       {/* Wall: ticker */}
@@ -191,6 +188,7 @@ function PhilosophyScene() {
 }
 
 export default function PhilosophySection() {
+  const { copy: c } = useLocale();
   return (
     <section
       id="about"
@@ -219,7 +217,7 @@ export default function PhilosophySection() {
         <div style={{ maxWidth: "640px" }}>
           <span className="section-label">
             <span className="slash-accent" style={{ width: "20px", height: "2px", background: "#60A5FA" }} />
-            <span style={{ color: "#60A5FA" }}>我们的理念 · OUR PHILOSOPHY</span>
+            <span style={{ color: "#60A5FA" }}>{c.ourPhilosophy}</span>
           </span>
           <h2
             style={{
@@ -232,15 +230,13 @@ export default function PhilosophySection() {
               fontFamily: "Sora, sans-serif",
             }}
           >
-            AI doesn't replace operators.
-            <br />
-            <span style={{ color: "#60A5FA" }}>It frees them to think.</span>
+            {c.aiDoesnTReplaceOperators}<br />
+            <span style={{ color: "#60A5FA" }}>{c.itFreesThemToThink}</span>
           </h2>
 
           <div style={{ marginTop: "1.5rem", maxWidth: "560px" }}>
             <p style={{ color: "#CBD5E1", fontSize: "1rem", lineHeight: 1.75 }}>
-              我们不相信花哨的演示，也不相信一上线就崩的「Demo 级」AI。
-              我们相信能在工厂周一早晨活下来的智能体——靠每天省下真实的工时，赢得自己的位置。
+              {c.usefulAiHasToEarn}
             </p>
           </div>
         </div>

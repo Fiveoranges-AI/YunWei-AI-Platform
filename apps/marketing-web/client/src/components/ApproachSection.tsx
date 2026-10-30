@@ -1,35 +1,38 @@
+import { useLocale } from "@/i18n/LocaleContext";
+import type { Copy } from "@/i18n/catalog";
 /* =============================================================
    Approach — Start with one validated business scene.
    ============================================================= */
 
 import type { CSSProperties } from "react";
 
-const STEPS = [
+const STEPS = (c: Copy) => [
   {
-    cn: "业务诊断",
+    cn: c.businessDiscovery,
     en: "Diagnose",
-    desc: "先梳理库存、订单、客户、流程和数据，找到最值得优先解决的问题。",
+    desc: c.reviewInventoryOrdersCustomersWorkflows,
   },
   {
-    cn: "可验证 Demo",
+    cn: c.aTestablePrototype,
     en: "Validate",
-    desc: "围绕一个小场景做出可看、可试、可讨论的 Demo，降低投入前的不确定性。",
+    desc: c.buildAFocusedPrototypeYour,
   },
   {
-    cn: "分阶段上线",
+    cn: c.phasedRollout,
     en: "Scale",
-    desc: "确认价值后再扩展到核心业务流程，让团队逐步接受并持续使用。",
+    desc: c.expandIntoCoreWorkflowsOnce,
   },
 ];
 
 export default function ApproachSection() {
+  const { copy: c, locale } = useLocale();
   return (
     <section id="approach" className="bg-section-blue" style={{ padding: "7rem 0" }}>
       <div className="container">
         <div style={{ marginBottom: "4.5rem", maxWidth: "760px" }}>
           <span className="section-label">
             <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
-            我们的方法 · OUR APPROACH
+            {c.ourApproach}
           </span>
           <h2
             style={{
@@ -42,8 +45,8 @@ export default function ApproachSection() {
               fontFamily: "Sora, sans-serif",
             }}
           >
-              不从大ERP开始，从一个可验证的小场景开始
-          </h2>
+              {c.startWithOneWorkflowProve}
+            </h2>
           <div
             style={{
               marginTop: "0.75rem",
@@ -53,7 +56,7 @@ export default function ApproachSection() {
               color: "#475569",
             }}
           >
-            Start small, validate fast, then expand into core operations.
+            {c.startSmallValidateFastThen}
           </div>
         </div>
 
@@ -83,7 +86,7 @@ export default function ApproachSection() {
           </svg>
 
           <div className="approach-steps">
-            {STEPS.map((s, i) => (
+            {STEPS(c).map((s, i) => (
               <div
                 key={s.en}
                 className="approach-step"
@@ -124,7 +127,7 @@ export default function ApproachSection() {
                 >
                   {s.cn}
                 </div>
-                <div
+                {locale === "zh-CN" && <div
                   style={{
                     fontSize: "0.8125rem",
                     color: "var(--brand-blue)",
@@ -134,9 +137,7 @@ export default function ApproachSection() {
                     fontWeight: 500,
                     textTransform: "uppercase",
                   }}
-                >
-                  {s.en}
-                </div>
+                >{s.en}</div>}
                 <p
                   style={{
                     marginTop: "0.875rem",

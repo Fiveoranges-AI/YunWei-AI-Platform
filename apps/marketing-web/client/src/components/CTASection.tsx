@@ -1,3 +1,4 @@
+import { useLocale } from "@/i18n/LocaleContext";
 /* =============================================================
    CTA — Ready to see it run on your data? (v1.3)
    2-column layout: copy + 3-button cluster (Demo / Book / Portal).
@@ -10,6 +11,7 @@ const PORTAL_URL = "https://app.fiveoranges.ai/";
 const STRATEGY_CALL_URL = "/strategy-call";
 
 export default function CTASection() {
+  const { copy: c, href: localize } = useLocale();
   return (
     <section
       id="contact"
@@ -24,7 +26,7 @@ export default function CTASection() {
           <div style={{ maxWidth: "620px" }}>
             <span className="section-label">
               <span className="slash-accent" style={{ width: "20px", height: "2px" }} />
-              进无止境 · BEYOND THE SCOPE
+              {c.beyondTheScope}
             </span>
             <h2
               style={{
@@ -37,7 +39,7 @@ export default function CTASection() {
                 fontFamily: "Sora, sans-serif",
               }}
             >
-              Ready to see it run on your data?
+              {c.readyToSeeItRun}
             </h2>
             <div
               style={{
@@ -48,7 +50,7 @@ export default function CTASection() {
                 color: "#475569",
               }}
             >
-              想看 AI 在你自己的数据上跑起来吗？
+              {c.startWithAFocusedConversation}
             </div>
             <p
               style={{
@@ -58,7 +60,7 @@ export default function CTASection() {
                 lineHeight: 1.7,
               }}
             >
-              预约 30 分钟 AI 数字化诊断。我们将和你一起诊断你最痛的那条流程，并诚实地告诉你 AI 是否是合适的解法。
+              {c.bookA30MinuteDiscovery}
             </p>
           </div>
 
@@ -71,7 +73,7 @@ export default function CTASection() {
             }}
           >
             <a
-              href={DEMO_URL}
+              href={localize(DEMO_URL)}
               target="_blank"
               rel="noopener noreferrer"
               className="hover-lift"
@@ -93,7 +95,7 @@ export default function CTASection() {
               }}
             >
               <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-                <span>查看 AI 经营助手演示</span>
+                <span>{c.exploreThePlatform}</span>
                 <span
                   style={{
                     fontSize: "10.5px",
@@ -103,7 +105,7 @@ export default function CTASection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  Demo
+                  {c.demo}
                 </span>
               </span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -112,7 +114,7 @@ export default function CTASection() {
             </a>
 
             <a
-              href={STRATEGY_CALL_URL}
+              href={localize(STRATEGY_CALL_URL)}
               onClick={() => trackEvent(ANALYTICS_EVENTS.heroStrategyCallClick, { location: "final_cta" })}
               style={{
                 display: "inline-flex",
@@ -131,7 +133,7 @@ export default function CTASection() {
               }}
             >
               <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-                <span>预约30分钟AI数字化诊断</span>
+                <span>{c.bookA30MinuteDiscovery2}</span>
                 <span
                   style={{
                     fontSize: "10.5px",
@@ -141,13 +143,13 @@ export default function CTASection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  Strategy Call
+                  {c.strategyCall}
                 </span>
               </span>
             </a>
 
             <a
-              href={PORTAL_URL}
+              href={localize(PORTAL_URL)}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -171,7 +173,7 @@ export default function CTASection() {
                 <circle cx="12" cy="7" r="4" />
               </svg>
               <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.15 }}>
-                <span>客户登录</span>
+                <span>{c.clientPortal}</span>
                 <span
                   style={{
                     fontSize: "10.5px",
@@ -181,7 +183,7 @@ export default function CTASection() {
                     textTransform: "uppercase",
                   }}
                 >
-                  Client Portal
+                  {c.clientPortal2}
                 </span>
               </span>
             </a>
